@@ -161,7 +161,23 @@
             <span id="chat-live-dot" class="chat-live-dot" role="img" aria-label="Verbindung aktiv"></span>
             <span id="chat-title" class="mono">Chat</span>
             <span class="chat-meta-divider" aria-hidden="true">/</span>
-            <span id="chat-model-pill" class="chat-model-pill hidden" lang="en"></span>
+            <span class="chat-model-picker-wrap hidden" id="chat-model-picker-wrap">
+              <button
+                type="button"
+                id="btn-chat-model-picker"
+                class="chat-model-pill chat-model-pill--btn hidden"
+                lang="en"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-controls="chat-model-menu"
+                aria-label="Aktives Modell wählen">
+                <span id="chat-model-pill-label">—</span>
+                <svg class="chat-model-pill-chevron" width="10" height="6" viewBox="0 0 10 6" aria-hidden="true">
+                  <path fill="currentColor" d="M0 0l5 6 5-6z"/>
+                </svg>
+              </button>
+              <ul id="chat-model-menu" class="chat-model-menu hidden" role="listbox" tabindex="-1" aria-label="Verfügbare Modelle"></ul>
+            </span>
           </div>
           <div class="chat-header-actions">
             <button type="button" id="btn-chat-history" title="Verlauf" aria-label="Chat-Verlauf oeffnen" aria-expanded="false" aria-controls="chat-history-drawer">
@@ -176,7 +192,7 @@
                 <line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
             </button>
-            <button type="button" id="btn-chat-settings" title="KI-Anbieter Einstellungen" aria-label="KI-Anbieter Einstellungen">
+            <button type="button" id="btn-chat-settings" title="Einstellungen" aria-label="Einstellungen öffnen">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -210,60 +226,206 @@
     </div>
   </main>
 
-  <div id="modal-settings" class="modal hidden" aria-hidden="true">
+  <div id="modal-settings" class="modal modal-settings-root hidden" aria-hidden="true">
     <div class="modal-backdrop" id="modal-settings-backdrop"></div>
-    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-settings-title">
-      <header class="modal-dialog__header">
-        <h2 id="modal-settings-title" class="modal-dialog__title">KI-Anbieter</h2>
-        <button type="button" id="btn-settings-close" class="modal-dialog__close" title="Schließen" aria-label="Einstellungen schließen">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
-            <path d="M4 4l8 8M12 4l-8 8"/>
+    <div
+      class="modal-dialog settings-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-settings-title"
+      aria-describedby="modal-settings-desc">
+      <header class="settings-dialog__header">
+        <div>
+          <h2 id="modal-settings-title" class="settings-dialog__title">Einstellungen</h2>
+          <p id="modal-settings-desc" class="settings-dialog__subtitle">
+            Bereich: <span id="settings-panel-heading">Modelle</span>
+          </p>
+        </div>
+        <button type="button" id="btn-settings-close" class="settings-dialog__icon-close" aria-label="Einstellungen schließen">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path fill="currentColor" d="M3.47 3.47a.75.75 0 0 1 1.06 0L8 6.94l3.47-3.47a.75.75 0 1 1 1.06 1.06L9.06 8l3.47 3.47a.75.75 0 1 1-1.06 1.06L8 9.06l-3.47 3.47a.75.75 0 0 1-1.06-1.06L6.94 8 3.47 4.53a.75.75 0 0 1 0-1.06z"/>
           </svg>
         </button>
       </header>
-      <div class="modal-dialog__body">
-        <p class="modal-note">API-Keys werden verschlüsselt auf diesem Gerät gespeichert. Sie verlassen die App nur bei Anfragen an den jeweiligen Anbieter.</p>
-        <p id="modal-encryption-warning" class="modal-warning hidden">Verschlüsselter Speicher ist auf diesem System nicht verfügbar. Ein Key kann nicht sicher gespeichert werden.</p>
 
-        <label class="modal-label" for="select-provider">Anbieter</label>
-        <select id="select-provider" class="modal-input"></select>
-        <p id="provider-status" class="modal-hint"></p>
+      <div class="settings-dialog__body">
+        <nav class="settings-dialog__nav" role="tablist" aria-label="Einstellungsbereiche">
+          <button type="button" class="settings-nav-item" role="tab" aria-selected="true" aria-controls="panel-settings-models" id="tab-settings-models" data-settings-panel="models">
+            Modelle
+            <span class="settings-nav-item__desc">API, Anbindung, Präferenzen</span>
+          </button>
+          <button type="button" class="settings-nav-item" role="tab" aria-selected="false" aria-controls="panel-settings-tools" id="tab-settings-tools" data-settings-panel="tools">
+            Tools
+            <span class="settings-nav-item__desc">Integrationen (z. B. später)</span>
+          </button>
+          <button type="button" class="settings-nav-item" role="tab" aria-selected="false" aria-controls="panel-settings-general" id="tab-settings-general" data-settings-panel="general">
+            Allgemein
+            <span class="settings-nav-item__desc">Texte, Prompts, Verhalten</span>
+          </button>
+        </nav>
 
-        <div id="provider-key-row">
-          <label class="modal-label" for="input-api-key">API-Key</label>
-          <input type="password" id="input-api-key" class="modal-input" placeholder="sk-…" autocomplete="off" />
+        <div class="settings-dialog__panel-wrap">
+          <section class="settings-panel settings-panel--active" id="panel-settings-models" role="tabpanel" aria-labelledby="tab-settings-models">
+            <p id="modal-encryption-warning" class="modal-warning hidden">Verschlüsselter Speicher ist auf diesem System nicht verfügbar. Ein Key kann nicht sicher gespeichert werden.</p>
+
+            <div class="settings-panel-models__head">
+              <h3 class="settings-subsection-title" id="heading-pref-models">Präferierte Modelle</h3>
+              <button type="button" id="btn-open-add-model" class="btn-secondary" aria-haspopup="dialog" aria-controls="dialog-add-model">
+                Modell hinzufügen
+              </button>
+            </div>
+            <p class="settings-pref-intro">
+              Gespeicherte Kombinationen aus Anbieter, Modell und Parametern. Der Schalter steuert, ob der Eintrag im
+              Chat im <strong>Modellmenü</strong> angeboten wird. Die Auswahl für eine Konversation triffst du dort.
+            </p>
+
+            <ul id="pref-model-list" class="settings-pref-list" aria-labelledby="heading-pref-models"></ul>
+
+            <p id="pref-list-empty" class="settings-empty-hint hidden">Noch keine Einträge – „Modell hinzufügen“ öffnen.</p>
+
+            <p id="modal-save-error" class="modal-save-error hidden"></p>
+          </section>
+
+          <section class="settings-panel" id="panel-settings-tools" role="tabpanel" aria-labelledby="tab-settings-tools" hidden>
+            <p class="settings-form-hint">
+              Hier können später z. B. externe Tools, Endpunkte oder MCP-Anbindungen verwaltet werden.
+            </p>
+            <div class="settings-placeholder-card">
+              <h3 class="settings-placeholder-card__title">Tool-Katalog</h3>
+              <p class="settings-placeholder-card__text">
+                Platz für Liste oder Karten pro Tool mit Name und Status — Datenfluss folgt mit späteren Releases.
+              </p>
+              <span class="settings-soon-pill">Noch nicht umgesetzt</span>
+            </div>
+            <div class="settings-placeholder-card">
+              <h3 class="settings-placeholder-card__title">Sichere Standards</h3>
+              <p class="settings-placeholder-card__text">
+                Globale Schalter (z. B. Netzwerkzugriff für Tools, Signatur-Anforderungen) lassen sich hier bündeln.
+              </p>
+            </div>
+          </section>
+
+          <section class="settings-panel" id="panel-settings-general" role="tabpanel" aria-labelledby="tab-settings-general" hidden>
+            <p class="settings-form-hint">
+              Texte und Prompts für das gesamte Verhalten der App — getrennt von modellspezifischen Angaben beim Anbieter.
+            </p>
+            <div class="modal-field-group">
+              <div class="modal-field-label eyebrow-row">System- bzw. Basis-Prompt</div>
+              <label class="visually-hidden" for="input-global-system-prompt">Basis-Prompt</label>
+              <textarea id="input-global-system-prompt" class="modal-input modal-textarea" rows="5" placeholder="Optional: Rolle, Ton, feste Regeln für alle Konversationen …"></textarea>
+              <p class="modal-hint">Wird den übergreifenden Anweisungen für den Chat vorangestellt (Ordner-Kontext bleibt erhalten).</p>
+            </div>
+            <div class="modal-field-group">
+              <div class="modal-field-label eyebrow-row">UI-Sprache</div>
+              <label class="visually-hidden" for="select-app-locale">Sprache</label>
+              <select id="select-app-locale" class="modal-input">
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+              </select>
+              <p class="modal-hint">Steuert <code lang="en">lang</code> der App-Oberfläche; Übersetzungen werden nach und nach ergänzt.</p>
+            </div>
+          </section>
         </div>
-
-        <div id="provider-baseurl-row" class="hidden">
-          <label class="modal-label" for="input-base-url">Server-URL</label>
-          <input type="text" id="input-base-url" class="modal-input" placeholder="http://localhost:11434" autocomplete="off" />
-        </div>
-
-        <div id="provider-insecure-row" class="hidden modal-checkbox-row">
-          <label class="modal-checkbox">
-            <input type="checkbox" id="input-insecure-tls" />
-            <span>TLS-Zertifikat ignorieren (insecure)</span>
-          </label>
-          <p class="modal-hint">Nur aktivieren, wenn der Server ein selbstsigniertes oder intern signiertes Zertifikat verwendet, dem du vertraust.</p>
-        </div>
-
-        <label class="modal-label" for="select-model">Modell</label>
-        <div class="modal-row">
-          <select id="select-model" class="modal-input modal-input--grow"></select>
-          <button type="button" id="btn-load-models" class="btn-secondary" title="Verfügbare Modelle vom Anbieter laden">Modelle laden</button>
-        </div>
-        <p id="model-status" class="modal-hint"></p>
-
-        <p id="modal-save-error" class="modal-save-error hidden"></p>
       </div>
-      <footer class="modal-dialog__footer">
+
+      <div class="settings-dialog__hint-bar">
+        <p class="settings-global-hint">
+          API-Keys werden verschlüsselt auf diesem Gerät gespeichert und verlassen die App nur bei Anfragen an den Anbieter. Das gilt für alle Einstellungsbereiche.
+          Änderungen gelten erst mit <strong>Übernehmen</strong>.
+        </p>
+      </div>
+
+      <footer class="settings-dialog__footer modal-dialog__footer">
         <div class="modal-actions">
-          <button type="button" id="btn-settings-save" class="btn-primary">Speichern &amp; aktivieren</button>
-          <button type="button" id="btn-settings-clear" class="btn-secondary">Anbieter zurücksetzen</button>
+          <button type="button" id="btn-settings-footer-close" class="btn-secondary">Schließen</button>
+          <button type="button" id="btn-settings-save" class="btn-primary">Übernehmen</button>
         </div>
       </footer>
+
+      <div id="add-model-overlay" class="add-model-overlay hidden" aria-hidden="true">
+      <div
+        class="add-model-dialog modal-dialog modal-dialog--nested"
+        role="dialog"
+        aria-modal="true"
+        id="dialog-add-model"
+        aria-labelledby="dialog-add-model-title"
+        aria-describedby="add-model-intro-text">
+        <header class="add-model-dialog__header">
+          <h2 id="dialog-add-model-title" class="add-model-dialog__title">Modell hinzufügen</h2>
+          <button type="button" id="btn-add-model-close-x" class="settings-dialog__icon-close" aria-label="Popup schließen">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path fill="currentColor" d="M3.47 3.47a.75.75 0 0 1 1.06 0L8 6.94l3.47-3.47a.75.75 0 1 1 1.06 1.06L9.06 8l3.47 3.47a.75.75 0 1 1-1.06 1.06L8 9.06l-3.47 3.47a.75.75 0 0 1-1.06-1.06L6.94 8 3.47 4.53a.75.75 0 0 1 0-1.06z"/>
+            </svg>
+          </button>
+        </header>
+        <div class="add-model-dialog__body modal-dialog__body">
+          <p class="popup-form-hint" id="add-model-intro-text">
+            Zugang und Modell gemeinsam einstellen und die Kombination mit <strong>Zur Präferenzliste hinzufügen</strong>
+            übernehmen. Server-URL und Modell teilen sich eine Zeile, wenn das Fenster breit genug ist.
+          </p>
+          <div class="provider-flow-card">
+            <p id="popup-form-flow-lead" class="popup-form-hint popup-form-hint--tight">
+              Die Anbieterwahl steuert Verbindungsfelder und Modellkatalog.
+            </p>
+
+            <div class="popup-flow-subhead">Anbieter</div>
+            <label class="visually-hidden" for="select-provider">Anbieter auswählen</label>
+            <select id="select-provider" class="modal-input" aria-describedby="provider-status"></select>
+            <p id="provider-status" class="modal-hint"></p>
+
+            <div id="provider-key-row">
+              <div class="popup-flow-subhead">API-Schlüssel</div>
+              <label class="visually-hidden" for="input-api-key">API-Key</label>
+              <input type="password" id="input-api-key" class="modal-input" placeholder="sk-…" autocomplete="off" />
+            </div>
+
+            <div id="provider-insecure-row" class="hidden modal-checkbox-row">
+              <label class="modal-checkbox">
+                <input type="checkbox" id="input-insecure-tls" />
+                <span>TLS-Zertifikat ignorieren (insecure)</span>
+              </label>
+              <p class="modal-hint">Nur bei selbstsigniertem oder intern signiertem Zertifikat, dem du vertraust.</p>
+            </div>
+
+            <div class="provider-form-grid-popup">
+              <div id="provider-baseurl-row" class="hidden provider-baseurl-slot">
+                <div class="popup-flow-subhead">Server-URL</div>
+                <label class="visually-hidden" for="input-base-url">Server-URL</label>
+                <input type="text" id="input-base-url" class="modal-input" placeholder="http://localhost:11434" autocomplete="off" />
+              </div>
+              <div class="popup-model-slot">
+                <div class="popup-flow-subhead">Modell</div>
+                <div class="modal-row">
+                  <select id="select-model" class="modal-input modal-input--grow"></select>
+                  <button type="button" id="btn-load-models" class="btn-secondary">Modelle laden</button>
+                </div>
+                <p id="model-status" class="modal-hint"></p>
+              </div>
+              <div id="openai-reasoning-section" class="hidden">
+                <div class="popup-flow-subhead">Reasoning (<span lang="en">OpenAI</span>)</div>
+                <label class="visually-hidden" for="select-popup-reasoning">Reasoning-Effort</label>
+                <select id="select-popup-reasoning" class="modal-input">
+                  <option value="low">low</option>
+                  <option value="medium" selected>medium</option>
+                  <option value="high">high</option>
+                </select>
+                <p id="popup-reasoning-hint" class="modal-hint"><span lang="en">reasoning_effort</span> bei passenden OpenAI-Modellen.</p>
+              </div>
+            </div>
+
+            <p id="popup-model-catalog-hint" class="modal-hint">Modellliste bezieht sich auf <strong id="model-load-provider-label">Ollama</strong>.</p>
+          </div>
+        </div>
+        <footer class="add-model-dialog__bottom">
+          <div class="modal-actions">
+            <button type="button" id="btn-add-model-close" class="btn-secondary">Schließen</button>
+            <button type="button" id="btn-add-preset-row" class="btn-primary">Übernehmen</button>
+          </div>
+        </footer>
+      </div>
     </div>
   </div>
+</div>
 
   <script src="vendor/marked.umd.js"></script>
   <script src="vendor/purify.min.js"></script>

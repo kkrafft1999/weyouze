@@ -32,61 +32,83 @@ async function listModels(config) {
   return { models };
 }
 
-function mergeToolCallDeltas(acc, deltas) {
-  if (!Array.isArray(deltas)) return;
-  for (const d of deltas) {
-    const idx = typeof d.index === 'number' ? d.index : 0;
-    if (!acc.has(idx)) {
-      acc.set(idx, { id: '', type: 'function', function: { name: '', arguments: '' } });
-    }
-    const cur = acc.get(idx);
-    if (d.id) cur.id = d.id;
-    if (d.type) cur.type = d.type;
-    if (d.function?.name) cur.function.name += d.function.name;
-    if (typeof d.function?.arguments === 'string') {
-      cur.function.arguments += d.function.arguments;
-    }
+// Tools: Chat-Completions-Form ({type:"function", function:{name,description,parameters}})
+// → Responses-Form (flach: {type:"function", name, description, parameters}).
+function translateToolsToResponses(tools) {
+  if (!Array.isArray(tools) || tools.length === 0) return undefined;
+  const out = [];
+  for (const t of tools) {
+    const fn = t?.function;
+    if (!fn?.name) continue;
+    out.push({
+      type: 'function',
+      name: fn.name,
+      description: fn.description || '',
+      parameters: fn.parameters || { type: 'object', properties: {} },
+    });
   }
+  return out.length ? out : undefined;
 }
 
-function toolCallsMapToArray(map) {
-  if (map.size === 0) return undefined;
-  return [...map.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([, v]) => ({
-      id: v.id,
-      type: v.type || 'function',
-      function: { name: v.function.name, arguments: v.function.arguments },
-    }));
-}
-
-function reasoningFragmentFromDelta(delta) {
-  if (!delta) return null;
-  if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0) {
-    return delta.reasoning_content;
+// Konversationsverlauf in Chat-Completions-Form
+// (system/user/assistant + assistant.tool_calls + tool/tool_call_id) → Responses-input.
+// Pro Round wird der gesamte Verlauf als Items uebergeben; previous_response_id
+// nutzen wir nicht, weil der chat-handler den Verlauf bereits selbst pflegt.
+function translateMessagesToResponsesInput(messages) {
+  const out = [];
+  for (const m of messages) {
+    if (m.role === 'system' || m.role === 'user') {
+      out.push({ role: m.role, content: typeof m.content === 'string' ? m.content : '' });
+      continue;
+    }
+    if (m.role === 'assistant') {
+      const text = typeof m.content === 'string' ? m.content : '';
+      if (text) out.push({ role: 'assistant', content: text });
+      if (Array.isArray(m.tool_calls)) {
+        for (const tc of m.tool_calls) {
+          out.push({
+            type: 'function_call',
+            call_id: tc.id,
+            name: tc.function?.name || '',
+            arguments: typeof tc.function?.arguments === 'string' ? tc.function.arguments : '',
+          });
+        }
+      }
+      continue;
+    }
+    if (m.role === 'tool') {
+      const output = typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '');
+      out.push({
+        type: 'function_call_output',
+        call_id: m.tool_call_id,
+        output,
+      });
+    }
   }
-  if (typeof delta.reasoning === 'string' && delta.reasoning.length > 0) {
-    return delta.reasoning;
-  }
-  if (typeof delta.thinking === 'string' && delta.thinking.length > 0) {
-    return delta.thinking;
-  }
-  return null;
+  return out;
 }
 
 async function streamChatRound({ config, model, messages, tools, callbacks }) {
   const apiKey = config?.apiKey;
   if (!apiKey) return { error: 'Kein API-Key hinterlegt.', code: 'NO_API_KEY' };
 
-  const body = { model, messages, stream: true };
-  if (Array.isArray(tools) && tools.length > 0) {
-    body.tools = tools;
+  const body = {
+    model,
+    input: translateMessagesToResponsesInput(messages),
+    stream: true,
+  };
+  const respTools = translateToolsToResponses(tools);
+  if (respTools) {
+    body.tools = respTools;
     body.tool_choice = 'auto';
+  }
+  if (typeof config?.reasoningEffort === 'string' && config.reasoningEffort.trim()) {
+    body.reasoning = { effort: config.reasoningEffort.trim() };
   }
 
   let res;
   try {
-    res = await fetch(`${baseUrlOf(config)}/chat/completions`, {
+    res = await fetch(`${baseUrlOf(config)}/responses`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -105,43 +127,85 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
 
   const reader = res.body.getReader();
   const fullContentRef = { v: '' };
-  const toolCallsByIndex = new Map();
+  const toolCalls = [];
   let finishReason = null;
-
-  const apply = (delta) => {
-    const reasoning = reasoningFragmentFromDelta(delta);
-    if (reasoning) callbacks.onReasoningDelta(reasoning);
-    if (delta?.content) {
-      fullContentRef.v += delta.content;
-      callbacks.onTextDelta(delta.content);
-    }
-    if (delta?.tool_calls) {
-      callbacks.onMarkGenerating();
-      mergeToolCallDeltas(toolCallsByIndex, delta.tool_calls);
-    }
-  };
+  let streamError = null;
 
   try {
     for await (const evt of iterSseEvents(reader)) {
+      const ev = evt.event || '';
       const data = evt.data;
       if (!data || data === '[DONE]') continue;
       let json;
       try { json = JSON.parse(data); } catch { continue; }
-      const choice = json.choices?.[0];
-      if (!choice) continue;
-      if (choice.finish_reason) finishReason = choice.finish_reason;
-      apply(choice.delta);
+
+      if (ev === 'response.output_text.delta') {
+        const delta = typeof json.delta === 'string' ? json.delta : '';
+        if (delta) {
+          fullContentRef.v += delta;
+          callbacks.onTextDelta(delta);
+        }
+        continue;
+      }
+
+      // OpenAI streamt Reasoning unter mehreren Event-Namen je nach Modell.
+      if (
+        ev === 'response.reasoning_summary_text.delta'
+        || ev === 'response.reasoning_text.delta'
+        || ev === 'response.reasoning.delta'
+      ) {
+        const delta = typeof json.delta === 'string' ? json.delta : '';
+        if (delta) callbacks.onReasoningDelta(delta);
+        continue;
+      }
+
+      if (ev === 'response.output_item.added') {
+        if (json.item?.type === 'function_call') callbacks.onMarkGenerating();
+        continue;
+      }
+
+      if (ev === 'response.output_item.done') {
+        const item = json.item;
+        if (item?.type === 'function_call') {
+          toolCalls.push({
+            id: item.call_id || item.id,
+            type: 'function',
+            function: {
+              name: item.name || '',
+              arguments: typeof item.arguments === 'string' ? item.arguments : '',
+            },
+          });
+        }
+        continue;
+      }
+
+      if (ev === 'response.completed') {
+        finishReason = toolCalls.length ? 'tool_calls' : 'stop';
+        continue;
+      }
+
+      if (ev === 'response.error' || ev === 'error') {
+        const errMsg =
+          json.error?.message
+          || (typeof json.message === 'string' ? json.message : '')
+          || 'Fehler im Antwort-Stream.';
+        streamError = errMsg;
+        continue;
+      }
     }
   } finally {
     reader.releaseLock?.();
   }
 
+  if (streamError) {
+    return { error: streamError, code: 'API' };
+  }
+
   const fullContent = fullContentRef.v;
-  const tool_calls = toolCallsMapToArray(toolCallsByIndex);
   const message = {
     role: 'assistant',
-    content: fullContent.length > 0 ? fullContent : tool_calls?.length ? null : '',
-    ...(tool_calls?.length ? { tool_calls } : {}),
+    content: fullContent.length > 0 ? fullContent : toolCalls.length ? null : '',
+    ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
   };
   return { message, finishReason };
 }

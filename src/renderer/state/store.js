@@ -15,9 +15,11 @@ export const appStore = {
   llmState: {
     encryptionAvailable: true,
     activeProvider: 'openai',
+    activePresetId: null,
+    presets: [],
+    chatTarget: null,
     providers: [],
   },
-  settingsDraftProviderId: null,
   chatMessages: [],
   chatSessionId: 0,
   currentChatId: '',

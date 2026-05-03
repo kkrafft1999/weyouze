@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weyouze — Einstellungen (UI-Mockup zur Abstimmung)</title>
+  <link rel="stylesheet" href="../../src/renderer/styles/inter.css">
+  <link rel="stylesheet" href="../../src/renderer/styles/tokens.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --mockup-title-bar: var(--ds-grey-card);
+    }
+
+    [data-theme="dark"] {
+      --mockup-title-bar: var(--ds-grey-card);
+    }
+
+    body {
+      font-family: var(--ds-font-ui);
+      font-size: var(--ds-font-size-base);
+      line-height: var(--ds-line-height-base);
+      background: var(--ds-grey-bg);
+      color: var(--ds-black);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    [data-theme="dark"] body {
+      color: var(--ds-white);
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+      color: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      background: none;
+      border: none;
+    }
+
+    :focus { outline: none; }
+    :focus-visible {
+      outline: var(--ds-focus-ring);
+      outline-offset: var(--ds-focus-offset);
+    }
+
+    /* —— Demo-Chrome (Seite drumherum) —— */
+    .demo-page {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+
+    .demo-banner {
+      border: 1px solid var(--ds-grey-divider);
+      border-radius: var(--ds-radius-md);
+      background: var(--ds-white);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      font-size: var(--ds-font-size-md);
+      color: var(--ds-grey-muted);
+    }
+
+    [data-theme="dark"] .demo-banner {
+      background: var(--ds-grey-card);
+    }
+
+    .demo-banner strong {
+      display: block;
+      font-weight: var(--ds-font-weight-bold);
+      color: var(--ds-black);
+      margin-bottom: 6px;
+    }
+
+    [data-theme="dark"] .demo-banner strong {
+      color: var(--ds-white);
+    }
+
+    .demo-theme-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 16px;
+    }
+
+    .demo-theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: var(--ds-font-size-sm);
+      font-weight: var(--ds-font-weight-medium);
+      color: var(--ds-grey-muted);
+    }
+
+    .demo-theme-toggle input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--ds-blue);
+    }
+
+    /* —— Modal-Simulating Backdrop —— */
+    .modal-backdrop {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 24px 16px 48px;
+      min-height: calc(100vh - 120px);
+    }
+
+    /* Mindestens ~1200px App-Breite: Dialog darf großzügiger sein */
+    .settings-dialog {
+      width: 100%;
+      max-width: 1040px;
+      background: var(--ds-white);
+      border: 1px solid var(--ds-grey-divider);
+      border-radius: var(--ds-radius-md);
+      display: flex;
+      flex-direction: column;
+      max-height: min(92vh, 880px);
+    }
+
+    [data-theme="dark"] .settings-dialog {
+      background: var(--ds-grey-card);
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--ds-grey-divider);
+      flex-shrink: 0;
+    }
+
+    .settings-header h1 {
+      font-size: 16px;
+      font-weight: var(--ds-font-weight-bold);
+      letter-spacing: -0.01em;
+    }
+
+    .settings-header .subtitle {
+      font-size: var(--ds-font-size-sm);
+      color: var(--ds-grey-muted);
+      margin-top: 4px;
+      max-width: 42ch;
+    }
+
+    .icon-btn-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--ds-grey-muted);
+      transition: background var(--ds-motion-fast);
+    }
+
+    .icon-btn-close:hover {
+      background: var(--ds-grey-bg);
+    }
+
+    /* —— Body: Sidebar + Panel —— */
+    .settings-body {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      min-height: 0;
+      flex: 1;
+    }
+
+    @media (max-width: 640px) {
+      .settings-body {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .settings-nav {
+      border-right: 1px solid var(--ds-grey-divider);
+      padding: 12px 10px;
+      background: var(--ds-grey-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    [data-theme="dark"] .settings-nav {
+      background: var(--ds-grey-bg);
+    }
+
+    @media (max-width: 640px) {
+      .settings-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        border-right: none;
+        border-bottom: 1px solid var(--ds-grey-divider);
+      }
+    }
+
+    .nav-item {
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: var(--ds-radius-md);
+      border: 1px solid transparent;
+      font-size: var(--ds-font-size-md);
+      font-weight: var(--ds-font-weight-medium);
+      color: var(--ds-grey-strong);
+      transition: background var(--ds-motion-fast), border-color var(--ds-motion-fast);
+    }
+
+    @media (max-width: 640px) {
+      .nav-item {
+        width: auto;
+        flex: 1 1 auto;
+        min-width: min(100%, 140px);
+      }
+    }
+
+    .nav-item:hover {
+      border-color: var(--ds-blue);
+      background: var(--ds-blue-soft);
+    }
+
+    .nav-item[aria-selected="true"] {
+      border-color: var(--ds-blue);
+      background: var(--ds-blue-soft);
+      color: var(--ds-blue);
+    }
+
+    .nav-item-desc {
+      display: block;
+      font-size: 11px;
+      font-weight: var(--ds-font-weight-regular);
+      color: var(--ds-grey-muted);
+      margin-top: 2px;
+      line-height: 1.35;
+    }
+
+    .nav-item[aria-selected="true"] .nav-item-desc {
+      color: var(--ds-grey-strong);
+    }
+
+    .settings-panel-wrap {
+      overflow: auto;
+      min-height: 280px;
+    }
+
+    .settings-panel {
+      display: none;
+      padding: 20px 22px 24px;
+    }
+
+    .settings-panel.is-active {
+      display: block;
+    }
+
+    .eyebrow {
+      font-size: var(--ds-font-size-xs);
+      font-weight: var(--ds-font-weight-bold);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ds-grey-muted);
+      margin-bottom: 6px;
+    }
+
+    .form-hint {
+      font-size: var(--ds-font-size-sm);
+      color: var(--ds-grey-muted);
+      margin-bottom: 20px;
+      max-width: 56ch;
+    }
+
+    .field-group {
+      margin-bottom: 20px;
+    }
+
+    .field-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .label-row {
+      margin-bottom: 6px;
+    }
+
+    .input-text,
+    .input-select {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--ds-grey-divider);
+      border-radius: var(--ds-radius-md);
+      background: var(--ds-white);
+      font-size: var(--ds-font-size-base);
+      transition: border-color var(--ds-motion-fast);
+    }
+
+    [data-theme="dark"] .input-text,
+    [data-theme="dark"] .input-select {
+      background: var(--ds-grey-bg);
+      border-color: var(--ds-grey-divider);
+    }
+
+    .input-text:focus-visible,
+    .input-select:focus-visible {
+      border-color: var(--ds-blue);
+    }
+
+    .input-select {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath stroke='%236D6D6D' stroke-linecap='round' stroke-width='1.5' d='m1 1.5 5 5 5-5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+
+    .field-meta {
+      font-size: var(--ds-font-size-sm);
+      color: var(--ds-grey-muted);
+      margin-top: 6px;
+    }
+
+    .row-split {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .row-split .input-text {
+      flex: 1;
+    }
+
+    .btn-secondary {
+      padding: 8px 18px;
+      border-radius: var(--ds-radius-pill);
+      border: 1px solid var(--ds-grey-divider);
+      background: transparent;
+      font-weight: var(--ds-font-weight-medium);
+      font-size: var(--ds-font-size-md);
+      white-space: nowrap;
+      transition: border-color var(--ds-motion-fast);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--ds-grey-muted);
+    }
+
+    .check-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-top: 4px;
+    }
+
+    .check-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      accent-color: var(--ds-blue);
+      flex-shrink: 0;
+    }
+
+    .check-label {
+      font-size: var(--ds-font-size-base);
+    }
+
+    .section-divider {
+      height: 1px;
+      background: var(--ds-grey-divider);
+      margin: 22px 0;
+    }
+
+    .subsection-title {
+      font-size: var(--ds-font-size-md);
+      font-weight: var(--ds-font-weight-bold);
+      color: var(--ds-black);
+      margin: 0 0 10px;
+    }
+
+    [data-theme="dark"] .subsection-title {
+      color: var(--ds-white);
+    }
+
+    .subsection-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 10px;
+      flex-wrap: wrap;
+    }
+
+    .subsection-title-row .subsection-title {
+      margin: 0;
+    }
+
+    .pref-models-intro {
+      font-size: var(--ds-font-size-sm);
+      color: var(--ds-grey-muted);
+      line-height: var(--ds-line-height-prose);
+      max-width: 72ch;
+      margin: 0 0 16px;
+    }
+
+    .pref-models-intro strong {
+      font-weight: var(--ds-font-weight-bold);
+      color: var(--ds-grey-strong);
+    }
+
+    [data-theme="dark"] .pref-models-intro strong {
+      color: var(--ds-white);
+    }
+
+    .pref-models-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .pref-models-header .subsection-title {
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .pref-models-header .btn-open-add-model {
+      flex-shrink: 0;
+    }
+
+    /* Popup: Modell hinzufügen */
+    .add-model-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      background: rgba(0, 0, 0, 0.45);
+    }
+
+    .add-model-overlay.is-open {
+      display: flex;
+    }
+
+    [data-theme="dark"] .add-model-overlay {
+      background: rgba(0, 0, 0, 0.62);
+    }
+
+    .add-model-dialog {
+      width: 100%;
+      max-width: 560px;
+      max-height: min(90vh, 720px);
+      background: var(--ds-white);
+      border: 1px solid var(--ds-grey-divider);
+      border-radius: var(--ds-radius-md);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+    }
+
+    [data-theme="dark"] .add-model-dialog {
+      background: var(--ds-grey-card);
+    }
+
+    .add-model-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--ds-grey-divider);
+      flex-shrink: 0;
+    }
+
+    .add-model-header h2 {
+      font-size: 16px;
+      font-weight: var(--ds-font-weight-bold);
+      letter-spacing: -0.01em;
+      margin: 0;
+    }
+
+    .add-model-body {
+      overflow: auto;
+      padding: 18px 18px 20px;
+      min-height: 0;
+    }
+
+    .add-model-body .provider-flow-card {
+      margin-bottom: 0;
+    }
+
+    .popup-form-hint {
+      font-size: var(--ds-font-size-sm);
+      color: var(--ds-grey-muted);
+      line-height: var(--ds-line-height-prose);
+      max-width: 72ch;
+      margin: 0 0 14px;
+    }
+
+    .popup-form-hint strong {
+      font-weight: var(--ds-font-weight-bold);
+      color: var(--ds-grey-strong);
+    }
+
+    [data-theme="dark"] .popup-form-hint strong {
+      color: var(--ds-white);
+    }
+
+    .add-model-popup-footer {
+      flex-shrink: 0;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 18px;
+      border-top: 1px solid var(--ds-grey-divider);
+      background: var(--ds-grey-bg);
+    }
+
+    [data-theme="dark"] .add-model-popup-footer {
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .pref-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .pref-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .pref-main strong {
+      display: block;
+      font-size: var(--ds-font-size-base);
+      font-weight: var(--ds-font-weight-bold);
+      margin-bottom: 4px;
+    }
+
+    .pref-detail {
+      display: block;
+      font-size: var(--ds-font-size-sm);
+      color: var(--ds-grey-muted);
+      line-height: var(--ds-line-height-prose);
+    }
+
+    .pref-params {
+      font-family: var(--ds-font-mono);
+      font-size: var(--ds-font-size-sm);
+    }
+
+    .provider-flow-card {
+      border: 1px solid var(--ds-grey-divider);
+      border-radius: var(--ds-radius-md);
+      background: var(--ds-grey-bg);
+      padding: 14px 16px 16px;
+      margin-bottom: 8px;
+    }
+
+    [data-theme="dark"] .provider-flow-card {
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .provider-flow-card .field-group {
+      margin-bottom: 14px;
+    }
+
+    .provider-flow-card .field-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .provider-flow-card .field-group:last-of-type {
+      margin-bottom: 0;
+    }
+
+    .provider-form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 16px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+
+    @media (max-width: 560px) {
+      .provider-form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .provider-form-grid .field-group {
+      margin-bottom: 0;
+    }
+
+    .provider-flow-lead {
+      font-size: var(--ds-font-size-sm);
+      color: var(--ds-grey-muted);
+      margin-bottom: 14px;
+      max-width: 72ch;
+      line-height: var(--ds-line-height-prose);
+    }
+
+    .flow-subhead {
+      font-size: var(--ds-font-size-xs);
+      font-weight: var(--ds-font-weight-bold);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ds-grey-muted);
+      margin: 0 0 10px;
+    }
+
+    .flow-subhead:first-child {
+      margin-top: 0;
+    }
+
+    .add-model-actions {
+      margin-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .add-model-actions .btn-secondary {
+      flex-shrink: 0;
+    }
+
+    .pref-row-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* Toggle (Mono-Blue: 40×22, Knubbel 16×16) */
+    .pref-switch {
+      width: 40px;
+      height: 22px;
+      padding: 0;
+      flex-shrink: 0;
+      border: none;
+      background: transparent;
+    }
+
+    .pref-switch-track {
+      display: block;
+      width: 40px;
+      height: 22px;
+      border-radius: var(--ds-radius-pill);
+      background: var(--ds-grey-divider);
+      transition: background var(--ds-motion-fast);
+      position: relative;
+    }
+
+    .pref-switch[aria-checked="true"] .pref-switch-track {
+      background: var(--ds-blue);
+    }
+
+    .pref-switch-knob {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--ds-white);
+      top: 3px;
+      left: 3px;
+      pointer-events: none;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+      transition: transform var(--ds-motion-fast);
+    }
+
+    .pref-switch[aria-checked="true"] .pref-switch-knob {
+      transform: translateX(18px);
+    }
+
+    .pref-switch:focus-visible .pref-switch-track {
+      outline: var(--ds-focus-ring);
+      outline-offset: var(--ds-focus-offset);
+    }
+
+    .pref-row-inner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border: 1px solid var(--ds-grey-divider);
+      border-radius: var(--ds-radius-md);
+      background: var(--ds-white);
+      transition: border-color var(--ds-motion-fast), background var(--ds-motion-fast), opacity var(--ds-motion-fast);
+    }
+
+    [data-theme="dark"] .pref-row-inner {
+      background: var(--ds-grey-bg);
+    }
+
+    .pref-row-inner.is-inactive {
+      opacity: 0.78;
+      border-style: dashed;
+    }
+
+    .pref-row-inner.is-inactive .pref-main strong {
+      color: var(--ds-grey-muted);
+    }
+
+    .btn-icon-trash {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--ds-grey-muted);
+      transition: background var(--ds-motion-fast), color var(--ds-motion-fast);
+    }
+
+    .btn-icon-trash:hover {
+      background: var(--ds-grey-bg);
+      color: var(--ds-black);
+    }
+
+    [data-theme="dark"] .btn-icon-trash:hover {
+      color: var(--ds-white);
+    }
+
+    .btn-icon-trash svg {
+      display: block;
+    }
+
+    /* Tools / Allgemein Platzhalter */
+    .placeholder-card {
+      border: 1px dashed var(--ds-grey-divider);
+      border-radius: var(--ds-radius-md);
+      padding: 16px 18px;
+      background: var(--ds-white);
+      margin-bottom: 14px;
+    }
+
+    [data-theme="dark"] .placeholder-card {
+      background: var(--ds-grey-bg);
+    }
+
+    .placeholder-card h3 {
+      font-size: var(--ds-font-size-md);
+      font-weight: var(--ds-font-weight-bold);
+      margin-bottom: 6px;
+    }
+
+    .placeholder-card p {
+      font-size: var(--ds-font-size-sm);
+      color: var(--ds-grey-muted);
+      line-height: var(--ds-line-height-prose);
+    }
+
+    .pill-soon {
+      display: inline-block;
+      margin-top: 10px;
+      font-size: var(--ds-font-size-xs);
+      font-weight: var(--ds-font-weight-bold);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: var(--ds-radius-pill);
+      border: 1px solid var(--ds-grey-divider);
+      color: var(--ds-grey-muted);
+    }
+
+    textarea.input-text {
+      min-height: 120px;
+      resize: vertical;
+      line-height: var(--ds-line-height-prose);
+    }
+
+    .settings-global-hint {
+      flex-shrink: 0;
+      padding: 12px 20px 14px;
+      border-top: 1px solid var(--ds-grey-divider);
+      background: var(--ds-grey-bg);
+    }
+
+    [data-theme="dark"] .settings-global-hint {
+      background: var(--ds-grey-bg);
+    }
+
+    .settings-global-hint-inner {
+      margin-bottom: 0;
+      max-width: none;
+    }
+
+    /* Footer */
+    .settings-footer {
+      flex-shrink: 0;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 14px 20px;
+      border-top: 1px solid var(--ds-grey-divider);
+      background: var(--ds-grey-bg);
+    }
+
+    .btn-primary {
+      padding: 8px 18px;
+      border-radius: var(--ds-radius-pill);
+      border: 1px solid transparent;
+      background: var(--ds-btn-primary-bg);
+      color: var(--ds-btn-primary-fg);
+      font-weight: var(--ds-font-weight-bold);
+      font-size: var(--ds-font-size-md);
+      transition: background var(--ds-motion-fast);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--ds-btn-primary-bg-hover);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      box-shadow: var(--ds-btn-primary-active-shadow);
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-page">
+    <div class="demo-theme-row">
+      <label class="demo-theme-toggle" for="theme-dark">
+        <input type="checkbox" id="theme-dark" data-theme-toggle>
+        <span>Dark-Mode (Vorschau)</span>
+      </label>
+    </div>
+
+    <div class="demo-banner" role="status">
+      <strong>Abstimmungs-Mockup — nicht produktiv</strong>
+      Eigenständige HTML-Datei zur Diskussion des neuen Einstellungslayouts. Navigation links soll später u. a. Modelle, Tool-Konfiguration und globale Voreinstellungen tragen. Öffnen aus dem Repo: <code>docs/ui-design/settings-dialog-mockup.html</code> (Fonts/Tokens per relativem Pfad aus <code>src/renderer/styles/</code>).
+    </div>
+
+    <div class="modal-backdrop">
+      <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-desc">
+        <header class="settings-header">
+          <div>
+            <h1 id="dialog-title">Einstellungen</h1>
+            <p id="dialog-desc" class="subtitle">Bereich: <span id="panel-title-active">Modelle</span></p>
+          </div>
+          <button type="button" class="icon-btn-close" aria-label="Dialog schließen (Mockup)">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path fill="currentColor" d="M3.47 3.47a.75.75 0 0 1 1.06 0L8 6.94l3.47-3.47a.75.75 0 1 1 1.06 1.06L9.06 8l3.47 3.47a.75.75 0 1 1-1.06 1.06L8 9.06l-3.47 3.47a.75.75 0 0 1-1.06-1.06L6.94 8 3.47 4.53a.75.75 0 0 1 0-1.06z"/>
+            </svg>
+          </button>
+        </header>
+
+        <div class="settings-body">
+          <nav class="settings-nav" role="tablist" aria-label="Einstellungsbereiche">
+            <button type="button" class="nav-item" role="tab" aria-selected="true" aria-controls="panel-provider" id="tab-provider" data-panel="provider">
+              Modelle
+              <span class="nav-item-desc">API, Anbindung, Präferenzen</span>
+            </button>
+            <button type="button" class="nav-item" role="tab" aria-selected="false" aria-controls="panel-tools" id="tab-tools" data-panel="tools">
+              Tools
+              <span class="nav-item-desc">Integrationen (z. B. später)</span>
+            </button>
+            <button type="button" class="nav-item" role="tab" aria-selected="false" aria-controls="panel-general" id="tab-general" data-panel="general">
+              Allgemein
+              <span class="nav-item-desc">Texte, Prompts, Verhalten</span>
+            </button>
+          </nav>
+
+          <div class="settings-panel-wrap">
+            <section class="settings-panel is-active" id="panel-provider" role="tabpanel" aria-labelledby="tab-provider">
+              <div class="pref-models-header">
+                <h2 class="subsection-title" id="heading-pref-models">Präferierte Modelle</h2>
+                <button type="button" class="btn-secondary btn-open-add-model" id="btn-open-add-model" aria-haspopup="dialog" aria-controls="dialog-add-model">Modell hinzufügen</button>
+              </div>
+              <p class="pref-models-intro">
+                Hier liegen gespeicherte Kombinationen aus Anbieter, Modell und Parametern. Der Schalter steuert, ob ein Eintrag im Chat im <strong>Modellmenü</strong> angeboten wird (vergleichbar mit Cursor). Die konkrete Auswahl für eine Konversation triffst du dort.
+              </p>
+
+              <ul id="pref-model-list" class="pref-list" role="list" aria-labelledby="heading-pref-models">
+                <li class="pref-row">
+                  <div class="pref-row-inner" data-pref-active="true">
+                    <div class="pref-main">
+                      <strong>Ollama · gpt-oss:20b</strong>
+                      <span class="pref-detail">Server laut Verbindung · TLS insecure</span>
+                    </div>
+                    <div class="pref-row-actions">
+                      <button type="button" class="pref-switch" role="switch" aria-checked="true" aria-label="Ollama · gpt-oss:20b — im Chat-Modellmenü sichtbar">
+                        <span class="pref-switch-track" aria-hidden="true">
+                          <span class="pref-switch-knob"></span>
+                        </span>
+                      </button>
+                      <button type="button" class="btn-icon-trash" aria-label="Eintrag Ollama gpt-oss:20b aus der Liste entfernen">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </li>
+                <li class="pref-row">
+                  <div class="pref-row-inner is-inactive" data-pref-active="false">
+                    <div class="pref-main">
+                      <strong>OpenAI API · gpt-4.1</strong>
+                      <span class="pref-detail pref-params">reasoning_effort: medium</span>
+                    </div>
+                    <div class="pref-row-actions">
+                      <button type="button" class="pref-switch" role="switch" aria-checked="false" aria-label="OpenAI API · gpt-4.1 — im Chat-Modellmenü ausgeblendet">
+                        <span class="pref-switch-track" aria-hidden="true">
+                          <span class="pref-switch-knob"></span>
+                        </span>
+                      </button>
+                      <button type="button" class="btn-icon-trash" aria-label="Eintrag OpenAI API gpt-4.1 aus der Liste entfernen">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              </ul>
+            </section>
+
+            <section class="settings-panel" id="panel-tools" role="tabpanel" aria-labelledby="tab-tools" hidden>
+              <p class="form-hint">
+                Hier können später z. B. externe Tools, Endpunkte oder MCP-Anbindungen verwaltet werden.
+              </p>
+              <div class="placeholder-card">
+                <h3>Tool-Katalog (Platzhalter)</h3>
+                <p>
+                  Kurze Liste oder Karten pro Tool: Name, Status, „Bearbeiten“. Für das Mockup nur Strukturhinweis — Inhalte und Datenfluss folgen mit der Implementierung.
+                </p>
+                <span class="pill-soon">Noch nicht umgesetzt</span>
+              </div>
+              <div class="placeholder-card">
+                <h3>Sichere Defaults</h3>
+                <p>
+                  Globale Schalter wie „Netzwerkzugriff für Tools erlauben“ oder „Nur lokal signierte Plugins“ ließen sich hier bündeln.
+                </p>
+              </div>
+            </section>
+
+            <section class="settings-panel" id="panel-general" role="tabpanel" aria-labelledby="tab-general" hidden>
+              <p class="form-hint">
+                Texte und Prompts, die das Verhalten der App übergreifend prägen — getrennt von modellspezifischen Feinheiten beim Anbieter.
+              </p>
+              <div class="field-group">
+                <div class="label-row eyebrow">System- bzw. Basis-Prompt</div>
+                <label class="visually-hidden" for="base-prompt">Basis-Prompt</label>
+                <textarea id="base-prompt" class="input-text" placeholder="Optional: Rolle, Ton, feste Regeln für alle Konversationen …"></textarea>
+                <p class="field-meta">Wird bei neuen Chats vorgeschlagen; modellspezifische Overrides möglich (später abstimmen).</p>
+              </div>
+              <div class="section-divider" aria-hidden="true"></div>
+              <div class="field-group">
+                <div class="label-row eyebrow">UI-Sprache / Formatierungen</div>
+                <label class="visually-hidden" for="locale-pref">Sprache</label>
+                <select id="locale-pref" class="input-select">
+                  <option selected>Deutsch (Deutschland)</option>
+                  <option>English</option>
+                </select>
+                <p class="field-meta">Beispiel — konkrete Optionen klären wir bei der Umsetzung.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="settings-global-hint">
+          <p class="form-hint settings-global-hint-inner">
+            API-Keys werden verschlüsselt auf diesem Gerät gespeichert und verlassen die App nur bei Anfragen an den Anbieter. Das gilt für alle Einstellungsbereiche. Änderungen gelten zunächst nur in diesem Dialog; mit <strong>Übernehmen</strong> wendest du sie auf die App an.
+          </p>
+        </div>
+
+        <footer class="settings-footer">
+          <button type="button" class="btn-secondary">Schließen</button>
+          <button type="button" class="btn-primary">Übernehmen</button>
+        </footer>
+      </div>
+
+      <div id="add-model-overlay" class="add-model-overlay" aria-hidden="true">
+        <div
+          role="dialog"
+          aria-modal="true"
+          id="dialog-add-model"
+          aria-labelledby="dialog-add-model-title"
+          aria-describedby="heading-provider-model-intro"
+          class="add-model-dialog">
+          <header class="add-model-header">
+            <h2 id="dialog-add-model-title">Modell hinzufügen</h2>
+            <button type="button" class="icon-btn-close" id="btn-add-model-close-x" aria-label="Popup schließen (Mockup)">
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <path fill="currentColor" d="M3.47 3.47a.75.75 0 0 1 1.06 0L8 6.94l3.47-3.47a.75.75 0 1 1 1.06 1.06L9.06 8l3.47 3.47a.75.75 0 1 1-1.06 1.06L8 9.06l-3.47 3.47a.75.75 0 0 1-1.06-1.06L6.94 8 3.47 4.53a.75.75 0 0 1 0-1.06z"/>
+              </svg>
+            </button>
+          </header>
+          <div class="add-model-body">
+            <p class="popup-form-hint" id="heading-provider-model-intro">
+              Hier konfigurierst du <strong>Zugang</strong> und <strong>Modell</strong> in einem Schritt und übernimmst die Kombination mit dem Button in die Präferenzliste. <strong>Server-URL</strong> und <strong>Modell</strong> nutzen bei genug Breite dieselbe Zeile; ein schmaler Viewport stapelt die Felder.
+            </p>
+            <div class="provider-flow-card">
+              <p class="provider-flow-lead">
+                Die Anbieterwahl steuert, welche Verbindungsfelder und welcher Modellkatalog gelten. Über <strong>Zur Präferenzliste hinzufügen</strong> nimmst du die aktuelle Kombination in die Liste im Einstellungsdialog auf.
+              </p>
+
+              <div class="flow-subhead">Anbieter</div>
+              <div class="field-group">
+                <label class="visually-hidden" for="provider-select">Anbieter auswählen</label>
+                <select id="provider-select" class="input-select" aria-describedby="provider-meta">
+                  <option value="ollama" selected>Ollama (lokal)</option>
+                  <option value="openai">OpenAI API</option>
+                </select>
+                <p class="field-meta" id="provider-meta">
+                  Nutzt die Server-URL im Raster unten · Ollama-API
+                </p>
+              </div>
+
+              <div id="openai-key-wrap" class="field-group" hidden>
+                <div class="label-row eyebrow">API-Schlüssel</div>
+                <p class="field-meta" style="margin-bottom:8px">Im Mockup nur Platzhalter — in der App verschlüsselt gespeichert.</p>
+                <label class="visually-hidden" for="openai-key">OpenAI API-Schlüssel</label>
+                <input id="openai-key" type="password" class="input-text" value="" placeholder="sk-…" autocomplete="off" readonly>
+              </div>
+
+              <div class="provider-form-grid">
+                <div id="server-url-group" class="field-group">
+                  <div class="label-row eyebrow">Server-URL</div>
+                  <label class="visually-hidden" for="server-url">Server-URL</label>
+                  <input id="server-url" type="url" class="input-text" value="https://ollama.intern.example" autocomplete="off">
+                </div>
+
+                <div class="field-group">
+                  <div class="label-row eyebrow">Modell</div>
+                  <div class="row-split">
+                    <label class="visually-hidden" for="model-pick-select">Modell aus Katalog</label>
+                    <select id="model-pick-select" class="input-select"></select>
+                    <button type="button" class="btn-secondary" id="btn-load-models">Modelle laden</button>
+                  </div>
+                </div>
+
+                <div id="openai-only" class="field-group" hidden>
+                  <div class="label-row eyebrow">Reasoning (OpenAI)</div>
+                  <label class="visually-hidden" for="reasoning-effort">Reasoning-Effort</label>
+                  <select id="reasoning-effort" class="input-select" aria-describedby="reasoning-hint">
+                    <option value="minimal">minimal</option>
+                    <option value="low">low</option>
+                    <option value="medium" selected>medium</option>
+                    <option value="high">high</option>
+                  </select>
+                  <p class="field-meta" id="reasoning-hint"><span lang="en">reasoning_effort</span> bei passenden OpenAI-Modellen.</p>
+                </div>
+              </div>
+
+              <p class="field-meta" style="margin-bottom:12px">Katalog bezieht sich auf <strong id="model-load-provider-label">Ollama</strong> · Server-URL und Modell nutzen bei ausreichend Breite dieselbe Zeile.</p>
+
+              <div id="tls-group" class="field-group">
+                <div class="check-row">
+                  <input type="checkbox" id="insecure-tls" checked>
+                  <div>
+                    <label class="check-label" for="insecure-tls">TLS-Zertifikat ignorieren (insecure)</label>
+                    <p class="field-meta" style="margin-top:6px">
+                      Nur bei selbstsigniertem oder intern signiertem Zertifikat, dem du vertraust.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="add-model-actions">
+                <button type="button" class="btn-secondary" id="btn-add-pref">Zur Präferenzliste hinzufügen</button>
+              </div>
+            </div>
+          </div>
+          <footer class="add-model-popup-footer">
+            <button type="button" class="btn-secondary" id="btn-add-model-cancel">Abbrechen</button>
+            <button type="button" class="btn-primary" id="btn-add-model-popup-apply">Übernehmen</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    code {
+      font-family: var(--ds-font-mono);
+      font-size: 0.92em;
+    }
+  </style>
+
+  <script>
+    (function () {
+      var tabs = [].slice.call(document.querySelectorAll('.nav-item[role="tab"]'));
+      var panels = {
+        provider: document.getElementById('panel-provider'),
+        tools: document.getElementById('panel-tools'),
+        general: document.getElementById('panel-general')
+      };
+      var titleActive = document.getElementById('panel-title-active');
+      var titles = {
+        provider: 'Modelle',
+        tools: 'Tools',
+        general: 'Allgemein'
+      };
+
+      function activate(panelId) {
+        tabs.forEach(function (tab) {
+          var sel = tab.getAttribute('data-panel') === panelId;
+          tab.setAttribute('aria-selected', sel ? 'true' : 'false');
+          tab.tabIndex = sel ? 0 : -1;
+        });
+        Object.keys(panels).forEach(function (key) {
+          var p = panels[key];
+          if (!p) return;
+          var on = key === panelId;
+          p.classList.toggle('is-active', on);
+          p.hidden = !on;
+        });
+        titleActive.textContent = titles[panelId] || '';
+      }
+
+      tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          activate(tab.getAttribute('data-panel'));
+        });
+      });
+
+      var themeToggle = document.getElementById('theme-dark');
+      if (themeToggle) {
+        themeToggle.addEventListener('change', function () {
+          document.documentElement.setAttribute('data-theme', themeToggle.checked ? 'dark' : '');
+        });
+      }
+
+      var addModelOverlay = document.getElementById('add-model-overlay');
+      var btnOpenAddModel = document.getElementById('btn-open-add-model');
+      var popupApplyEl = document.getElementById('btn-add-model-popup-apply');
+      var lastFocusBeforePopup = null;
+
+      function closeAddModelPopup() {
+        if (!addModelOverlay || !addModelOverlay.classList.contains('is-open')) return;
+        addModelOverlay.classList.remove('is-open');
+        addModelOverlay.setAttribute('aria-hidden', 'true');
+        if (document.body.style.overflow === 'hidden') {
+          document.body.style.overflow = '';
+        }
+        var back = lastFocusBeforePopup || btnOpenAddModel;
+        if (back && typeof back.focus === 'function') {
+          back.focus();
+        }
+      }
+
+      function openAddModelPopup() {
+        if (!addModelOverlay) return;
+        lastFocusBeforePopup = document.activeElement;
+        addModelOverlay.classList.add('is-open');
+        addModelOverlay.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        var dlg = document.getElementById('dialog-add-model');
+        var sel = dlg && dlg.querySelector('#provider-select');
+        if (sel && typeof sel.focus === 'function') {
+          sel.focus();
+        }
+      }
+
+      if (btnOpenAddModel) {
+        btnOpenAddModel.addEventListener('click', openAddModelPopup);
+      }
+
+      ['btn-add-model-cancel', 'btn-add-model-close-x'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('click', closeAddModelPopup);
+        }
+      });
+
+      if (popupApplyEl) {
+        popupApplyEl.addEventListener('click', closeAddModelPopup);
+      }
+
+      if (addModelOverlay) {
+        addModelOverlay.addEventListener('click', function (e) {
+          if (e.target === addModelOverlay) {
+            closeAddModelPopup();
+          }
+        });
+      }
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        if (addModelOverlay && addModelOverlay.classList.contains('is-open')) {
+          e.preventDefault();
+          closeAddModelPopup();
+        }
+      });
+
+      /* —— Modelle-Einstellungen (Mockup): Anbieter umschalten, Liste, Popup —— */
+      var providerSelect = document.getElementById('provider-select');
+      var openaiKeyWrap = document.getElementById('openai-key-wrap');
+      var serverUrlGroup = document.getElementById('server-url-group');
+      var tlsGroup = document.getElementById('tls-group');
+      var openaiOnly = document.getElementById('openai-only');
+      var providerMeta = document.getElementById('provider-meta');
+      var modelPick = document.getElementById('model-pick-select');
+      var modelLoadLabel = document.getElementById('model-load-provider-label');
+      var reasoningEl = document.getElementById('reasoning-effort');
+      var prefList = document.getElementById('pref-model-list');
+      var btnAddPref = document.getElementById('btn-add-pref');
+      var insecureTls = document.getElementById('insecure-tls');
+      var serverUrl = document.getElementById('server-url');
+
+      var MODELS = {
+        ollama: ['gpt-oss:20b', 'llama3.2', 'mistral-small'],
+        openai: ['gpt-4.1', 'gpt-4.1-mini', 'o4-mini']
+      };
+
+      var PROVIDER_LABEL = { ollama: 'Ollama', openai: 'OpenAI API' };
+
+      function fillModelSelect(provider) {
+        if (!modelPick) return;
+        var list = MODELS[provider] || [];
+        modelPick.innerHTML = '';
+        list.forEach(function (name) {
+          var o = document.createElement('option');
+          o.value = name;
+          o.textContent = name;
+          modelPick.appendChild(o);
+        });
+      }
+
+      function syncProviderMockup() {
+        if (!providerSelect) return;
+        var v = providerSelect.value;
+        var isOllama = v === 'ollama';
+
+        if (openaiKeyWrap) openaiKeyWrap.hidden = isOllama;
+        if (serverUrlGroup) serverUrlGroup.hidden = !isOllama;
+        if (tlsGroup) tlsGroup.hidden = !isOllama;
+        if (openaiOnly) openaiOnly.hidden = isOllama;
+
+        if (providerMeta) {
+          providerMeta.textContent = isOllama
+            ? 'Nutzt die Server-URL im Raster unten · Ollama-API'
+            : 'Nutzt den hinterlegten API-Schlüssel · OpenAI-API';
+        }
+        if (modelLoadLabel) {
+          modelLoadLabel.textContent = PROVIDER_LABEL[v] || v;
+        }
+        fillModelSelect(v);
+      }
+
+      if (providerSelect) {
+        providerSelect.addEventListener('change', syncProviderMockup);
+        syncProviderMockup();
+      }
+
+      function ollamaDetailLine() {
+        var tls = insecureTls && insecureTls.checked ? 'TLS insecure' : 'TLS geprüft';
+        var host = serverUrl && serverUrl.value ? serverUrl.value.replace(/^https?:\/\//, '') : 'Server';
+        return 'Server: ' + host + ' · ' + tls;
+      }
+
+      function setPrefRowActive(wrap, active) {
+        if (!wrap) return;
+        var sw = wrap.querySelector('.pref-switch');
+        wrap.classList.toggle('is-inactive', !active);
+        wrap.setAttribute('data-pref-active', active ? 'true' : 'false');
+        if (sw) {
+          sw.setAttribute('aria-checked', active ? 'true' : 'false');
+          var strong = wrap.querySelector('.pref-main strong');
+          var name = strong ? strong.textContent : 'Eintrag';
+          sw.setAttribute(
+            'aria-label',
+            name + (active ? ' — im Chat-Modellmenü sichtbar' : ' — im Chat-Modellmenü ausgeblendet')
+          );
+        }
+      }
+
+      function makeTrashButton(ariaLabel) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn-icon-trash';
+        b.setAttribute('aria-label', ariaLabel);
+        b.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+        return b;
+      }
+
+      function buildPrefRow(pLabel, model, detailText, pv) {
+        var li = document.createElement('li');
+        li.className = 'pref-row';
+        li.setAttribute('data-pref-added', 'true');
+
+        var wrap = document.createElement('div');
+        wrap.className = 'pref-row-inner';
+
+        var main = document.createElement('div');
+        main.className = 'pref-main';
+
+        var strong = document.createElement('strong');
+        strong.textContent = pLabel + ' · ' + model;
+
+        var detail = document.createElement('span');
+        detail.className = 'pref-detail' + (pv === 'openai' ? ' pref-params' : '');
+        detail.textContent = detailText;
+
+        main.appendChild(strong);
+        main.appendChild(detail);
+
+        var actions = document.createElement('div');
+        actions.className = 'pref-row-actions';
+
+        var sw = document.createElement('button');
+        sw.type = 'button';
+        sw.className = 'pref-switch';
+        sw.setAttribute('role', 'switch');
+        sw.setAttribute('aria-checked', 'true');
+        var track = document.createElement('span');
+        track.className = 'pref-switch-track';
+        track.setAttribute('aria-hidden', 'true');
+        var knob = document.createElement('span');
+        knob.className = 'pref-switch-knob';
+        track.appendChild(knob);
+        sw.appendChild(track);
+
+        var rm = makeTrashButton('Eintrag ' + pLabel + ' ' + model + ' aus der Liste entfernen');
+
+        actions.appendChild(sw);
+        actions.appendChild(rm);
+        wrap.appendChild(main);
+        wrap.appendChild(actions);
+        li.appendChild(wrap);
+        setPrefRowActive(wrap, true);
+        return li;
+      }
+
+      if (btnAddPref && prefList && modelPick && providerSelect) {
+        btnAddPref.addEventListener('click', function () {
+          var pv = providerSelect.value;
+          var pLabel = PROVIDER_LABEL[pv] || pv;
+          var model = modelPick.value || '—';
+          var detailText = '';
+          if (pv === 'openai' && reasoningEl) {
+            detailText = 'reasoning_effort: ' + reasoningEl.value;
+          } else {
+            detailText = ollamaDetailLine();
+          }
+          prefList.appendChild(buildPrefRow(pLabel, model, detailText, pv));
+        });
+      }
+
+      if (prefList) {
+        prefList.addEventListener('click', function (e) {
+          var t = e.target;
+          if (!t || !t.closest) return;
+
+          var swBtn = t.closest('.pref-switch');
+          if (swBtn && prefList.contains(swBtn)) {
+            var wrap = swBtn.closest('.pref-row-inner');
+            var cur = wrap && wrap.getAttribute('data-pref-active') === 'true';
+            setPrefRowActive(wrap, !cur);
+            return;
+          }
+
+          var btn = t.closest('.btn-icon-trash');
+          if (!btn || !prefList.contains(btn)) return;
+          var row = btn.closest('.pref-row');
+          if (!row) return;
+          row.remove();
+        });
+      }
+
+      if (insecureTls) {
+        insecureTls.addEventListener('change', function () {
+          prefList.querySelectorAll('.pref-row:not([data-pref-added])').forEach(function (row) {
+            var strong = row.querySelector('.pref-main strong');
+            if (strong && strong.textContent.indexOf('Ollama') === 0) {
+              var det = row.querySelector('.pref-detail');
+              if (det && det.textContent.indexOf('Server') !== -1) {
+                det.textContent = ollamaDetailLine();
+              }
+            }
+          });
+        });
+      }
+
+      if (serverUrl) {
+        serverUrl.addEventListener('input', function () {
+          prefList.querySelectorAll('.pref-row:not([data-pref-added])').forEach(function (row) {
+            var strong = row.querySelector('.pref-main strong');
+            if (strong && strong.textContent.indexOf('Ollama') === 0) {
+              var det = row.querySelector('.pref-detail');
+              if (det && det.textContent.indexOf('Server') !== -1) {
+                det.textContent = ollamaDetailLine();
+              }
+            }
+          });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
