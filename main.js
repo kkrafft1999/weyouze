@@ -1,8 +1,9 @@
-const { app, ipcMain, dialog, safeStorage, session } = require('electron');
+const { app, ipcMain, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 const providers = require('./providers');
 const { createWindow, getMainWindow } = require('./src/main/window');
+const { registerMediaCapturePermissions } = require('./src/main/permissions');
 const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('./src/shared/ipc-channels');
 
 const LLM_CONFIG_FILENAME = 'llm-config.json';
@@ -515,13 +516,7 @@ async function getValidatedFolderHistory() {
 }
 
 app.whenReady().then(() => {
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    if (permission === 'media' || permission === 'audioCapture') {
-      callback(true);
-      return;
-    }
-    callback(false);
-  });
+  registerMediaCapturePermissions();
 
   createWindow();
 
