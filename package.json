@@ -58,6 +58,7 @@
     "electron": "^41.5.0"
   },
   "overrides": {
-    "@xmldom/xmldom": "^0.8.13"
+    "@xmldom/xmldom": "^0.8.13",
+    "tar": "^7.5.13"
   }
 }
