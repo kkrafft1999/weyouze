@@ -1190,6 +1190,20 @@ function markdownToSafeHtml(raw) {
   return esc.innerHTML.replace(/\n/g, '<br>');
 }
 
+// Drosselt das Live-Rendern des Markdown-Streams auf max. 1x pro Frame.
+// Verhindert, dass schnelle Provider (z. B. Ollama lokal) den Parser pro
+// Token aufrufen. Behaelt das Auto-Scroll am Bubble-Ende bei.
+let _streamRenderRaf = 0;
+function scheduleStreamRender(streamEl, text) {
+  if (!streamEl) return;
+  if (_streamRenderRaf) cancelAnimationFrame(_streamRenderRaf);
+  _streamRenderRaf = requestAnimationFrame(() => {
+    _streamRenderRaf = 0;
+    streamEl.innerHTML = markdownToSafeHtml(text);
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  });
+}
+
 // ── Phase 2 (a11y): Hilfen fuer Tool-Status-Pill, Lang-Marker, Live-Indikator ──
 //
 // Tool-Aufrufe werden im UI als <details class="chat-tool-log"> gerendert.
@@ -1333,8 +1347,8 @@ function renderChatMessages() {
         li.appendChild(buildToolLog(m.toolTrace, 'running'));
 
         const stream = document.createElement('div');
-        stream.className = 'chat-md-streaming';
-        stream.textContent = m.content || '';
+        stream.className = 'chat-md-streaming chat-md';
+        stream.innerHTML = markdownToSafeHtml(m.content || '');
         li.appendChild(stream);
       } else {
         if (Array.isArray(m.toolTrace) && m.toolTrace.length > 0) {
@@ -1408,8 +1422,7 @@ async function sendChatMessage() {
             '.chat-msg.assistant:last-of-type .chat-md-streaming'
           );
           if (streamEl) {
-            streamEl.textContent = last.content;
-            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+            scheduleStreamRender(streamEl, last.content);
           } else {
             renderChatMessages();
           }
