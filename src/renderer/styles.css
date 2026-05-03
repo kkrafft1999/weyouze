@@ -806,7 +806,13 @@ summary:focus-visible,
   flex-direction: column;
   gap: 14px;
   min-height: 0;
-  scroll-behavior: smooth;
+  /* Bewusst KEIN scroll-behavior: smooth.
+   * Beim App-Start mit langer Chat-History wuerde der initiale
+   * "scrollTop = scrollHeight" als sichtbare Animation laufen und der
+   * gesamte Verlauf zum unteren Rand "vorbeifliegen" — sehr unruhig.
+   * Auch beim Token-Streaming hinkt smooth hinterher und produziert Wackeln.
+   * Sprung-Scroll ist hier das Standard-Verhalten in Chat-UIs (Slack,
+   * iMessage, ChatGPT) und das, was die User-Erwartung trifft. */
   /* Phase 2: jetzt <ol role="log"> — Default-Listenstil entfernen,
      damit kein Bullet/Indent erscheint. */
   list-style: none;
@@ -1518,6 +1524,28 @@ summary:focus-visible,
 .modal-input--grow {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* Provider-Modal: Insecure-TLS-Toggle. Layout-only — Farben kommen aus
+ * accent-color (--ds-blue), die Hint-Klasse darunter aus .modal-hint. */
+.modal-checkbox-row {
+  margin-top: 12px;
+}
+
+.modal-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ds-font-size-md);
+  cursor: pointer;
+}
+
+.modal-checkbox input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ds-blue);
+  cursor: pointer;
+  margin: 0;
 }
 
 .modal-hint {

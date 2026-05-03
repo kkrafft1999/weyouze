@@ -19,6 +19,7 @@ function listProviderMeta() {
       fields: p.fields || {},
       defaultModel: p.defaultModel || '',
       defaultBaseUrl: p.defaultBaseUrl || '',
+      defaultInsecureTls: p.defaultInsecureTls === true,
       apiBase: p.apiBase || '',
     };
   });

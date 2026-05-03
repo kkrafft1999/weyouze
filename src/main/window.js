@@ -15,6 +15,7 @@ function createWindow() {
       preload: path.join(projectRoot, 'src', 'preload', 'index.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false,
     },
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#ffffff',

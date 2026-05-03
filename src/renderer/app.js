@@ -63,6 +63,8 @@ const providerKeyRow = document.getElementById('provider-key-row');
 const providerBaseUrlRow = document.getElementById('provider-baseurl-row');
 const inputApiKey = document.getElementById('input-api-key');
 const inputBaseUrl = document.getElementById('input-base-url');
+const providerInsecureRow = document.getElementById('provider-insecure-row');
+const inputInsecureTls = document.getElementById('input-insecure-tls');
 const selectModel = document.getElementById('select-model');
 const btnLoadModels = document.getElementById('btn-load-models');
 const modelStatus = document.getElementById('model-status');
@@ -1508,6 +1510,14 @@ function applyProviderToForm(providerId) {
     inputBaseUrl.value = '';
   }
 
+  if (meta.fields?.insecureTls) {
+    providerInsecureRow.classList.remove('hidden');
+    inputInsecureTls.checked = !!meta.insecureTls;
+  } else {
+    providerInsecureRow.classList.add('hidden');
+    inputInsecureTls.checked = false;
+  }
+
   renderModelSelect(meta.model || meta.defaultModel || '', null);
 
   const lines = [];
@@ -1552,7 +1562,7 @@ function handleModalKeydown(e) {
   }
 }
 
-function openSettingsModal() {
+async function openSettingsModal() {
   stopChatVoiceListening();
   setModalError('');
   setProviderStatus('');
@@ -1562,13 +1572,34 @@ function openSettingsModal() {
 
   modalSettings.classList.remove('hidden');
   modalSettings.setAttribute('aria-hidden', 'false');
-  modalEncryptionWarning.classList.toggle('hidden', appStore.llmState.encryptionAvailable);
+  modalSettings.addEventListener('keydown', handleModalKeydown);
 
+  selectProvider.disabled = true;
+  btnLoadModels.disabled = true;
+  btnSettingsSave.disabled = true;
+  setProviderStatus('Lade Anbieter ...');
+  try {
+    await refreshLLMState();
+  } catch (err) {
+    setProviderStatus('', false);
+    setModalError(`Anbieter konnten nicht geladen werden: ${err.message || 'Unbekannter Fehler'}`);
+    return;
+  } finally {
+    btnLoadModels.disabled = false;
+    btnSettingsSave.disabled = false;
+  }
+
+  modalEncryptionWarning.classList.toggle('hidden', appStore.llmState.encryptionAvailable);
   appStore.settingsDraftProviderId = appStore.llmState.activeProvider;
   renderProviderSelect();
+  selectProvider.disabled = false;
+  if (!appStore.llmState.providers.length) {
+    setProviderStatus('', false);
+    setModalError('Keine Anbieter verfügbar.');
+    return;
+  }
   applyProviderToForm(appStore.settingsDraftProviderId);
 
-  modalSettings.addEventListener('keydown', handleModalKeydown);
   queueMicrotask(() => {
     try {
       selectProvider.focus();
@@ -1597,6 +1628,7 @@ async function loadModelsForCurrentDraft() {
 
   const apiKey = (inputApiKey.value || '').trim();
   const baseUrl = (inputBaseUrl.value || '').trim();
+  const insecureTls = meta.fields?.insecureTls ? !!inputInsecureTls.checked : undefined;
 
   if (meta.fields?.apiKey && !apiKey && !meta.hasKey) {
     setModelStatus('Bitte zuerst einen API-Key eingeben.', true);
@@ -1614,6 +1646,7 @@ async function loadModelsForCurrentDraft() {
       providerId,
       apiKey: apiKey || undefined,
       baseUrl: baseUrl || undefined,
+      insecureTls,
     });
     if (result?.error) {
       setModelStatus(`Fehler: ${result.error}`, true);
@@ -1695,6 +1728,7 @@ btnSettingsSave.addEventListener('click', async () => {
   const payload = { providerId, model, makeActive: true };
   if (apiKey) payload.apiKey = apiKey;
   if (baseUrl) payload.baseUrl = baseUrl;
+  if (meta.fields?.insecureTls) payload.insecureTls = !!inputInsecureTls.checked;
 
   btnSettingsSave.disabled = true;
   try {

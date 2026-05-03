@@ -15,12 +15,16 @@ function registerSettingsHandlers({
       const hasKey = m.fields.apiKey ? !!entry.apiKeyEnc : false;
       const baseUrl = m.fields.baseUrl ? (entry.baseUrl || m.defaultBaseUrl) : '';
       const configured = m.fields.apiKey ? hasKey : m.fields.baseUrl ? !!baseUrl : true;
+      const insecureTls = m.fields.insecureTls
+        ? (typeof entry.insecureTls === 'boolean' ? entry.insecureTls : m.defaultInsecureTls === true)
+        : false;
       return {
         ...m,
         configured,
         hasKey,
         model: entry.model || m.defaultModel,
         baseUrl,
+        insecureTls,
       };
     });
     const active = config.activeProvider || defaultProviderId;
@@ -54,6 +58,14 @@ function registerSettingsHandlers({
         next.baseUrl = incomingUrl;
       } else if (!prevEntry.baseUrl) {
         next.baseUrl = provider.defaultBaseUrl || '';
+      }
+    }
+
+    if (provider.fields?.insecureTls) {
+      if (typeof payload?.insecureTls === 'boolean') {
+        next.insecureTls = payload.insecureTls;
+      } else if (typeof prevEntry.insecureTls !== 'boolean') {
+        next.insecureTls = provider.defaultInsecureTls === true;
       }
     }
 
@@ -110,10 +122,18 @@ function registerSettingsHandlers({
     const incomingUrl = typeof payload?.baseUrl === 'string' && payload.baseUrl.trim()
       ? payload.baseUrl.trim()
       : null;
+    const incomingInsecure = typeof payload?.insecureTls === 'boolean'
+      ? payload.insecureTls
+      : null;
 
     const config = {
       apiKey: incomingKey || stored.apiKey || '',
       baseUrl: incomingUrl || stored.baseUrl || provider.defaultBaseUrl || '',
+      insecureTls: incomingInsecure !== null
+        ? incomingInsecure
+        : (typeof stored.insecureTls === 'boolean'
+            ? stored.insecureTls
+            : provider.defaultInsecureTls === true),
     };
     try {
       return await provider.listModels(config);
