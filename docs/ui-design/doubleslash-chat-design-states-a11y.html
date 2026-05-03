@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>doubleSlash Chat — Design Exploration (a11y)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --cyan: #00A5E1;          /* nur als UI-Form, nicht als Schrift */
+    --blue: #00759E;          /* Schrift, Pill-BG, sekundärer Akzent */
+    --black: #000;
+    --white: #FFF;
+    --grey-bg: #F9F9F9;
+    --grey-card: #F2F2F2;
+    --grey-divider: #EFEFEF;
+    --grey-muted: #6D6D6D;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--grey-bg);
+    color: var(--black);
+    padding: 56px 32px 80px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Button / Input Reset */
+  button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+  }
+  input {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    outline: none;
+  }
+  input::placeholder { color: var(--grey-muted); opacity: 1; }
+  ol, ul { list-style: none; }
+
+  /* Globaler Fokus-Ring */
+  :focus { outline: none; }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  .page { max-width: 880px; margin: 0 auto; }
+
+  .page-header { margin-bottom: 56px; }
+  .eyebrow {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--blue);          /* a11y: nicht --cyan */
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+  }
+  .page-header h1 {
+    font-size: 36px;
+    font-weight: 600;
+    line-height: 1.1;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+  .page-header p {
+    font-size: 15px;
+    color: var(--grey-muted);
+    max-width: 560px;
+  }
+
+  .state { margin-bottom: 48px; }
+  .state-label {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .state-label-tag {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--blue);          /* a11y */
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .state-label-name { font-size: 14px; font-weight: 600; }
+  .state-label-desc { font-size: 13px; color: var(--grey-muted); }
+
+  .ds-card {
+    background: var(--white);
+    border: 1px solid var(--grey-divider);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .ds-icon {
+    width: 16px; height: 16px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.4;
+    stroke-linecap: round; stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  /* Card-Header */
+  .ds-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 14px;            /* mehr Vertikalraum für Touch-Targets */
+    border-bottom: 1px solid var(--grey-divider);
+  }
+  .ds-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    flex-wrap: wrap;
+    padding: 4px 4px;
+  }
+  .ds-header-right { display: flex; align-items: center; gap: 4px; color: var(--grey-muted); }
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+  }
+  .icon-btn:hover { background: var(--grey-bg); }
+  .live-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    background: var(--cyan);
+    border-radius: 50%;
+  }
+
+  /* Card-Input */
+  .ds-input {
+    padding: 8px 10px;
+    border-top: 1px solid var(--grey-divider);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ds-input input {
+    flex: 1;
+    font-size: 14px;
+    color: var(--black);
+    padding: 8px 6px;
+  }
+  .ds-send {
+    background: var(--cyan);
+    color: var(--white);
+    width: 32px;                  /* a11y: 32×32 minimum */
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ds-send:hover { background: var(--blue); }
+  .ds-send svg {
+    width: 16px; height: 16px;
+    stroke: currentColor; fill: none;
+    stroke-width: 2;              /* dicker für Kontrast */
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* Empty-State Body */
+  .empty-body { padding: 56px 32px 36px; }
+  .empty-eyebrow {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--blue);            /* a11y */
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+  }
+  .empty-h {
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1.15;
+    margin-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+  .empty-sub {
+    font-size: 14px;
+    color: var(--grey-muted);
+    margin-bottom: 32px;
+  }
+  .chip-list { display: flex; flex-direction: column; gap: 8px; }
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--grey-divider);
+    border-radius: 6px;
+    width: 100%;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .chip:hover { border-color: var(--cyan); background: rgba(0,165,225,0.025); }
+  .chip-cmd {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--blue);
+    font-weight: 600;
+    min-width: 64px;
+  }
+  .chip-text { font-size: 14px; }
+  .chip-arrow { margin-left: auto; color: var(--grey-muted); }
+
+  /* Konversations-Body */
+  .body-default { padding: 28px 24px 24px; }
+  .messages { display: flex; flex-direction: column; }
+
+  .user-msg {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 22px;
+  }
+  .user-msg-text {
+    font-size: 13px;
+    color: var(--grey-muted);
+    padding: 4px 0 4px 12px;
+    border-left: 2px solid var(--cyan);
+    max-width: 80%;
+  }
+
+  /* Tool-Call Hero */
+  .tool-hero {
+    margin-bottom: 18px;
+    border: 1px solid var(--grey-divider);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .tool-hero.running { border-color: var(--cyan); }
+  .tool-hero-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 14px;
+    background: var(--grey-bg);
+    border-bottom: 1px solid var(--grey-divider);
+    gap: 10px;
+  }
+  .tool-hero.running .tool-hero-header {
+    background: rgba(0,165,225,0.05);
+    border-bottom-color: rgba(0,117,158,0.2);
+  }
+  .tool-hero-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+  .tool-hero-cmd { font-size: 13px; font-weight: 600; }
+  .tool-hero-arg { font-size: 13px; color: var(--grey-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tool-hero-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .tool-hero-time { font-size: 12px; color: var(--grey-muted); }
+  .tool-hero.running .tool-hero-time { color: var(--blue); font-weight: 600; }
+  .pill {
+    font-size: 11px;              /* a11y: 11px statt 10px */
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--blue);      /* a11y: --blue für 5:1 Kontrast auf Weiß */
+    color: var(--white);
+    letter-spacing: 0.6px;
+  }
+  .tool-hero-body { padding: 14px 16px; background: var(--white); }
+  .tool-output-comment { font-size: 12px; color: var(--grey-muted); margin-bottom: 6px; }
+  .tool-output-line { font-size: 13px; line-height: 1.7; }
+  .tool-output-line.dim { color: var(--grey-muted); }
+
+  /* Tool-Call Compact */
+  .tool-compact {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 14px;
+    border: 1px solid var(--grey-divider);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: var(--white);
+  }
+  .tool-compact-left { display: flex; align-items: center; gap: 10px; }
+  .check {
+    width: 14px; height: 14px;
+    stroke: var(--blue);          /* a11y: --blue statt --cyan */
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* AI Response */
+  .ai-msg { font-size: 17px; line-height: 1.55; }
+  .inline-code {
+    font-family: ui-monospace, monospace;
+    font-size: 14px;
+    padding: 2px 6px;
+    background: var(--grey-card);
+    border-radius: 4px;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+  .cursor {
+    display: inline-block;
+    width: 2px; height: 18px;
+    background: var(--cyan);
+    vertical-align: text-bottom;
+    margin-left: 3px;
+    animation: blink 1s steps(2) infinite;
+  }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .pulse { animation: pulse 1.6s ease-in-out infinite; }
+
+  .dots { display: inline-flex; gap: 4px; align-items: center; }
+  .dots span {
+    width: 4px; height: 4px;
+    background: var(--grey-muted);
+    border-radius: 50%;
+    opacity: 0.3;
+  }
+  @keyframes wave { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+  .dots span:nth-child(1) { animation: wave 1.2s ease-in-out infinite; }
+  .dots span:nth-child(2) { animation: wave 1.2s ease-in-out 0.2s infinite; }
+  .dots span:nth-child(3) { animation: wave 1.2s ease-in-out 0.4s infinite; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { animation: spin 0.9s linear infinite; color: var(--blue); }
+
+  .thinking {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--grey-muted);
+    font-size: 13px;
+    padding: 4px 0;
+  }
+
+  /* Reduced Motion */
+  @media (prefers-reduced-motion: reduce) {
+    .pulse, .cursor, .spin { animation: none; }
+    .cursor { opacity: 1; }
+    .dots span { opacity: 0.7; animation: none; }
+  }
+
+  .footer-note {
+    margin-top: 64px;
+    padding-top: 32px;
+    border-top: 1px solid var(--grey-divider);
+    font-size: 13px;
+    color: var(--grey-muted);
+  }
+  .footer-note h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--black);
+    margin-bottom: 14px;
+  }
+  .footer-note dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 10px 24px;
+    align-items: baseline;
+  }
+  .footer-note dt {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--blue);            /* a11y */
+    font-weight: 600;
+  }
+
+  /* Visually hidden for screen readers only */
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 32px 16px 64px; }
+    .page-header h1 { font-size: 28px; }
+    .empty-h { font-size: 24px; }
+    .empty-body { padding: 40px 20px 28px; }
+    .body-default { padding: 24px 16px 20px; }
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+
+    <header class="page-header">
+      <p class="eyebrow"><span aria-hidden="true">// </span>design exploration</p>
+      <h1>doubleSlash Chat<br>spielerisch · mutig</h1>
+      <p>Drei Zustände einer Coding-Agent-Oberfläche — barrierefrei nach WCAG 2.1 AA.</p>
+    </header>
+
+    <!-- ============================================ -->
+    <!-- STATE 1: EMPTY                                -->
+    <!-- ============================================ -->
+    <section class="state" aria-labelledby="state1-title">
+      <header class="state-label">
+        <span class="state-label-tag" aria-hidden="true">// state_01</span>
+        <h2 class="state-label-name" id="state1-title">empty</h2>
+        <p class="state-label-desc">erster Eindruck, vor dem ersten Prompt</p>
+      </header>
+
+      <article class="ds-card" aria-label="Chat im Leerzustand">
+        <header class="ds-header">
+          <div class="ds-header-left">
+            <span class="live-dot pulse" role="img" aria-label="Verbindung aktiv"></span>
+            <span class="mono" style="font-weight: 600;">bat-toolkit</span>
+            <span aria-hidden="true" style="color: var(--grey-muted);">/</span>
+            <span class="mono" style="color: var(--grey-muted);"><span class="sr-only">Branch: </span>main</span>
+            <span aria-hidden="true" style="color: var(--grey-muted); margin-left: 4px;">·</span>
+            <span style="color: var(--grey-muted);"><span class="sr-only">Modell: </span>claude-opus-4.7</span>
+          </div>
+          <div class="ds-header-right">
+            <button class="icon-btn" aria-label="Verlauf öffnen">
+              <svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>
+            </button>
+            <button class="icon-btn" aria-label="Neuer Chat">
+              <svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>
+            </button>
+            <button class="icon-btn" aria-label="Menü">
+              <svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="13" cy="8" r="1"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="empty-body">
+          <p class="empty-eyebrow">
+            <span aria-hidden="true">// </span><span lang="en">BAT AGENT</span>
+          </p>
+          <h3 class="empty-h">Was sollen wir bauen?</h3>
+          <p class="empty-sub">Wähle einen Blueprint oder beschreib die Aufgabe direkt.</p>
+
+          <div class="chip-list" role="group" aria-label="Schnellaktionen">
+            <button class="chip" type="button">
+              <span class="chip-cmd">analyse</span>
+              <span class="chip-text">Codebase scannen, Architektur erklären</span>
+              <span class="chip-arrow" aria-hidden="true">→</span>
+            </button>
+            <button class="chip" type="button">
+              <span class="chip-cmd">review</span>
+              <span class="chip-text">Code-Review für aktuellen Branch</span>
+              <span class="chip-arrow" aria-hidden="true">→</span>
+            </button>
+            <button class="chip" type="button">
+              <span class="chip-cmd">test</span>
+              <span class="chip-text">Test-Suite generieren oder ergänzen</span>
+              <span class="chip-arrow" aria-hidden="true">→</span>
+            </button>
+            <button class="chip" type="button">
+              <span class="chip-cmd">doc</span>
+              <span class="chip-text">Inline-Doku für Modul schreiben</span>
+              <span class="chip-arrow" aria-hidden="true">→</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="ds-input">
+          <button class="icon-btn" aria-label="Anhang hinzufügen">
+            <svg class="ds-icon" style="color: var(--grey-muted);" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>
+          </button>
+          <input type="text" placeholder="Oder gib was Eigenes ein…" aria-label="Nachricht eingeben">
+          <button class="icon-btn" aria-label="Spracheingabe">
+            <svg class="ds-icon" style="color: var(--grey-muted);" viewBox="0 0 16 16" aria-hidden="true"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M4 8a4 4 0 0 0 8 0M8 12v2M6 14h4"/></svg>
+          </button>
+          <button class="ds-send" aria-label="Senden">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4"/></svg>
+          </button>
+        </div>
+      </article>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- STATE 2: RUNNING                              -->
+    <!-- ============================================ -->
+    <section class="state" aria-labelledby="state2-title">
+      <header class="state-label">
+        <span class="state-label-tag" aria-hidden="true">// state_02</span>
+        <h2 class="state-label-name" id="state2-title">running</h2>
+        <p class="state-label-desc">Agent in Aktion — wo die Persönlichkeit sitzt</p>
+      </header>
+
+      <article class="ds-card" aria-label="Chat während Tool-Aufruf">
+        <header class="ds-header">
+          <div class="ds-header-left">
+            <span class="live-dot pulse" role="img" aria-label="Verbindung aktiv"></span>
+            <span class="mono" style="font-weight: 600;">bat-toolkit</span>
+            <span aria-hidden="true" style="color: var(--grey-muted);">/</span>
+            <span class="mono" style="color: var(--grey-muted);"><span class="sr-only">Branch: </span>main</span>
+            <span aria-hidden="true" style="color: var(--grey-muted); margin-left: 4px;">·</span>
+            <span style="color: var(--grey-muted);"><span class="sr-only">Modell: </span>claude-opus-4.7</span>
+          </div>
+          <div class="ds-header-right">
+            <button class="icon-btn" aria-label="Verlauf öffnen"><svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg></button>
+            <button class="icon-btn" aria-label="Neuer Chat"><svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+            <button class="icon-btn" aria-label="Menü"><svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="13" cy="8" r="1"/></svg></button>
+          </div>
+        </header>
+
+        <div class="body-default">
+          <ol class="messages" role="log" aria-label="Konversation, läuft noch" aria-busy="true">
+            <li class="user-msg">
+              <p class="user-msg-text"><span class="sr-only">Nutzer-Frage: </span>analysiere die abhängigkeiten und finde unbenutzte</p>
+            </li>
+
+            <li class="tool-compact" aria-label="Tool-Aufruf abgeschlossen">
+              <div class="tool-compact-left">
+                <svg class="check" viewBox="0 0 16 16" role="img" aria-label="Abgeschlossen"><path d="M3 8l3 3 7-7"/></svg>
+                <span class="mono tool-hero-cmd">read</span>
+                <span class="mono tool-hero-arg">package.json</span>
+              </div>
+              <span class="mono tool-hero-time"><span class="sr-only">Dauer: </span>0,4 s</span>
+            </li>
+
+            <li class="tool-compact" aria-label="Tool-Aufruf abgeschlossen">
+              <div class="tool-compact-left">
+                <svg class="check" viewBox="0 0 16 16" role="img" aria-label="Abgeschlossen"><path d="M3 8l3 3 7-7"/></svg>
+                <span class="mono tool-hero-cmd">read</span>
+                <span class="mono tool-hero-arg">src/index.ts</span>
+              </div>
+              <span class="mono tool-hero-time"><span class="sr-only">Dauer: </span>0,6 s</span>
+            </li>
+
+            <li>
+              <div class="tool-hero running" style="margin-top: 10px;" aria-label="Tool-Aufruf läuft" aria-live="polite">
+                <div class="tool-hero-header">
+                  <div class="tool-hero-left">
+                    <span class="live-dot pulse" role="img" aria-label="Aktiv"></span>
+                    <span class="mono tool-hero-cmd">grep</span>
+                    <span class="mono tool-hero-arg">"import" src/**</span>
+                  </div>
+                  <div class="tool-hero-right">
+                    <span class="mono tool-hero-time"><span class="sr-only">Dauer: </span>1,8 s</span>
+                    <span class="pill" lang="en"><span class="sr-only">Status: </span>RUNNING</span>
+                  </div>
+                </div>
+                <div class="tool-hero-body">
+                  <p class="mono tool-output-comment"><span aria-hidden="true">// </span>scanning src/ — 14 files matched</p>
+                  <p class="mono tool-output-line dim">src/components/Header.tsx:1</p>
+                  <p class="mono tool-output-line dim">src/components/Sidebar.tsx:1</p>
+                  <p class="mono tool-output-line dim">src/lib/marp.ts:3</p>
+                  <p class="mono tool-output-line dim">src/lib/blueprints.ts:7</p>
+                  <p class="dots" style="margin-top: 8px;" aria-label="weitere Treffer werden geladen">
+                    <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+                  </p>
+                </div>
+              </div>
+            </li>
+
+            <li>
+              <p class="thinking" style="margin-top: 14px;" role="status">
+                <svg class="ds-icon spin" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 6.5 6.5"/></svg>
+                <span>analysiert Abhängigkeitsgraph</span>
+              </p>
+            </li>
+          </ol>
+        </div>
+
+        <div class="ds-input">
+          <button class="icon-btn" aria-label="Anhang hinzufügen"><svg class="ds-icon" style="color: var(--grey-muted);" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+          <input type="text" placeholder="Was als nächstes?" aria-label="Nachricht eingeben">
+          <button class="icon-btn" aria-label="Spracheingabe"><svg class="ds-icon" style="color: var(--grey-muted);" viewBox="0 0 16 16" aria-hidden="true"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M4 8a4 4 0 0 0 8 0M8 12v2M6 14h4"/></svg></button>
+          <button class="ds-send" aria-label="Senden"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button>
+        </div>
+      </article>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- STATE 3: DONE                                 -->
+    <!-- ============================================ -->
+    <section class="state" aria-labelledby="state3-title">
+      <header class="state-label">
+        <span class="state-label-tag" aria-hidden="true">// state_03</span>
+        <h2 class="state-label-name" id="state3-title">done</h2>
+        <p class="state-label-desc">vollständige Antwort, Tool-Call abgeschlossen</p>
+      </header>
+
+      <article class="ds-card" aria-label="Chat mit abgeschlossener Antwort">
+        <header class="ds-header">
+          <div class="ds-header-left">
+            <span class="live-dot pulse" role="img" aria-label="Verbindung aktiv"></span>
+            <span class="mono" style="font-weight: 600;">bat-toolkit</span>
+            <span aria-hidden="true" style="color: var(--grey-muted);">/</span>
+            <span class="mono" style="color: var(--grey-muted);"><span class="sr-only">Branch: </span>main</span>
+            <span aria-hidden="true" style="color: var(--grey-muted); margin-left: 4px;">·</span>
+            <span style="color: var(--grey-muted);"><span class="sr-only">Modell: </span>claude-opus-4.7</span>
+          </div>
+          <div class="ds-header-right">
+            <button class="icon-btn" aria-label="Verlauf öffnen"><svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg></button>
+            <button class="icon-btn" aria-label="Neuer Chat"><svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+            <button class="icon-btn" aria-label="Menü"><svg class="ds-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="13" cy="8" r="1"/></svg></button>
+          </div>
+        </header>
+
+        <div class="body-default">
+          <ol class="messages" role="log" aria-label="Konversation">
+            <li class="user-msg">
+              <p class="user-msg-text"><span class="sr-only">Nutzer-Frage: </span>welches Packages hat das Projekt</p>
+            </li>
+
+            <li>
+              <div class="tool-hero" aria-label="Tool-Aufruf abgeschlossen">
+                <div class="tool-hero-header">
+                  <div class="tool-hero-left">
+                    <span class="live-dot" role="img" aria-label="Abgeschlossen"></span>
+                    <span class="mono tool-hero-cmd">read</span>
+                    <span class="mono tool-hero-arg">package.json</span>
+                  </div>
+                  <div class="tool-hero-right">
+                    <span class="mono tool-hero-time"><span class="sr-only">Dauer: </span>0,4 s</span>
+                    <span class="pill" lang="en"><span class="sr-only">Status: </span>DONE</span>
+                  </div>
+                </div>
+                <div class="tool-hero-body">
+                  <p class="mono tool-output-comment"><span aria-hidden="true">// </span>1 dependency · package.json:14</p>
+                  <p class="mono tool-output-line">
+                    <span style="color: var(--blue);">"@marp-team/marp-cli"</span><span style="color: var(--grey-muted);">: </span><span>"^4.2.3"</span>
+                  </p>
+                </div>
+              </div>
+            </li>
+
+            <li>
+              <p class="ai-msg" style="margin-top: 4px;">
+                <span class="sr-only">Antwort: </span>Ein Dev-Dependency: <span class="inline-code">@marp-team/marp-cli</span>. Vier Skripte – HTML, PDF, PPTX, Preview – alles über Marp.<span class="cursor" aria-hidden="true"></span>
+              </p>
+            </li>
+          </ol>
+        </div>
+
+        <div class="ds-input">
+          <button class="icon-btn" aria-label="Anhang hinzufügen"><svg class="ds-icon" style="color: var(--grey-muted);" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+          <input type="text" placeholder="Was als nächstes?" aria-label="Nachricht eingeben">
+          <button class="icon-btn" aria-label="Spracheingabe"><svg class="ds-icon" style="color: var(--grey-muted);" viewBox="0 0 16 16" aria-hidden="true"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M4 8a4 4 0 0 0 8 0M8 12v2M6 14h4"/></svg></button>
+          <button class="ds-send" aria-label="Senden"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button>
+        </div>
+      </article>
+    </section>
+
+    <footer class="footer-note">
+      <h3>a11y-Anpassungen vs. Original</h3>
+      <dl>
+        <dt>color</dt><dd>Cyan #00A5E1 nur als Form (Border, Dot, Send-BG). Schrift &amp; Pill-BG → Clickable Blue #00759E (5,0:1 Kontrast).</dd>
+        <dt>focus</dt><dd>2px Cyan Outline + 2px Offset auf allen interaktiven Elementen via :focus-visible.</dd>
+        <dt>html</dt><dd>&lt;button&gt; statt &lt;div&gt;, &lt;input&gt; statt &lt;span&gt;, &lt;ol role="log"&gt; für Konversation.</dd>
+        <dt>aria</dt><dd>aria-label auf Icon-Buttons, role="img" + Label auf Status-SVGs, aria-hidden auf dekorativen Zeichen.</dd>
+        <dt>motion</dt><dd>prefers-reduced-motion deaktiviert Pulse, Cursor-Blink, Spinner, Wave-Dots.</dd>
+        <dt>lang</dt><dd>"RUNNING", "DONE", "BAT AGENT" mit lang="en" — sonst spricht Screenreader sie deutsch.</dd>
+        <dt>size</dt><dd>Send-Button 32×32, Header-Icons mit 32×32 Touch-Target, Pill 11px statt 10px.</dd>
+      </dl>
+    </footer>
+
+  </main>
+</body>
+</html>

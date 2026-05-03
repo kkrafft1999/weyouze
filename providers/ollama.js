@@ -1,0 +1,167 @@
+const { iterStreamLines, readErrorMessage } = require('./stream-helpers');
+
+const DEFAULT_BASE = 'http://localhost:11434';
+
+function baseUrlOf(config) {
+  const raw = typeof config?.baseUrl === 'string' ? config.baseUrl.trim() : '';
+  return (raw || DEFAULT_BASE).replace(/\/$/, '');
+}
+
+async function listModels(config) {
+  const url = `${baseUrlOf(config)}/api/tags`;
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    return { error: err.message || `Verbindung zu ${baseUrlOf(config)} fehlgeschlagen.` };
+  }
+  if (!res.ok) return { error: await readErrorMessage(res) };
+  const json = await res.json().catch(() => null);
+  if (!json || !Array.isArray(json.models)) {
+    return { error: 'Unerwartete Antwort des Ollama-Servers.' };
+  }
+  const models = json.models
+    .map((m) => m && typeof m.name === 'string' ? { id: m.name, label: m.name } : null)
+    .filter(Boolean)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return { models };
+}
+
+function safeJsonParse(s, fallback = {}) {
+  if (typeof s !== 'string' || !s.trim()) return fallback;
+  try { return JSON.parse(s); } catch { return fallback; }
+}
+
+function translateMessagesToOllama(messages) {
+  const out = [];
+  for (const m of messages) {
+    if (m.role === 'system' || m.role === 'user') {
+      out.push({ role: m.role, content: typeof m.content === 'string' ? m.content : '' });
+      continue;
+    }
+    if (m.role === 'assistant') {
+      const row = {
+        role: 'assistant',
+        content: typeof m.content === 'string' ? m.content : '',
+      };
+      if (Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+        row.tool_calls = m.tool_calls.map((tc) => ({
+          function: {
+            name: tc.function?.name || '',
+            arguments: safeJsonParse(tc.function?.arguments, {}),
+          },
+        }));
+      }
+      out.push(row);
+      continue;
+    }
+    if (m.role === 'tool') {
+      out.push({
+        role: 'tool',
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''),
+      });
+      continue;
+    }
+  }
+  return out;
+}
+
+function translateToolsToOllama(tools) {
+  if (!Array.isArray(tools) || tools.length === 0) return undefined;
+  return tools.map((t) => ({
+    type: 'function',
+    function: {
+      name: t.function?.name,
+      description: t.function?.description || '',
+      parameters: t.function?.parameters || { type: 'object', properties: {} },
+    },
+  }));
+}
+
+async function streamChatRound({ config, model, messages, tools, callbacks }) {
+  const url = `${baseUrlOf(config)}/api/chat`;
+  const body = {
+    model,
+    messages: translateMessagesToOllama(messages),
+    stream: true,
+  };
+  const tooling = translateToolsToOllama(tools);
+  if (tooling) body.tools = tooling;
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { error: err.message || `Verbindung zu ${baseUrlOf(config)} fehlgeschlagen.`, code: 'NETWORK' };
+  }
+  if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };
+  if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };
+
+  const reader = res.body.getReader();
+  let textOut = '';
+  const collectedToolCalls = [];
+  let finishReason = null;
+
+  try {
+    for await (const line of iterStreamLines(reader)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let payload;
+      try { payload = JSON.parse(trimmed); } catch { continue; }
+
+      if (payload.error) {
+        return { error: payload.error, code: 'API' };
+      }
+
+      const msg = payload.message;
+      if (msg) {
+        if (typeof msg.content === 'string' && msg.content.length > 0) {
+          textOut += msg.content;
+          callbacks.onTextDelta(msg.content);
+        }
+        if (Array.isArray(msg.tool_calls)) {
+          for (const tc of msg.tool_calls) {
+            const name = tc.function?.name;
+            if (!name) continue;
+            const args = tc.function?.arguments;
+            const argStr = typeof args === 'string' ? args : JSON.stringify(args ?? {});
+            collectedToolCalls.push({
+              id: `ocall_${collectedToolCalls.length}_${Date.now().toString(36)}`,
+              type: 'function',
+              function: { name, arguments: argStr },
+            });
+            callbacks.onMarkGenerating();
+          }
+        }
+      }
+      if (payload.done === true) {
+        finishReason = collectedToolCalls.length ? 'tool_calls' : (payload.done_reason || 'stop');
+        break;
+      }
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  const message = {
+    role: 'assistant',
+    content: textOut.length > 0 ? textOut : collectedToolCalls.length ? null : '',
+    ...(collectedToolCalls.length ? { tool_calls: collectedToolCalls } : {}),
+  };
+  return { message, finishReason };
+}
+
+module.exports = {
+  id: 'ollama',
+  name: 'Ollama (lokal)',
+  fields: { baseUrl: true },
+  defaultModel: 'llama3.2',
+  defaultBaseUrl: DEFAULT_BASE,
+  apiBase: DEFAULT_BASE,
+  listModels,
+  streamChatRound,
+};

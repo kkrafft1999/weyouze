@@ -1,0 +1,249 @@
+const { iterSseEvents, readErrorMessage } = require('./stream-helpers');
+
+const API_BASE = 'https://api.anthropic.com/v1';
+const ANTHROPIC_VERSION = '2023-06-01';
+const DEFAULT_MAX_TOKENS = 8192;
+
+function authHeaders(apiKey) {
+  return {
+    'x-api-key': apiKey,
+    'anthropic-version': ANTHROPIC_VERSION,
+    'content-type': 'application/json',
+  };
+}
+
+async function listModels(config) {
+  const apiKey = config?.apiKey;
+  if (!apiKey) return { error: 'API-Key fehlt.' };
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/models?limit=100`, { headers: authHeaders(apiKey) });
+  } catch (err) {
+    return { error: err.message || 'Netzwerkfehler' };
+  }
+  if (!res.ok) return { error: await readErrorMessage(res) };
+  const json = await res.json().catch(() => null);
+  if (!json || !Array.isArray(json.data)) {
+    return { error: 'Unerwartete Antwort der Anthropic-API.' };
+  }
+  const models = json.data
+    .map((m) => m && typeof m.id === 'string'
+      ? { id: m.id, label: m.display_name || m.id }
+      : null)
+    .filter(Boolean)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return { models };
+}
+
+function translateToolsToAnthropic(tools) {
+  if (!Array.isArray(tools) || tools.length === 0) return undefined;
+  const out = [];
+  for (const t of tools) {
+    if (!t?.function?.name) continue;
+    out.push({
+      name: t.function.name,
+      description: t.function.description || '',
+      input_schema: t.function.parameters || { type: 'object', properties: {} },
+    });
+  }
+  return out.length ? out : undefined;
+}
+
+function isLikelyJsonString(s) {
+  const t = String(s ?? '').trim();
+  return t.length > 0 && (t[0] === '{' || t[0] === '[' || t === 'null' || t === 'true' || t === 'false' || /^-?\d/.test(t));
+}
+
+function translateMessagesToAnthropic(messages) {
+  let system = '';
+  const out = [];
+  let pendingToolResults = null; // array of tool_result blocks to flush on next non-tool message
+
+  const flushPendingToolResults = () => {
+    if (pendingToolResults && pendingToolResults.length) {
+      out.push({ role: 'user', content: pendingToolResults });
+    }
+    pendingToolResults = null;
+  };
+
+  for (const m of messages) {
+    if (m.role === 'system') {
+      system += (system ? '\n\n' : '') + (m.content || '');
+      continue;
+    }
+    if (m.role === 'tool') {
+      const block = {
+        type: 'tool_result',
+        tool_use_id: m.tool_call_id || '',
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''),
+      };
+      if (!pendingToolResults) pendingToolResults = [];
+      pendingToolResults.push(block);
+      continue;
+    }
+    flushPendingToolResults();
+
+    if (m.role === 'user') {
+      out.push({ role: 'user', content: typeof m.content === 'string' ? m.content : '' });
+      continue;
+    }
+    if (m.role === 'assistant') {
+      const blocks = [];
+      if (typeof m.content === 'string' && m.content.length > 0) {
+        blocks.push({ type: 'text', text: m.content });
+      }
+      if (Array.isArray(m.tool_calls)) {
+        for (const tc of m.tool_calls) {
+          if (!tc?.function?.name) continue;
+          let input = {};
+          const argStr = tc.function.arguments;
+          if (typeof argStr === 'string' && argStr.trim()) {
+            try { input = JSON.parse(argStr); } catch { input = {}; }
+          }
+          blocks.push({
+            type: 'tool_use',
+            id: tc.id || `tu_${Math.random().toString(36).slice(2)}`,
+            name: tc.function.name,
+            input,
+          });
+        }
+      }
+      if (blocks.length === 0) blocks.push({ type: 'text', text: '' });
+      out.push({ role: 'assistant', content: blocks });
+      continue;
+    }
+  }
+  flushPendingToolResults();
+  return { system: system || undefined, messages: out };
+}
+
+async function streamChatRound({ config, model, messages, tools, callbacks }) {
+  const apiKey = config?.apiKey;
+  if (!apiKey) return { error: 'Kein API-Key hinterlegt.', code: 'NO_API_KEY' };
+
+  const { system, messages: anthMessages } = translateMessagesToAnthropic(messages);
+  const tooling = translateToolsToAnthropic(tools);
+  const body = {
+    model,
+    max_tokens: DEFAULT_MAX_TOKENS,
+    stream: true,
+    messages: anthMessages,
+  };
+  if (system) body.system = system;
+  if (tooling) body.tools = tooling;
+
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/messages`, {
+      method: 'POST',
+      headers: authHeaders(apiKey),
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
+  }
+  if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };
+  if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };
+
+  const reader = res.body.getReader();
+
+  // Accumulators per content block index
+  const blocks = new Map(); // index -> { type, text?, toolCall: {id, name, args} }
+  let textOut = '';
+  let stopReason = null;
+
+  try {
+    for await (const evt of iterSseEvents(reader)) {
+      if (!evt.data) continue;
+      let payload;
+      try { payload = JSON.parse(evt.data); } catch { continue; }
+      const type = payload.type || evt.event;
+
+      if (type === 'content_block_start') {
+        const idx = payload.index;
+        const cb = payload.content_block || {};
+        if (cb.type === 'text') {
+          blocks.set(idx, { type: 'text', text: '' });
+        } else if (cb.type === 'tool_use') {
+          blocks.set(idx, {
+            type: 'tool_use',
+            toolCall: { id: cb.id, name: cb.name, args: '' },
+          });
+        } else if (cb.type === 'thinking') {
+          blocks.set(idx, { type: 'thinking', text: '' });
+        }
+      } else if (type === 'content_block_delta') {
+        const idx = payload.index;
+        const block = blocks.get(idx);
+        if (!block) continue;
+        const d = payload.delta || {};
+        if (d.type === 'text_delta' && typeof d.text === 'string') {
+          block.text = (block.text || '') + d.text;
+          textOut += d.text;
+          callbacks.onTextDelta(d.text);
+        } else if (d.type === 'input_json_delta' && typeof d.partial_json === 'string') {
+          if (block.toolCall) {
+            block.toolCall.args += d.partial_json;
+            callbacks.onMarkGenerating();
+          }
+        } else if (d.type === 'thinking_delta' && typeof d.thinking === 'string') {
+          block.text = (block.text || '') + d.thinking;
+          callbacks.onReasoningDelta(d.thinking);
+        }
+      } else if (type === 'content_block_stop') {
+        // no-op; data already accumulated
+      } else if (type === 'message_delta') {
+        const sr = payload.delta?.stop_reason;
+        if (sr) stopReason = sr;
+      } else if (type === 'message_stop') {
+        // end
+      } else if (type === 'error') {
+        const msg = payload.error?.message || 'Anthropic-Stream-Fehler';
+        return { error: msg, code: 'API' };
+      }
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  // Build canonical tool_calls (preserve block order)
+  const orderedIndexes = [...blocks.keys()].sort((a, b) => a - b);
+  const tool_calls = [];
+  for (const idx of orderedIndexes) {
+    const b = blocks.get(idx);
+    if (b?.type === 'tool_use' && b.toolCall) {
+      const args = b.toolCall.args || '';
+      tool_calls.push({
+        id: b.toolCall.id,
+        type: 'function',
+        function: {
+          name: b.toolCall.name,
+          arguments: isLikelyJsonString(args) ? args : '{}',
+        },
+      });
+    }
+  }
+
+  const message = {
+    role: 'assistant',
+    content: textOut.length > 0 ? textOut : tool_calls.length ? null : '',
+    ...(tool_calls.length ? { tool_calls } : {}),
+  };
+
+  let finishReason = null;
+  if (stopReason === 'tool_use') finishReason = 'tool_calls';
+  else if (stopReason === 'end_turn') finishReason = 'stop';
+  else if (stopReason) finishReason = stopReason;
+
+  return { message, finishReason };
+}
+
+module.exports = {
+  id: 'anthropic',
+  name: 'Anthropic (Claude)',
+  fields: { apiKey: true },
+  defaultModel: 'claude-3-5-sonnet-latest',
+  apiBase: API_BASE,
+  listModels,
+  streamChatRound,
+};

@@ -1,0 +1,225 @@
+const { iterSseEvents, readErrorMessage } = require('./stream-helpers');
+
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+
+function bareModelId(modelOrPath) {
+  const s = String(modelOrPath || '').trim();
+  if (s.startsWith('models/')) return s.slice('models/'.length);
+  return s;
+}
+
+async function listModels(config) {
+  const apiKey = config?.apiKey;
+  if (!apiKey) return { error: 'API-Key fehlt.' };
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/models?key=${encodeURIComponent(apiKey)}&pageSize=200`);
+  } catch (err) {
+    return { error: err.message || 'Netzwerkfehler' };
+  }
+  if (!res.ok) return { error: await readErrorMessage(res) };
+  const json = await res.json().catch(() => null);
+  if (!json || !Array.isArray(json.models)) {
+    return { error: 'Unerwartete Antwort der Google-API.' };
+  }
+  const models = json.models
+    .filter((m) => Array.isArray(m.supportedGenerationMethods)
+      && m.supportedGenerationMethods.includes('generateContent'))
+    .map((m) => {
+      const id = bareModelId(m.name);
+      return { id, label: m.displayName ? `${m.displayName} (${id})` : id };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return { models };
+}
+
+function translateToolsToGoogle(tools) {
+  if (!Array.isArray(tools) || tools.length === 0) return undefined;
+  const decls = [];
+  for (const t of tools) {
+    if (!t?.function?.name) continue;
+    decls.push({
+      name: t.function.name,
+      description: t.function.description || '',
+      parameters: stripUnsupportedSchemaFields(t.function.parameters || { type: 'object', properties: {} }),
+    });
+  }
+  return decls.length ? [{ functionDeclarations: decls }] : undefined;
+}
+
+// Gemini's function-declaration schema accepts a subset of JSON Schema.
+// Strip fields that often cause 400 errors.
+function stripUnsupportedSchemaFields(schema) {
+  if (!schema || typeof schema !== 'object') return schema;
+  const cleaned = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (k === '$schema' || k === 'additionalProperties') continue;
+    if (k === 'properties' && v && typeof v === 'object') {
+      const props = {};
+      for (const [pk, pv] of Object.entries(v)) {
+        props[pk] = stripUnsupportedSchemaFields(pv);
+      }
+      cleaned[k] = props;
+    } else if (k === 'items') {
+      cleaned[k] = stripUnsupportedSchemaFields(v);
+    } else {
+      cleaned[k] = v;
+    }
+  }
+  return cleaned;
+}
+
+function buildToolCallNameMap(messages) {
+  const map = new Map();
+  for (const m of messages) {
+    if (m.role === 'assistant' && Array.isArray(m.tool_calls)) {
+      for (const tc of m.tool_calls) {
+        if (tc.id && tc.function?.name) map.set(tc.id, tc.function.name);
+      }
+    }
+  }
+  return map;
+}
+
+function safeJsonParse(s, fallback = {}) {
+  if (typeof s !== 'string' || !s.trim()) return fallback;
+  try { return JSON.parse(s); } catch { return fallback; }
+}
+
+function translateMessagesToGoogle(messages) {
+  const toolNameById = buildToolCallNameMap(messages);
+  let systemText = '';
+  const contents = [];
+
+  for (const m of messages) {
+    if (m.role === 'system') {
+      systemText += (systemText ? '\n\n' : '') + (m.content || '');
+      continue;
+    }
+    if (m.role === 'user') {
+      contents.push({ role: 'user', parts: [{ text: typeof m.content === 'string' ? m.content : '' }] });
+      continue;
+    }
+    if (m.role === 'assistant') {
+      const parts = [];
+      if (typeof m.content === 'string' && m.content.length > 0) {
+        parts.push({ text: m.content });
+      }
+      if (Array.isArray(m.tool_calls)) {
+        for (const tc of m.tool_calls) {
+          if (!tc?.function?.name) continue;
+          parts.push({
+            functionCall: {
+              name: tc.function.name,
+              args: safeJsonParse(tc.function.arguments, {}),
+            },
+          });
+        }
+      }
+      if (parts.length === 0) parts.push({ text: '' });
+      contents.push({ role: 'model', parts });
+      continue;
+    }
+    if (m.role === 'tool') {
+      const name = toolNameById.get(m.tool_call_id) || 'tool';
+      const response = safeJsonParse(m.content, { result: m.content });
+      contents.push({
+        role: 'user',
+        parts: [{ functionResponse: { name, response } }],
+      });
+      continue;
+    }
+  }
+
+  return { systemText: systemText || null, contents };
+}
+
+async function streamChatRound({ config, model, messages, tools, callbacks }) {
+  const apiKey = config?.apiKey;
+  if (!apiKey) return { error: 'Kein API-Key hinterlegt.', code: 'NO_API_KEY' };
+
+  const { systemText, contents } = translateMessagesToGoogle(messages);
+  const tooling = translateToolsToGoogle(tools);
+  const body = { contents };
+  if (systemText) body.systemInstruction = { parts: [{ text: systemText }] };
+  if (tooling) body.tools = tooling;
+
+  const url = `${API_BASE}/models/${encodeURIComponent(bareModelId(model))}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
+  }
+  if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };
+  if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };
+
+  const reader = res.body.getReader();
+  let textOut = '';
+  const collectedToolCalls = [];
+  let finishReason = null;
+
+  try {
+    for await (const evt of iterSseEvents(reader)) {
+      if (!evt.data) continue;
+      let payload;
+      try { payload = JSON.parse(evt.data); } catch { continue; }
+      const cand = payload.candidates?.[0];
+      if (!cand) continue;
+      const parts = cand.content?.parts || [];
+      for (const p of parts) {
+        if (typeof p.text === 'string' && p.text.length > 0) {
+          textOut += p.text;
+          callbacks.onTextDelta(p.text);
+        } else if (p.thought === true && typeof p.text === 'string') {
+          callbacks.onReasoningDelta(p.text);
+        } else if (p.functionCall) {
+          callbacks.onMarkGenerating();
+          const fc = p.functionCall;
+          collectedToolCalls.push({
+            id: `gcall_${collectedToolCalls.length}_${Date.now().toString(36)}`,
+            type: 'function',
+            function: {
+              name: String(fc.name || ''),
+              arguments: JSON.stringify(fc.args ?? {}),
+            },
+          });
+        }
+      }
+      if (cand.finishReason) {
+        const fr = String(cand.finishReason).toUpperCase();
+        if (fr === 'STOP') finishReason = 'stop';
+        else if (fr === 'TOOL_CALLS' || fr === 'MALFORMED_FUNCTION_CALL') finishReason = 'tool_calls';
+        else finishReason = cand.finishReason;
+      }
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  if (collectedToolCalls.length > 0 && !finishReason) {
+    finishReason = 'tool_calls';
+  }
+
+  const message = {
+    role: 'assistant',
+    content: textOut.length > 0 ? textOut : collectedToolCalls.length ? null : '',
+    ...(collectedToolCalls.length ? { tool_calls: collectedToolCalls } : {}),
+  };
+  return { message, finishReason };
+}
+
+module.exports = {
+  id: 'google',
+  name: 'Google (Gemini)',
+  fields: { apiKey: true },
+  defaultModel: 'gemini-2.0-flash',
+  apiBase: API_BASE,
+  listModels,
+  streamChatRound,
+};

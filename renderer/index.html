@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self' blob:;">
+  <title>Weyouze Anything</title>
+  <link rel="stylesheet" href="styles/inter.css">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header id="titlebar">
+    <div class="titlebar-drag"></div>
+    <div class="titlebar-brand">
+      <span class="titlebar-eyebrow" aria-hidden="true">// <span lang="en">WEYOUZE</span></span>
+      <span id="app-brand">Anything</span>
+    </div>
+    <div class="titlebar-spacer"></div>
+    <button type="button" id="btn-toggle-content-pane" title="Mittlere Vorschau ausblenden" aria-label="Mittlere Vorschau ausblenden" aria-pressed="true">
+      <svg id="icon-content-pane-visible" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="1.5" y="2.5" width="6.5" height="11" rx="1"/>
+        <rect x="9.5" y="2.5" width="5" height="11" rx="1"/>
+      </svg>
+      <svg id="icon-content-pane-hidden" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" class="hidden" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="11" height="11" rx="1"/>
+      </svg>
+    </button>
+    <button type="button" id="theme-toggle" title="Theme wechseln" aria-label="Theme wechseln">
+      <svg id="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" class="hidden" aria-hidden="true">
+        <path d="M8 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 8 1zm0 11a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 8 12zm7-4a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1a.5.5 0 0 1 .5.5zM4 8a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1A.5.5 0 0 1 4 8zm9.354-3.646a.5.5 0 0 1 0 .707l-.707.707a.5.5 0 1 1-.707-.707l.707-.707a.5.5 0 0 1 .707 0zM5.06 11.647a.5.5 0 0 1 0 .707l-.707.707a.5.5 0 1 1-.707-.707l.707-.707a.5.5 0 0 1 .707 0zm8.587.707a.5.5 0 0 1-.707 0l-.707-.707a.5.5 0 0 1 .707-.707l.707.707a.5.5 0 0 1 0 .707zM5.06 4.353a.5.5 0 0 1-.707 0l-.707-.707a.5.5 0 1 1 .707-.707l.707.707a.5.5 0 0 1 0 .707zM8 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 1a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
+      </svg>
+      <svg id="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M13.5 8.5a5.5 5.5 0 1 1-7-7 7 7 0 0 0 7 7z"/>
+      </svg>
+    </button>
+  </header>
+
+  <main id="app">
+    <aside id="sidebar">
+      <div id="tree-header">
+        <div class="tree-header-titles">
+          <span class="tree-header-eyebrow" aria-hidden="true">// projekt</span>
+          <span id="project-name">Kein Ordner geöffnet</span>
+        </div>
+        <div id="folder-history-wrapper">
+          <button id="btn-folder-history" type="button" title="Zuletzt geöffnete Ordner" aria-label="Zuletzt geöffnete Ordner" aria-haspopup="menu" aria-expanded="false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"/>
+              <polyline points="12 7 12 12 15 14"/>
+            </svg>
+          </button>
+          <div id="folder-history-menu" class="hidden" role="menu" aria-hidden="true"></div>
+        </div>
+        <button id="btn-open-folder" title="Ordner öffnen" aria-label="Ordner öffnen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
+      </div>
+      <div id="tree-container"></div>
+    </aside>
+
+    <div id="divider"></div>
+
+    <div id="workspace">
+      <section id="content">
+        <div id="welcome">
+          <p class="welcome-eyebrow">
+            <span aria-hidden="true">// </span><span lang="en">WEYOUZE</span>
+          </p>
+          <h1 class="welcome-headline">Womit fangen wir an?</h1>
+          <p class="welcome-sub">Oeffne einen Ordner und starte einen Chat ueber den Inhalt.</p>
+          <button type="button" id="welcome-cta" class="welcome-cta">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>Ordner oeffnen</span>
+            <span class="welcome-cta-arrow" aria-hidden="true">&rarr;</span>
+          </button>
+
+          <section
+            id="welcome-recent"
+            class="welcome-section hidden"
+            aria-labelledby="welcome-recent-label"
+          >
+            <h2 id="welcome-recent-label" class="welcome-section-label">
+              <span aria-hidden="true">// </span>zuletzt geoeffnet
+            </h2>
+            <div id="welcome-recent-list" class="chip-list" role="list"></div>
+          </section>
+
+          <section
+            id="welcome-quick-actions"
+            class="welcome-section"
+            aria-labelledby="welcome-actions-label"
+          >
+            <h2 id="welcome-actions-label" class="welcome-section-label">
+              <span aria-hidden="true">// </span>schnellstart
+            </h2>
+            <div
+              id="welcome-actions-list"
+              class="chip-list"
+              role="group"
+              aria-label="Schnellstart-Aktionen"
+            >
+              <button type="button" class="chip" data-action="analyse">
+                <span class="chip-cmd" lang="en">analyse</span>
+                <span class="chip-desc">Repo-Struktur erklaeren</span>
+                <span class="chip-arrow" aria-hidden="true">&rarr;</span>
+              </button>
+              <button type="button" class="chip" data-action="review">
+                <span class="chip-cmd" lang="en">review</span>
+                <span class="chip-desc">Code-Review starten</span>
+                <span class="chip-arrow" aria-hidden="true">&rarr;</span>
+              </button>
+              <button type="button" class="chip" data-action="test">
+                <span class="chip-cmd" lang="en">test</span>
+                <span class="chip-desc">Tests vorschlagen</span>
+                <span class="chip-arrow" aria-hidden="true">&rarr;</span>
+              </button>
+              <button type="button" class="chip" data-action="doc">
+                <span class="chip-cmd" lang="en">doc</span>
+                <span class="chip-desc">Doku zusammenfassen</span>
+                <span class="chip-arrow" aria-hidden="true">&rarr;</span>
+              </button>
+            </div>
+          </section>
+        </div>
+        <div id="file-preview" class="hidden">
+          <div id="preview-header">
+            <span id="preview-filename"></span>
+            <span id="preview-meta"></span>
+          </div>
+          <pre id="preview-content"></pre>
+        </div>
+        <div id="file-info" class="hidden">
+          <div class="file-info-icon" aria-hidden="true">
+            <svg width="48" height="48" viewBox="0 0 16 16" fill="#888" aria-hidden="true">
+              <path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.5L9.5 0H4zM10 1v3.5h3.5L10 1zM4 1h5v4h4v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/>
+            </svg>
+          </div>
+          <h2 id="info-filename"></h2>
+          <table id="info-table">
+            <tr><td>Größe</td><td id="info-size"></td></tr>
+            <tr><td>Geändert</td><td id="info-modified"></td></tr>
+            <tr><td>Typ</td><td id="info-type"></td></tr>
+          </table>
+        </div>
+      </section>
+
+      <div id="chat-divider"></div>
+
+      <aside id="chat-panel">
+        <div id="chat-header">
+          <div class="chat-header-meta">
+            <span id="chat-live-dot" class="chat-live-dot" role="img" aria-label="Verbindung aktiv"></span>
+            <span id="chat-title" class="mono">Chat</span>
+            <span class="chat-meta-divider" aria-hidden="true">/</span>
+            <span id="chat-model-pill" class="chat-model-pill hidden" lang="en"></span>
+          </div>
+          <div class="chat-header-actions">
+            <button type="button" id="btn-chat-history" title="Verlauf" aria-label="Chat-Verlauf oeffnen" aria-expanded="false" aria-controls="chat-history-drawer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-chat-new" title="Neuer Chat" aria-label="Neuer Chat">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-chat-settings" title="KI-Anbieter Einstellungen" aria-label="KI-Anbieter Einstellungen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <section id="chat-history-drawer" class="hidden" aria-hidden="true" role="region" aria-label="Chat-Verlauf">
+          <p id="chat-history-empty" class="chat-history-empty hidden">Noch keine gespeicherten Chats.</p>
+          <div id="chat-history-list" class="chat-history-list"></div>
+        </section>
+        <ol id="chat-messages" role="log" aria-label="Konversation" aria-live="polite" aria-busy="false"></ol>
+        <div id="chat-hint" class="hidden"></div>
+        <div id="chat-input-row">
+          <textarea id="chat-input" rows="1" placeholder="Nachricht…" autocomplete="off"></textarea>
+          <button type="button" id="btn-chat-mic" title="Spracheingabe" aria-pressed="false" aria-label="Spracheingabe starten">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
+            </svg>
+          </button>
+          <button type="button" id="btn-chat-send" title="Senden" aria-label="Senden">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="19" x2="12" y2="5"/>
+              <polyline points="5 12 12 5 19 12"/>
+            </svg>
+          </button>
+          <p id="chat-voice-status" class="chat-voice-status hidden" aria-live="polite"></p>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div id="modal-settings" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" id="modal-settings-backdrop"></div>
+    <div class="modal-dialog modal-dialog--llm" role="dialog" aria-modal="true" aria-labelledby="modal-settings-title">
+      <h2 id="modal-settings-title">KI-Anbieter</h2>
+      <p class="modal-note">API-Keys werden verschlüsselt auf diesem Gerät gespeichert. Sie verlassen die App nur bei Anfragen an den jeweiligen Anbieter.</p>
+      <p id="modal-encryption-warning" class="modal-warning hidden">Verschlüsselter Speicher ist auf diesem System nicht verfügbar. Ein Key kann nicht sicher gespeichert werden.</p>
+
+      <label class="modal-label" for="select-provider">Anbieter</label>
+      <select id="select-provider" class="modal-input"></select>
+      <p id="provider-status" class="modal-hint"></p>
+
+      <div id="provider-key-row">
+        <label class="modal-label" for="input-api-key">API-Key</label>
+        <input type="password" id="input-api-key" class="modal-input" placeholder="sk-…" autocomplete="off" />
+      </div>
+
+      <div id="provider-baseurl-row" class="hidden">
+        <label class="modal-label" for="input-base-url">Server-URL</label>
+        <input type="text" id="input-base-url" class="modal-input" placeholder="http://localhost:11434" autocomplete="off" />
+      </div>
+
+      <label class="modal-label" for="select-model">Modell</label>
+      <div class="modal-row">
+        <select id="select-model" class="modal-input modal-input--grow"></select>
+        <button type="button" id="btn-load-models" class="btn-secondary" title="Verfügbare Modelle vom Anbieter laden">Modelle laden</button>
+      </div>
+      <p id="model-status" class="modal-hint"></p>
+
+      <p id="modal-save-error" class="modal-save-error hidden"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-settings-save" class="btn-primary">Speichern &amp; aktivieren</button>
+        <button type="button" id="btn-settings-clear" class="btn-secondary">Anbieter zurücksetzen</button>
+        <button type="button" id="btn-settings-close" class="btn-secondary">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/marked.umd.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

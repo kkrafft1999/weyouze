@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Python virtual env
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Build output
+out/
+dist/
+build/
+
+# Auto-generated vendor bundle
+renderer/vendor/*.js
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cursor (lokale Agent-Daten)
+.cursor/
