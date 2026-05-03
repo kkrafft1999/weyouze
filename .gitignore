@@ -34,5 +34,8 @@ Thumbs.db
 *.swp
 *.swo
 
-# Cursor (lokale Agent-Daten)
-.cursor/
+# Cursor: Projektregeln unter .cursor/rules/ versionieren;
+# übrige Agent-/Cache-Daten (z. B. .cursor/projects) lokal ignorieren
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
