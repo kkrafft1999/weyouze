@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const vendor = path.join(root, 'renderer', 'vendor');
+const vendor = path.join(root, 'src', 'renderer', 'vendor');
 const fontsDir = path.join(vendor, 'fonts');
 
 fs.mkdirSync(vendor, { recursive: true });

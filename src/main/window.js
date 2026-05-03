@@ -12,7 +12,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 420,
     webPreferences: {
-      preload: path.join(projectRoot, 'preload.js'),
+      preload: path.join(projectRoot, 'src', 'preload', 'index.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -27,7 +27,7 @@ function createWindow() {
     }
   });
 
-  window.loadFile(path.join(projectRoot, 'renderer', 'index.html'));
+  window.loadFile(path.join(projectRoot, 'src', 'renderer', 'index.html'));
   return window;
 }
 

@@ -1,0 +1,27 @@
+/** Zentrale mutable Renderer-State für Phase 4.5 — ein Objekt statt verteilter Top-Level-lets. */
+export const appStore = {
+  rootPath: null,
+  activeTreeItem: null,
+  selectedPath: null,
+  selectedIsDirectory: false,
+  dragSourcePath: null,
+  dragSourceRow: null,
+  currentDropTarget: null,
+  voiceRecording: false,
+  voiceMediaRecorder: null,
+  voiceChunks: [],
+  voiceStream: null,
+  voiceTranscribing: false,
+  llmState: {
+    encryptionAvailable: true,
+    activeProvider: 'openai',
+    providers: [],
+  },
+  settingsDraftProviderId: null,
+  chatMessages: [],
+  chatSessionId: 0,
+  currentChatId: '',
+  currentChatWorkspace: null,
+  streamRenderRaf: 0,
+  lastFocusBeforeModal: null,
+};

@@ -1,31 +1,22 @@
-const api = window.electronAPI;
+import {
+  isTextFile,
+  getExtension,
+  formatSize,
+  markdownToSafeHtml,
+  svgChevron,
+  svgFolder,
+  svgFile,
+} from './utils/helpers.js';
+import { appStore } from './state/store.js';
+import { initTheme } from './components/ThemeManager.js';
+import { initSidebarResizer } from './components/SidebarResizer.js';
+import { folderDepthSortKey, parentDirFromItemPath } from './components/FileTree.js';
 
-// ── Theme Toggle ──
+const api = window.electronAPI;
 
 const themeToggle = document.getElementById('theme-toggle');
 const iconSun = document.getElementById('icon-sun');
 const iconMoon = document.getElementById('icon-moon');
-
-function setTheme(mode) {
-  if (mode === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    iconSun.classList.remove('hidden');
-    iconMoon.classList.add('hidden');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-    iconSun.classList.add('hidden');
-    iconMoon.classList.remove('hidden');
-  }
-  localStorage.setItem('theme', mode);
-}
-
-const savedTheme = localStorage.getItem('theme') || 'light';
-setTheme(savedTheme);
-
-themeToggle.addEventListener('click', () => {
-  const current = document.documentElement.getAttribute('data-theme');
-  setTheme(current === 'dark' ? 'light' : 'dark');
-});
 
 const btnOpen = document.getElementById('btn-open-folder');
 const projectName = document.getElementById('project-name');
@@ -81,6 +72,9 @@ const btnSettingsClose = document.getElementById('btn-settings-close');
 const modalEncryptionWarning = document.getElementById('modal-encryption-warning');
 const modalSaveError = document.getElementById('modal-save-error');
 
+initTheme({ themeToggle, iconSun, iconMoon });
+initSidebarResizer({ divider, sidebar, workspace, chatDivider, chatPanel });
+
 function syncChatInputHeight() {
   const el = chatInput;
   el.style.height = '0px';
@@ -126,15 +120,6 @@ btnToggleContentPane.addEventListener('click', async () => {
     setContentPaneVisible(wasVisible);
   }
 });
-
-let rootPath = null;
-let activeTreeItem = null;
-let selectedPath = null;
-let selectedIsDirectory = false;
-
-let dragSourcePath = null;
-let dragSourceRow = null;
-let currentDropTarget = null;
 
 // ── Folder Open ──
 
@@ -207,7 +192,7 @@ function renderWelcomeRecent(paths) {
     btn.appendChild(arrow);
 
     btn.addEventListener('click', () => {
-      if (p !== rootPath) openProject(p);
+      if (p !== appStore.rootPath) openProject(p);
     });
     welcomeRecentList.appendChild(btn);
   }
@@ -234,15 +219,15 @@ if (welcomeActionsList) {
     chatInput.value = prompt;
     syncChatInputHeight();
     chatInput.focus();
-    if (rootPath && activeProviderConfigured()) {
+    if (appStore.rootPath && activeProviderConfigured()) {
       sendChatMessage();
     }
   });
 }
 
 async function openProject(folderPath) {
-  const workspaceChanged = rootPath !== folderPath;
-  rootPath = folderPath;
+  const workspaceChanged = appStore.rootPath !== folderPath;
+  appStore.rootPath = folderPath;
   const name = folderPath.split('/').pop() || folderPath;
   projectName.textContent = name;
   document.title = 'Weyouze Anything';
@@ -302,7 +287,7 @@ function renderFolderHistory(paths) {
     btn.appendChild(sub);
     btn.addEventListener('click', () => {
       closeFolderHistoryMenu();
-      if (p !== rootPath) openProject(p);
+      if (p !== appStore.rootPath) openProject(p);
     });
     folderHistoryMenu.appendChild(btn);
   }
@@ -351,7 +336,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 treeContainer.addEventListener('dragover', (e) => {
-  if (!rootPath || !dragSourcePath) return;
+  if (!appStore.rootPath || !appStore.dragSourcePath) return;
   const overItem = e.target.closest('.tree-item');
   if (overItem && overItem.dataset.isDirectory === 'true') return;
   e.preventDefault();
@@ -367,21 +352,21 @@ treeContainer.addEventListener('dragleave', (e) => {
 
 treeContainer.addEventListener('drop', async (e) => {
   clearDragVisualState();
-  if (!rootPath || !dragSourcePath) return;
+  if (!appStore.rootPath || !appStore.dragSourcePath) return;
   const overItem = e.target.closest('.tree-item');
   if (overItem && overItem.dataset.isDirectory === 'true') return;
   e.preventDefault();
-  const sourcePath = dragSourcePath;
+  const sourcePath = appStore.dragSourcePath;
   if (!sourcePath) return;
   const expandedBefore = collectExpandedFolderPaths();
-  const result = await api.moveItem(sourcePath, rootPath);
+  const result = await api.moveItem(sourcePath, appStore.rootPath);
   if (result.error) {
     console.error('Move failed:', result.error);
     clearDragVisualState();
     return;
   }
   treeContainer.innerHTML = '';
-  await loadTreeLevel(treeContainer, rootPath, 0);
+  await loadTreeLevel(treeContainer, appStore.rootPath, 0);
   await restoreExpandedFolders(expandedBefore);
   clearDragVisualState();
 });
@@ -423,8 +408,8 @@ async function loadTreeLevel(parentEl, dirPath, depth) {
     row.appendChild(label);
 
     row.addEventListener('dragstart', (e) => {
-      dragSourcePath = item.path;
-      dragSourceRow = row;
+      appStore.dragSourcePath = item.path;
+      appStore.dragSourceRow = row;
       row.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', item.path);
@@ -432,8 +417,8 @@ async function loadTreeLevel(parentEl, dirPath, depth) {
 
     row.addEventListener('dragend', () => {
       clearDragVisualState();
-      dragSourcePath = null;
-      dragSourceRow = null;
+      appStore.dragSourcePath = null;
+      appStore.dragSourceRow = null;
     });
 
     if (item.isDirectory) {
@@ -467,24 +452,24 @@ function handleDragOver(e) {
 function handleDragEnter(e) {
   e.preventDefault();
   const row = e.currentTarget;
-  if (row === dragSourceRow) return;
+  if (row === appStore.dragSourceRow) return;
   clearDropTarget();
   row.classList.add('drop-target');
-  currentDropTarget = row;
+  appStore.currentDropTarget = row;
 }
 
 function handleDragLeave(e) {
   const row = e.currentTarget;
   if (!row.contains(e.relatedTarget)) {
     row.classList.remove('drop-target');
-    if (currentDropTarget === row) currentDropTarget = null;
+    if (appStore.currentDropTarget === row) appStore.currentDropTarget = null;
   }
 }
 
 function clearDropTarget() {
-  if (currentDropTarget) {
-    currentDropTarget.classList.remove('drop-target');
-    currentDropTarget = null;
+  if (appStore.currentDropTarget) {
+    appStore.currentDropTarget.classList.remove('drop-target');
+    appStore.currentDropTarget = null;
   }
 }
 
@@ -496,7 +481,7 @@ function clearDragVisualState() {
   for (const el of treeContainer.querySelectorAll('.tree-item.dragging')) {
     el.classList.remove('dragging');
   }
-  currentDropTarget = null;
+  appStore.currentDropTarget = null;
 }
 
 function collectExpandedFolderPaths() {
@@ -506,10 +491,6 @@ function collectExpandedFolderPaths() {
     if (p) paths.push(p);
   }
   return paths;
-}
-
-function folderDepthSortKey(dirPath) {
-  return dirPath.split('/').filter(Boolean).length;
 }
 
 async function restoreExpandedFolders(paths) {
@@ -548,7 +529,7 @@ async function handleDrop(e, destDir, dropRow, depth) {
   e.stopPropagation();
   clearDragVisualState();
 
-  const sourcePath = dragSourcePath || e.dataTransfer.getData('text/plain');
+  const sourcePath = appStore.dragSourcePath || e.dataTransfer.getData('text/plain');
   if (!sourcePath || sourcePath === destDir) return;
 
   const expandedBefore = collectExpandedFolderPaths();
@@ -568,12 +549,6 @@ async function handleDrop(e, destDir, dropRow, depth) {
   clearDragVisualState();
 }
 
-function parentDirFromItemPath(itemPath) {
-  const parts = itemPath.split('/');
-  parts.pop();
-  return parts.join('/') || '/';
-}
-
 async function refreshParentOf(itemPath) {
   const parts = itemPath.split('/');
   parts.pop();
@@ -582,10 +557,10 @@ async function refreshParentOf(itemPath) {
 }
 
 async function refreshFolder(dirPath) {
-  if (dirPath === rootPath) {
+  if (dirPath === appStore.rootPath) {
     const expandedBefore = collectExpandedFolderPaths();
     treeContainer.innerHTML = '';
-    await loadTreeLevel(treeContainer, rootPath, 0);
+    await loadTreeLevel(treeContainer, appStore.rootPath, 0);
     await restoreExpandedFolders(expandedBefore);
     return;
   }
@@ -624,23 +599,23 @@ async function toggleFolder(row, childContainer, dirPath, depth) {
   }
 
   setActiveItem(row);
-  selectedPath = dirPath;
-  selectedIsDirectory = true;
+  appStore.selectedPath = dirPath;
+  appStore.selectedIsDirectory = true;
 }
 
 async function selectFile(row, item) {
   setActiveItem(row);
-  selectedPath = item.path;
-  selectedIsDirectory = false;
+  appStore.selectedPath = item.path;
+  appStore.selectedIsDirectory = false;
   await showFileContent(item);
 }
 
 function setActiveItem(row) {
-  if (activeTreeItem) {
-    activeTreeItem.classList.remove('active');
+  if (appStore.activeTreeItem) {
+    appStore.activeTreeItem.classList.remove('active');
   }
   row.classList.add('active');
-  activeTreeItem = row;
+  appStore.activeTreeItem = row;
 }
 
 // ── Content Display ──
@@ -681,62 +656,7 @@ function showFileInfo(item, errorMsg) {
   infoType.textContent = getExtension(item.name) || 'Unbekannt';
 }
 
-// ── Sidebar Resize ──
-
-let isResizing = false;
-
-divider.addEventListener('mousedown', (e) => {
-  isResizing = true;
-  divider.classList.add('dragging');
-  document.body.style.cursor = 'col-resize';
-  e.preventDefault();
-});
-
-let isResizingChat = false;
-
-document.addEventListener('mousemove', (e) => {
-  if (isResizing) {
-    const newWidth = Math.max(150, Math.min(e.clientX, 600));
-    sidebar.style.width = `${newWidth}px`;
-    return;
-  }
-  if (isResizingChat && workspace) {
-    const rect = workspace.getBoundingClientRect();
-    const fromRight = rect.right - e.clientX;
-    const minChat = 260;
-    const maxChat = Math.max(minChat, Math.min(rect.width * 0.5, rect.width - 200));
-    const w = Math.max(minChat, Math.min(fromRight, maxChat));
-    chatPanel.style.width = `${w}px`;
-  }
-});
-
-document.addEventListener('mouseup', () => {
-  if (isResizing) {
-    isResizing = false;
-    divider.classList.remove('dragging');
-    document.body.style.cursor = '';
-  }
-  if (isResizingChat) {
-    isResizingChat = false;
-    chatDivider.classList.remove('dragging');
-    document.body.style.cursor = '';
-  }
-});
-
-chatDivider.addEventListener('mousedown', (e) => {
-  isResizingChat = true;
-  chatDivider.classList.add('dragging');
-  document.body.style.cursor = 'col-resize';
-  e.preventDefault();
-});
-
 // ── Chat: Spracheingabe (ein Mikrofon-Button + Whisper) ──
-
-let voiceRecording = false;
-let voiceMediaRecorder = null;
-let voiceChunks = [];
-let voiceStream = null;
-let voiceTranscribing = false;
 
 function setMicUi(recording) {
   btnChatMic.classList.toggle('recording', recording);
@@ -756,33 +676,33 @@ function setVoiceStatus(text) {
 }
 
 function releaseVoiceStream() {
-  if (voiceStream) {
-    for (const track of voiceStream.getTracks()) track.stop();
-    voiceStream = null;
+  if (appStore.voiceStream) {
+    for (const track of appStore.voiceStream.getTracks()) track.stop();
+    appStore.voiceStream = null;
   }
 }
 
 async function startVoiceRecording() {
-  if (voiceRecording || voiceTranscribing) return;
+  if (appStore.voiceRecording || appStore.voiceTranscribing) return;
   try {
-    voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    appStore.voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
     setVoiceStatus(err.name === 'NotAllowedError' ? 'Mikrofonzugriff verweigert.' : `Mikrofon: ${err.message}`);
     return;
   }
 
-  voiceChunks = [];
+  appStore.voiceChunks = [];
   const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus'
     : 'audio/webm';
-  voiceMediaRecorder = new MediaRecorder(voiceStream, { mimeType });
-  voiceMediaRecorder.ondataavailable = (e) => {
-    if (e.data?.size > 0) voiceChunks.push(e.data);
+  appStore.voiceMediaRecorder = new MediaRecorder(appStore.voiceStream, { mimeType });
+  appStore.voiceMediaRecorder.ondataavailable = (e) => {
+    if (e.data?.size > 0) appStore.voiceChunks.push(e.data);
   };
-  voiceMediaRecorder.onstop = () => handleVoiceStopped();
-  voiceMediaRecorder.start(250);
+  appStore.voiceMediaRecorder.onstop = () => handleVoiceStopped();
+  appStore.voiceMediaRecorder.start(250);
 
-  voiceRecording = true;
+  appStore.voiceRecording = true;
   setMicUi(true);
   // a11y (Phase 2): sichtbares Status-Label, damit der Recording-Status
   // nicht nur ueber die rote Mic-Faerbung kommuniziert wird.
@@ -790,21 +710,21 @@ async function startVoiceRecording() {
 }
 
 function stopVoiceRecording() {
-  if (!voiceRecording || !voiceMediaRecorder) return;
-  voiceRecording = false;
-  try { voiceMediaRecorder.stop(); } catch { /* already stopped */ }
+  if (!appStore.voiceRecording || !appStore.voiceMediaRecorder) return;
+  appStore.voiceRecording = false;
+  try { appStore.voiceMediaRecorder.stop(); } catch { /* already stopped */ }
   releaseVoiceStream();
 }
 
 async function handleVoiceStopped() {
   setMicUi(false);
 
-  if (voiceChunks.length === 0) { setVoiceStatus(''); return; }
-  const blob = new Blob(voiceChunks, { type: 'audio/webm' });
-  voiceChunks = [];
+  if (appStore.voiceChunks.length === 0) { setVoiceStatus(''); return; }
+  const blob = new Blob(appStore.voiceChunks, { type: 'audio/webm' });
+  appStore.voiceChunks = [];
   if (blob.size < 1000) { setVoiceStatus('Aufnahme zu kurz.'); return; }
 
-  voiceTranscribing = true;
+  appStore.voiceTranscribing = true;
   btnChatMic.disabled = true;
   setVoiceStatus('Transkribiere…');
 
@@ -826,21 +746,21 @@ async function handleVoiceStopped() {
   } catch (err) {
     setVoiceStatus(`Fehler: ${err.message || 'Transkription fehlgeschlagen.'}`);
   } finally {
-    voiceTranscribing = false;
+    appStore.voiceTranscribing = false;
     btnChatMic.disabled = false;
   }
 }
 
 function stopChatVoiceListening() {
-  if (voiceRecording) stopVoiceRecording();
+  if (appStore.voiceRecording) stopVoiceRecording();
   releaseVoiceStream();
   setMicUi(false);
-  if (!voiceTranscribing) setVoiceStatus('');
+  if (!appStore.voiceTranscribing) setVoiceStatus('');
 }
 
 btnChatMic.addEventListener('click', () => {
   if (btnChatMic.disabled) return;
-  if (voiceRecording) {
+  if (appStore.voiceRecording) {
     stopVoiceRecording();
   } else {
     startVoiceRecording();
@@ -852,17 +772,6 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ── OpenAI Chat ──
-
-let llmState = {
-  encryptionAvailable: true,
-  activeProvider: 'openai',
-  providers: [],
-};
-let settingsDraftProviderId = null;
-let chatMessages = [];
-let chatSessionId = 0;
-let currentChatId = '';
-let currentChatWorkspace = null;
 
 function inferChatTitle(messages) {
   const u = messages.find((m) => m.role === 'user');
@@ -928,33 +837,33 @@ function formatHistoryTime(ts) {
 }
 
 async function persistCurrentChat() {
-  if (!currentChatId || chatMessages.length === 0) return;
-  const messages = serializeChatMessagesForStorage(chatMessages);
+  if (!appStore.currentChatId || appStore.chatMessages.length === 0) return;
+  const messages = serializeChatMessagesForStorage(appStore.chatMessages);
   if (messages.length === 0) return;
-  const title = inferChatTitle(chatMessages);
+  const title = inferChatTitle(appStore.chatMessages);
   await api.upsertChatSession({
-    id: currentChatId,
-    workspaceRoot: currentChatWorkspace,
+    id: appStore.currentChatId,
+    workspaceRoot: appStore.currentChatWorkspace,
     title,
     updatedAt: Date.now(),
     messages,
   });
-  await api.setActiveChatId(currentChatWorkspace, currentChatId);
+  await api.setActiveChatId(appStore.currentChatWorkspace, appStore.currentChatId);
 }
 
 async function loadChatForWorkspace(workspaceRoot) {
   stopChatVoiceListening();
   await persistCurrentChat();
-  chatSessionId += 1;
+  appStore.chatSessionId += 1;
 
-  const store = await api.getChatHistory(workspaceRoot);
-  const sessions = Array.isArray(store?.sessions) ? store.sessions : [];
-  if (store?.activeChatId) {
-    const s = sessions.find((x) => x.id === store.activeChatId);
+  const hist = await api.getChatHistory(workspaceRoot);
+  const sessions = Array.isArray(hist?.sessions) ? hist.sessions : [];
+  if (hist?.activeChatId) {
+    const s = sessions.find((x) => x.id === hist.activeChatId);
     if (s && Array.isArray(s.messages)) {
-      currentChatId = s.id;
-      currentChatWorkspace = workspaceRoot || null;
-      chatMessages = normalizeLoadedMessages(s.messages);
+      appStore.currentChatId = s.id;
+      appStore.currentChatWorkspace = workspaceRoot || null;
+      appStore.chatMessages = normalizeLoadedMessages(s.messages);
       chatInput.value = '';
       syncChatInputHeight();
       renderChatMessages();
@@ -962,9 +871,9 @@ async function loadChatForWorkspace(workspaceRoot) {
     }
     await api.setActiveChatId(workspaceRoot, null);
   }
-  currentChatId = crypto.randomUUID();
-  currentChatWorkspace = workspaceRoot || null;
-  chatMessages = [];
+  appStore.currentChatId = crypto.randomUUID();
+  appStore.currentChatWorkspace = workspaceRoot || null;
+  appStore.chatMessages = [];
   chatInput.value = '';
   syncChatInputHeight();
   renderChatMessages();
@@ -977,8 +886,8 @@ function setHistoryDrawerOpen(open) {
 }
 
 async function renderHistoryList() {
-  const store = await api.getChatHistory(rootPath);
-  const sessions = Array.isArray(store.sessions) ? [...store.sessions] : [];
+  const hist = await api.getChatHistory(appStore.rootPath);
+  const sessions = Array.isArray(hist.sessions) ? [...hist.sessions] : [];
   sessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   chatHistoryList.innerHTML = '';
   if (sessions.length === 0) {
@@ -991,7 +900,7 @@ async function renderHistoryList() {
     row.className = 'chat-history-row';
     row.setAttribute('role', 'button');
     row.tabIndex = 0;
-    if (s.id === currentChatId) row.classList.add('chat-history-row--current');
+    if (s.id === appStore.currentChatId) row.classList.add('chat-history-row--current');
     const main = document.createElement('div');
     main.className = 'chat-history-row-main';
     const titleEl = document.createElement('span');
@@ -1032,25 +941,25 @@ async function renderHistoryList() {
 }
 
 async function openChatSession(id) {
-  if (!id || id === currentChatId) {
+  if (!id || id === appStore.currentChatId) {
     setHistoryDrawerOpen(false);
     return;
   }
   stopChatVoiceListening();
   await persistCurrentChat();
-  chatSessionId += 1;
-  const store = await api.getChatHistory(rootPath);
-  const s = store.sessions?.find((x) => x.id === id);
+  appStore.chatSessionId += 1;
+  const hist = await api.getChatHistory(appStore.rootPath);
+  const s = hist.sessions?.find((x) => x.id === id);
   if (!s || !Array.isArray(s.messages)) {
     setHistoryDrawerOpen(false);
     return;
   }
-  currentChatId = id;
-  currentChatWorkspace = s.workspaceRoot || null;
-  chatMessages = normalizeLoadedMessages(s.messages);
+  appStore.currentChatId = id;
+  appStore.currentChatWorkspace = s.workspaceRoot || null;
+  appStore.chatMessages = normalizeLoadedMessages(s.messages);
   chatInput.value = '';
   syncChatInputHeight();
-  await api.setActiveChatId(currentChatWorkspace, id);
+  await api.setActiveChatId(appStore.currentChatWorkspace, id);
   renderChatMessages();
   updateChatChrome();
   setHistoryDrawerOpen(false);
@@ -1059,15 +968,15 @@ async function openChatSession(id) {
 
 async function removeChatFromHistory(id) {
   await api.deleteChatSession(id);
-  if (id === currentChatId) {
+  if (id === appStore.currentChatId) {
     stopChatVoiceListening();
-    chatSessionId += 1;
-    currentChatId = crypto.randomUUID();
-    currentChatWorkspace = rootPath || null;
-    chatMessages = [];
+    appStore.chatSessionId += 1;
+    appStore.currentChatId = crypto.randomUUID();
+    appStore.currentChatWorkspace = appStore.rootPath || null;
+    appStore.chatMessages = [];
     chatInput.value = '';
     syncChatInputHeight();
-    await api.setActiveChatId(currentChatWorkspace, null);
+    await api.setActiveChatId(appStore.currentChatWorkspace, null);
     renderChatMessages();
     updateChatChrome();
   }
@@ -1077,13 +986,13 @@ async function removeChatFromHistory(id) {
 async function startNewChat() {
   stopChatVoiceListening();
   await persistCurrentChat();
-  chatSessionId += 1;
-  currentChatId = crypto.randomUUID();
-  currentChatWorkspace = rootPath || null;
-  chatMessages = [];
+  appStore.chatSessionId += 1;
+  appStore.currentChatId = crypto.randomUUID();
+  appStore.currentChatWorkspace = appStore.rootPath || null;
+  appStore.chatMessages = [];
   chatInput.value = '';
   syncChatInputHeight();
-  await api.setActiveChatId(currentChatWorkspace, null);
+  await api.setActiveChatId(appStore.currentChatWorkspace, null);
   renderChatMessages();
   updateChatChrome();
   setHistoryDrawerOpen(false);
@@ -1091,27 +1000,27 @@ async function startNewChat() {
 }
 
 function findProviderMeta(providerId) {
-  return (llmState.providers || []).find((p) => p.id === providerId) || null;
+  return (appStore.llmState.providers || []).find((p) => p.id === providerId) || null;
 }
 
 function activeProviderConfigured() {
-  const p = findProviderMeta(llmState.activeProvider);
+  const p = findProviderMeta(appStore.llmState.activeProvider);
   return !!(p && p.configured);
 }
 
 async function refreshLLMState() {
-  llmState = await api.getLLMState();
+  appStore.llmState = await api.getLLMState();
   updateChatChrome();
 }
 
 function updateChatChrome() {
-  const active = findProviderMeta(llmState.activeProvider);
+  const active = findProviderMeta(appStore.llmState.activeProvider);
   const isConfigured = activeProviderConfigured();
 
   // Phase 3: Chat-Header-Meta dynamisch (Mono-Projektname + Modell-Pille).
   if (chatTitleEl) {
-    if (rootPath) {
-      const projectName = rootPath.split('/').pop() || rootPath;
+    if (appStore.rootPath) {
+      const projectName = appStore.rootPath.split('/').pop() || appStore.rootPath;
       chatTitleEl.textContent = projectName;
       chatTitleEl.removeAttribute('lang');
     } else {
@@ -1130,7 +1039,7 @@ function updateChatChrome() {
   }
 
   if (!isConfigured) {
-    if (!llmState.encryptionAvailable) {
+    if (!appStore.llmState.encryptionAvailable) {
       chatHint.textContent =
         'Verschlüsselter Speicher ist nicht verfügbar. Ein API-Key kann hier nicht sicher gespeichert werden.';
     } else {
@@ -1138,7 +1047,7 @@ function updateChatChrome() {
     }
     chatHint.classList.remove('hidden');
     btnChatSend.disabled = true;
-  } else if (!rootPath) {
+  } else if (!appStore.rootPath) {
     chatHint.textContent =
       `Aktiv: ${active.name} · ${active.model || '(Modell nicht gesetzt)'} – Tipp: Öffne einen Ordner, damit der Assistent Dateien per Tool einlesen kann.`;
     chatHint.classList.remove('hidden');
@@ -1152,7 +1061,7 @@ function updateChatChrome() {
 }
 
 function updateStreamingChrome() {
-  const last = chatMessages[chatMessages.length - 1];
+  const last = appStore.chatMessages[appStore.chatMessages.length - 1];
   if (!last?.streaming) return;
   const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
   if (!bubble) return;
@@ -1179,26 +1088,15 @@ function updateStreamingChrome() {
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
 
-function markdownToSafeHtml(raw) {
-  const text = String(raw ?? '');
-  if (typeof marked !== 'undefined' && typeof marked.parse === 'function' && typeof DOMPurify !== 'undefined') {
-    const html = marked.parse(text, { breaks: true, gfm: true });
-    return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
-  }
-  const esc = document.createElement('div');
-  esc.textContent = text;
-  return esc.innerHTML.replace(/\n/g, '<br>');
-}
 
 // Drosselt das Live-Rendern des Markdown-Streams auf max. 1x pro Frame.
 // Verhindert, dass schnelle Provider (z. B. Ollama lokal) den Parser pro
 // Token aufrufen. Behaelt das Auto-Scroll am Bubble-Ende bei.
-let _streamRenderRaf = 0;
 function scheduleStreamRender(streamEl, text) {
   if (!streamEl) return;
-  if (_streamRenderRaf) cancelAnimationFrame(_streamRenderRaf);
-  _streamRenderRaf = requestAnimationFrame(() => {
-    _streamRenderRaf = 0;
+  if (appStore.streamRenderRaf) cancelAnimationFrame(appStore.streamRenderRaf);
+  appStore.streamRenderRaf = requestAnimationFrame(() => {
+    appStore.streamRenderRaf = 0;
     streamEl.innerHTML = markdownToSafeHtml(text);
     chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
   });
@@ -1291,7 +1189,7 @@ function buildToolLog(trace, state /* 'running' | 'done' */) {
 // Markiert die Konversation waehrend Streaming als "busy" (a11y-Pflicht aus
 // docs/ui-design/doubleslash-a11y-regeln.md, Abschnitt Live-Regionen).
 function syncChatBusyState() {
-  const last = chatMessages[chatMessages.length - 1];
+  const last = appStore.chatMessages[appStore.chatMessages.length - 1];
   const busy = !!(last && last.role === 'assistant' && last.streaming);
   chatMessagesEl.setAttribute('aria-busy', busy ? 'true' : 'false');
   // Phase 5 E: Live-Dot reflektiert den echten Verbindungs-Status.
@@ -1301,7 +1199,7 @@ function syncChatBusyState() {
 // Phase 5 E: Connection-Live-Dot auf echten Provider-/Stream-Status koppeln.
 function syncLiveDot() {
   if (!chatLiveDot) return;
-  const last = chatMessages[chatMessages.length - 1];
+  const last = appStore.chatMessages[appStore.chatMessages.length - 1];
   const streaming = !!(last && last.role === 'assistant' && last.streaming);
   const configured = activeProviderConfigured();
 
@@ -1320,7 +1218,7 @@ function syncLiveDot() {
 
 function renderChatMessages() {
   chatMessagesEl.innerHTML = '';
-  for (const m of chatMessages) {
+  for (const m of appStore.chatMessages) {
     const li = document.createElement('li');
     const roleClass = m.role === 'user' ? 'user' : 'assistant';
     li.classList.add('chat-msg', roleClass);
@@ -1394,15 +1292,15 @@ async function sendChatMessage() {
   stopChatVoiceListening();
   const text = chatInput.value.trim();
   if (!text || !activeProviderConfigured()) return;
-  const sessionAtSend = chatSessionId;
+  const sessionAtSend = appStore.chatSessionId;
   chatInput.value = '';
   syncChatInputHeight();
-  chatMessages.push({ role: 'user', content: text });
+  appStore.chatMessages.push({ role: 'user', content: text });
   renderChatMessages();
   btnChatSend.disabled = true;
 
-  const payload = chatMessages.map(({ role, content }) => ({ role, content }));
-  chatMessages.push({
+  const payload = appStore.chatMessages.map(({ role, content }) => ({ role, content }));
+  appStore.chatMessages.push({
     role: 'assistant',
     content: '',
     toolTrace: [],
@@ -1415,7 +1313,7 @@ async function sendChatMessage() {
   const offDelta =
     typeof api.onChatDelta === 'function'
       ? api.onChatDelta(({ text: deltaText }) => {
-          const last = chatMessages[chatMessages.length - 1];
+          const last = appStore.chatMessages[appStore.chatMessages.length - 1];
           if (!last || last.role !== 'assistant' || !last.streaming) return;
           last.content = (last.content || '') + (deltaText || '');
           const streamEl = chatMessagesEl.querySelector(
@@ -1432,7 +1330,7 @@ async function sendChatMessage() {
   const offTool =
     typeof api.onChatToolLine === 'function'
       ? api.onChatToolLine(({ line }) => {
-          const last = chatMessages[chatMessages.length - 1];
+          const last = appStore.chatMessages[appStore.chatMessages.length - 1];
           if (!last || last.role !== 'assistant' || !last.streaming) return;
           if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
           last.toolTrace.push(line);
@@ -1456,7 +1354,7 @@ async function sendChatMessage() {
   const offProgress =
     typeof api.onChatProgress === 'function'
       ? api.onChatProgress((p) => {
-          const last = chatMessages[chatMessages.length - 1];
+          const last = appStore.chatMessages[appStore.chatMessages.length - 1];
           if (!last || last.role !== 'assistant' || !last.streaming) return;
           if (p.type === 'phase' && p.phase) {
             last.phase = p.phase;
@@ -1472,9 +1370,9 @@ async function sendChatMessage() {
   let result;
   try {
     result = await api.chat(payload, {
-      workspaceRoot: rootPath,
-      selectedPath: selectedPath,
-      selectedIsDirectory: selectedIsDirectory,
+      workspaceRoot: appStore.rootPath,
+      selectedPath: appStore.selectedPath,
+      selectedIsDirectory: appStore.selectedIsDirectory,
     });
   } finally {
     offDelta();
@@ -1483,14 +1381,14 @@ async function sendChatMessage() {
   }
 
   btnChatSend.disabled = !activeProviderConfigured();
-  if (sessionAtSend !== chatSessionId) return;
+  if (sessionAtSend !== appStore.chatSessionId) return;
 
-  const last = chatMessages[chatMessages.length - 1];
+  const last = appStore.chatMessages[appStore.chatMessages.length - 1];
   if (result.error) {
     if (last && last.streaming) {
-      chatMessages.pop();
+      appStore.chatMessages.pop();
     }
-    chatMessages.push({ role: 'assistant', content: result.error, isError: true });
+    appStore.chatMessages.push({ role: 'assistant', content: result.error, isError: true });
   } else if (last && last.role === 'assistant' && last.streaming) {
     last.streaming = false;
     last.content = result.content ?? '';
@@ -1531,7 +1429,7 @@ function setModelStatus(text, isError = false) {
 
 function renderProviderSelect() {
   selectProvider.innerHTML = '';
-  for (const p of llmState.providers) {
+  for (const p of appStore.llmState.providers) {
     const opt = document.createElement('option');
     opt.value = p.id;
     // a11y (Phase 2): Provider-Namen sind englische Eigennamen (OpenAI,
@@ -1539,12 +1437,12 @@ function renderProviderSelect() {
     // sie englisch aussprechen.
     opt.setAttribute('lang', 'en');
     const tags = [];
-    if (p.id === llmState.activeProvider) tags.push('aktiv');
+    if (p.id === appStore.llmState.activeProvider) tags.push('aktiv');
     if (p.configured) tags.push('konfiguriert');
     opt.textContent = tags.length ? `${p.name} – ${tags.join(', ')}` : p.name;
     selectProvider.appendChild(opt);
   }
-  selectProvider.value = settingsDraftProviderId || llmState.activeProvider;
+  selectProvider.value = appStore.settingsDraftProviderId || appStore.llmState.activeProvider;
 }
 
 function renderModelSelect(currentValue, options) {
@@ -1579,7 +1477,7 @@ function renderModelSelect(currentValue, options) {
 function applyProviderToForm(providerId) {
   const meta = findProviderMeta(providerId);
   if (!meta) return;
-  settingsDraftProviderId = providerId;
+  appStore.settingsDraftProviderId = providerId;
   selectProvider.value = providerId;
 
   if (meta.fields?.apiKey) {
@@ -1614,7 +1512,7 @@ function applyProviderToForm(providerId) {
 
   const lines = [];
   if (meta.apiBase) lines.push(`API: ${meta.apiBase}`);
-  if (meta.id === llmState.activeProvider) lines.push('Aktuell aktiv');
+  if (meta.id === appStore.llmState.activeProvider) lines.push('Aktuell aktiv');
   if (meta.configured) {
     lines.push(meta.fields?.apiKey ? 'Key gespeichert' : 'Konfiguriert');
   }
@@ -1625,8 +1523,6 @@ function applyProviderToForm(providerId) {
 
 // Phase 5 (Review #12-#13): Modal-A11y — Element merken, Focus-Trap auf Tab,
 // Escape schliesst, beim Schliessen Focus zurueck auf den Trigger.
-let lastFocusBeforeModal = null;
-
 function getFocusableModalElements() {
   const dialog = modalSettings.querySelector('.modal-dialog');
   if (!dialog) return [];
@@ -1662,15 +1558,15 @@ function openSettingsModal() {
   setProviderStatus('');
   setModelStatus('');
 
-  lastFocusBeforeModal = document.activeElement;
+  appStore.lastFocusBeforeModal = document.activeElement;
 
   modalSettings.classList.remove('hidden');
   modalSettings.setAttribute('aria-hidden', 'false');
-  modalEncryptionWarning.classList.toggle('hidden', llmState.encryptionAvailable);
+  modalEncryptionWarning.classList.toggle('hidden', appStore.llmState.encryptionAvailable);
 
-  settingsDraftProviderId = llmState.activeProvider;
+  appStore.settingsDraftProviderId = appStore.llmState.activeProvider;
   renderProviderSelect();
-  applyProviderToForm(settingsDraftProviderId);
+  applyProviderToForm(appStore.settingsDraftProviderId);
 
   modalSettings.addEventListener('keydown', handleModalKeydown);
   queueMicrotask(() => {
@@ -1687,15 +1583,15 @@ function closeSettingsModal() {
   modalSettings.classList.add('hidden');
   modalSettings.setAttribute('aria-hidden', 'true');
   modalSettings.removeEventListener('keydown', handleModalKeydown);
-  settingsDraftProviderId = null;
-  if (lastFocusBeforeModal && typeof lastFocusBeforeModal.focus === 'function') {
-    try { lastFocusBeforeModal.focus(); } catch { /* ignore */ }
+  appStore.settingsDraftProviderId = null;
+  if (appStore.lastFocusBeforeModal && typeof appStore.lastFocusBeforeModal.focus === 'function') {
+    try { appStore.lastFocusBeforeModal.focus(); } catch { /* ignore */ }
   }
-  lastFocusBeforeModal = null;
+  appStore.lastFocusBeforeModal = null;
 }
 
 async function loadModelsForCurrentDraft() {
-  const providerId = settingsDraftProviderId;
+  const providerId = appStore.settingsDraftProviderId;
   const meta = findProviderMeta(providerId);
   if (!meta) return;
 
@@ -1776,7 +1672,7 @@ btnLoadModels.addEventListener('click', () => {
 
 btnSettingsSave.addEventListener('click', async () => {
   setModalError('');
-  const providerId = settingsDraftProviderId || llmState.activeProvider;
+  const providerId = appStore.settingsDraftProviderId || appStore.llmState.activeProvider;
   const meta = findProviderMeta(providerId);
   if (!meta) {
     setModalError('Kein Anbieter ausgewählt.');
@@ -1815,24 +1711,24 @@ btnSettingsSave.addEventListener('click', async () => {
 });
 
 btnSettingsClear.addEventListener('click', async () => {
-  const providerId = settingsDraftProviderId || llmState.activeProvider;
+  const providerId = appStore.settingsDraftProviderId || appStore.llmState.activeProvider;
   if (!providerId) return;
   stopChatVoiceListening();
   await api.clearProvider(providerId);
-  chatSessionId += 1;
-  currentChatId = crypto.randomUUID();
-  currentChatWorkspace = rootPath || null;
-  chatMessages = [];
+  appStore.chatSessionId += 1;
+  appStore.currentChatId = crypto.randomUUID();
+  appStore.currentChatWorkspace = appStore.rootPath || null;
+  appStore.chatMessages = [];
   chatInput.value = '';
   syncChatInputHeight();
-  await api.setActiveChatId(currentChatWorkspace, null);
+  await api.setActiveChatId(appStore.currentChatWorkspace, null);
   renderChatMessages();
   await refreshLLMState();
   // Reflect the cleared state in the modal (if still open)
   if (!modalSettings.classList.contains('hidden')) {
-    settingsDraftProviderId = llmState.activeProvider;
+    appStore.settingsDraftProviderId = appStore.llmState.activeProvider;
     renderProviderSelect();
-    applyProviderToForm(settingsDraftProviderId);
+    applyProviderToForm(appStore.settingsDraftProviderId);
   }
 });
 
@@ -1854,69 +1750,3 @@ refreshLLMState();
   }
   syncChatInputHeight();
 })();
-
-// ── Helpers ──
-
-const TEXT_EXTENSIONS = new Set([
-  'txt', 'md', 'js', 'ts', 'jsx', 'tsx', 'json', 'html', 'htm', 'css',
-  'scss', 'less', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf',
-  'sh', 'bash', 'zsh', 'py', 'rb', 'java', 'c', 'cpp', 'h', 'hpp',
-  'cs', 'go', 'rs', 'swift', 'kt', 'scala', 'php', 'sql', 'r',
-  'vue', 'svelte', 'astro', 'env', 'gitignore', 'dockerfile',
-  'makefile', 'cmake', 'gradle', 'properties', 'log', 'csv', 'svg',
-  'lock', 'editorconfig', 'prettierrc', 'eslintrc', 'babelrc',
-]);
-
-function isTextFile(filename) {
-  const ext = getExtension(filename);
-  if (!ext) {
-    const lower = filename.toLowerCase();
-    return ['makefile', 'dockerfile', 'readme', 'license', 'changelog'].some(
-      (n) => lower === n || lower.startsWith(n + '.')
-    );
-  }
-  return TEXT_EXTENSIONS.has(ext);
-}
-
-function getExtension(filename) {
-  const dotIndex = filename.lastIndexOf('.');
-  if (dotIndex <= 0) return '';
-  return filename.slice(dotIndex + 1).toLowerCase();
-}
-
-function formatSize(bytes) {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
-// ── SVG Icons ──
-
-function svgChevron() {
-  return `<svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-    <path d="M3 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;
-}
-
-function svgFolder() {
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-  </svg>`;
-}
-
-function svgFile(filename) {
-  const ext = getExtension(filename);
-  const colorMap = {
-    js: '#f1e05a', ts: '#3178c6', jsx: '#61dafb', tsx: '#3178c6',
-    json: '#a8d08d', html: '#e34c26', css: '#563d7c', scss: '#c6538c',
-    py: '#3572A5', rb: '#cc342d', java: '#b07219', go: '#00ADD8',
-    rs: '#dea584', md: '#519aba', svg: '#ff9900', xml: '#e44b23',
-    yaml: '#cb171e', yml: '#cb171e', sh: '#89e051', sql: '#e38c00',
-  };
-  const color = colorMap[ext] || '#888';
-
-  return `<svg width="16" height="16" viewBox="0 0 16 16" fill="${color}">
-    <path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.5L9.5 0H4zM9 1v3.5a.5.5 0 0 0 .5.5H13L9 1zM4 1h4v4h5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/>
-  </svg>`;
-}

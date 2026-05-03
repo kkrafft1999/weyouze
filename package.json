@@ -1,7 +1,7 @@
 {
   "name": "weyouze",
   "version": "1.0.0",
-  "main": "main.js",
+  "main": "src/main/index.js",
   "productName": "Weyouze Anything",
   "scripts": {
     "sync-vendor": "node scripts/sync-renderer-vendor.js",

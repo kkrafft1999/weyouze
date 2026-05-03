@@ -167,6 +167,11 @@ function createStorageService({
     }
   }
 
+  async function writeUIPrefs(data) {
+    await fs.mkdir(path.dirname(getUIPrefsPath()), { recursive: true });
+    await fs.writeFile(getUIPrefsPath(), JSON.stringify(data), 'utf8');
+  }
+
   function getChatHistoryPath() {
     return path.join(app.getPath('userData'), CHAT_HISTORY_FILENAME);
   }
@@ -336,6 +341,7 @@ function createStorageService({
     getOpenAIApiKey,
     getValidatedLastFolder,
     readUIPrefs,
+    writeUIPrefs,
     normalizeWorkspaceRoot,
     workspaceBucketKey,
     normalizeSessionForStore,

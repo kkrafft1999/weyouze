@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer, shell } = require('electron');
-const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('./src/shared/ipc-channels');
+const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('../shared/ipc-channels');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   openFolder: () => ipcRenderer.invoke(REQ.DIALOG_OPEN_FOLDER),
