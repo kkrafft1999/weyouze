@@ -13,7 +13,7 @@ dist/
 build/
 
 # Auto-generated vendor bundle
-renderer/vendor/*.js
+src/renderer/vendor/*.js
 
 # Logs
 *.log
