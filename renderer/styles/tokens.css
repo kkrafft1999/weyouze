@@ -1,53 +1,60 @@
 /*
- * doubleSlash Design-Tokens — Single Source of Truth fuer Farben, Typo,
- * Abstaende und Motion. Quelle:
- *   docs/ui-design/doubleslash-a11y-regeln.md
+ * doubleSlash Mono-Blue Design-Tokens — Single Source of Truth fuer Farben,
+ * Typo, Abstaende und Motion. Massgebliches Regelwerk:
+ *   .cursor/rules/ui-design-tokens.mdc
+ * Visuelle Referenz (States-Mockup, an diese Tokens angeglichen):
  *   docs/ui-design/doubleslash-chat-design-states-a11y.html
  *
- * Regel: Hex-Werte werden ab Phase 1 nur noch hier definiert. Komponenten in
- * styles.css beziehen sich ueber `var(--ds-*)` bzw. die abgeleiteten Aliase.
+ * Mono-Blue-Mantra: EINE Akzentfarbe (--ds-blue). Cyan ist vollstaendig
+ * entfernt. --ds-blue-soft (5%-Wash) und --ds-blue-border (25%) sind die
+ * abgestuften Varianten fuer Hover-Wash, Active-States und Tool-Hero-Header.
  *
- * Phase 0: Diese Datei wird in renderer/index.html VOR styles.css geladen,
- * sodass spaetere Phasen die alten Tokens (`--accent`, `--text-muted`, ...)
- * schrittweise auf die neuen abbilden koennen.
+ * Regel: Hex-Werte werden nur hier definiert. Komponenten in styles.css
+ * beziehen sich ueber `var(--ds-*)` bzw. die abgeleiteten Aliase. Diese Datei
+ * wird in renderer/index.html VOR styles.css geladen.
  */
 
 :root {
   /* ── Marken-Palette ───────────────────────────────────────────────────── */
-  --ds-cyan: #00A5E1;          /* nur als UI-Form: Border, Dot, Send-BG, Fokus-Ring */
-  --ds-blue: #00759E;          /* Schrift, Pill-BG, sekundaerer Akzent (5,0:1 auf #FFF) */
+  --ds-blue: #00759E;          /* einzige Akzentfarbe (5,0:1 auf #FFF) */
+  --ds-blue-soft: rgba(0, 117, 158, 0.05);   /* Hover-Wash, aktive Card-Items, Tool-Running-Header */
+  --ds-blue-border: rgba(0, 117, 158, 0.25); /* Tool-Running Header-Border, sanfte Divider */
   --ds-black: #000000;
   --ds-white: #FFFFFF;
 
   /* ── Neutrale Toene (Light) ───────────────────────────────────────────── */
-  --ds-grey-bg: #F9F9F9;       /* Seitenhintergrund */
+  --ds-grey-bg: #F9F9F9;       /* Seitenhintergrund, Footer-BG, Icon-Btn-Hover */
   --ds-grey-card: #F2F2F2;     /* Karten-Hintergrund, Inline-Code */
-  --ds-grey-divider: #EFEFEF;  /* Trenner, Borders */
-  --ds-grey-muted: #6D6D6D;    /* 4,84:1 auf #FFF — nur ab 14 px verwenden */
+  --ds-grey-divider: #EFEFEF;  /* Trenner, Default-Borders */
+  --ds-grey-muted: #6D6D6D;    /* 4,84:1 auf #FFF — Sekundaerschrift, btn-secondary-Hover */
   --ds-grey-strong: #5C5C5C;   /* 7,1:1 auf #FFF — fuer Text < 14 px */
 
-  /* ── Status-Farben ────────────────────────────────────────────────────── */
+  /* ── Status-Tokens (rote Ausnahmeregel) ───────────────────────────────────
+   * Rot ist im Mono-Blue-System NICHT als allgemeiner Akzent erlaubt. Diese
+   * Tokens sind ausschliesslich fuer Faelle, in denen die Bedeutung visuell
+   * wirklich rot verlangt: Error-Bubbles (Nutzer muss aktiv gewarnt werden)
+   * und Mic-Recording (etablierte Audio-Konvention). Keine sonstige
+   * Verwendung — fuer DONE-Status, Success oder neutralen Hinweis bitte
+   * --ds-blue oder --ds-grey-muted nutzen. */
   --ds-error: #B03030;         /* 5,1:1 auf #FFF */
   --ds-error-bg: rgba(176, 48, 48, 0.10);
   --ds-error-border: rgba(176, 48, 48, 0.35);
-  --ds-success: var(--ds-blue);  /* DONE-Pill, Check-Icon */
 
-  /* ── Mic-Recording (Phase 5: separater Token, weil ein anderer Rotton
-   *    als die generelle Fehler-Farbe genutzt wird — Recording soll alarmieren
-   *    ohne mit Error-Bubbles farblich zu kollidieren). */
-  --ds-mic-recording: #DC2626;        /* 4,8:1 auf #FFF */
+  --ds-mic-recording: #DC2626;        /* 4,8:1 auf #FFF — separater Rotton, damit
+                                         Recording-Pulse nicht mit Error-Bubbles
+                                         farblich kollidiert */
   --ds-mic-recording-bg: rgba(220, 38, 38, 0.12);
 
-  /* ── Primary-Button: Brand-CTA in --ds-blue (Clickable-Blue, 5:1 mit Weiss).
-   *    Bewusst NICHT --ds-cyan, weil Cyan auf Weiss nur ~2,5:1 ergibt und
-   *    damit die Designsystem-Regel "Cyan nicht als Schrift-/Pill-BG"
-   *    sowie WCAG-AA fuer Text verletzt. Der Chat-Send-Button verwendet
-   *    --ds-cyan, weil dort nur ein Icon liegt (graphical object, 3:1
-   *    Schwellwert). Hover wird per color-mix() um 20% Schwarz/Weiss
-   *    abgedunkelt/aufgehellt — passt sich automatisch an --ds-blue an. */
+  /* ── Primary-Button: gleicher Bluton, Hover nur leicht dunkler (kein Schwarz-
+   *    Sprung). Active: leichter Lift via Schatten (Token --ds-btn-primary-active-shadow),
+   *    :active inset via scale(0.97) + Schatten in Komponenten-CSS. */
   --ds-btn-primary-bg: var(--ds-blue);
-  --ds-btn-primary-bg-hover: color-mix(in srgb, var(--ds-blue) 80%, black);
+  --ds-btn-primary-bg-hover: #005f80;
   --ds-btn-primary-fg: var(--ds-white);
+  --ds-btn-primary-active-shadow: 0 4px 14px rgba(0, 95, 128, 0.35);
+
+  /* Kreis-Icon-Buttons (neutral): Active-Lift — kein Brand-Blau im Schatten. */
+  --ds-icon-btn-active-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
 
   /* ── Typografie ───────────────────────────────────────────────────────── */
   --ds-font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -84,7 +91,7 @@
   --ds-icon-size: 16px;        /* Standard-Icon-SVG */
 
   /* ── Fokus-Ring ───────────────────────────────────────────────────────── */
-  --ds-focus-ring: 2px solid var(--ds-cyan);
+  --ds-focus-ring: 2px solid var(--ds-blue);
   --ds-focus-offset: 2px;
 
   /* ── Motion ───────────────────────────────────────────────────────────── */
@@ -94,9 +101,11 @@
 }
 
 /* ── Dark-Mode-Mapping ──────────────────────────────────────────────────────
- * Die Referenz-HTML ist Light-only. Diese Werte sind Kontrast-validierte
- * Vorschlaege fuer den vorhandenen Theme-Toggle der Weyouze-App und sollten
- * idealerweise mit dem Designer abgestimmt werden.
+ * Die Mono-Blue-Referenz ist Light-only. Diese Werte sind Kontrast-validierte
+ * Vorschlaege fuer den vorhandenen Theme-Toggle der Weyouze-App. --ds-blue
+ * muss im Dark-Mode aufgehellt werden, um als Schrift/BG ueber 4,5:1 zu
+ * kommen — der Hue bleibt im Blue-Bereich, damit es weiterhin als "die
+ * Akzentfarbe" gelesen wird.
  */
 [data-theme='dark'] {
   --ds-grey-bg: #1A1A1B;
@@ -105,10 +114,9 @@
   --ds-grey-muted: #A1A1A6;    /* 5,4:1 auf #1A1A1B */
   --ds-grey-strong: #C4C4C9;   /* 8,3:1 auf #1A1A1B */
 
-  /* Cyan bleibt als reine Form-Akzent gleich. Blue muss heller werden, damit
-   * es als Schrift auf Dunkel ueber 4,5:1 kommt. */
   --ds-blue: #3FB8E5;          /* 6,2:1 auf #1A1A1B */
-  --ds-success: var(--ds-blue);
+  --ds-blue-soft: rgba(63, 184, 229, 0.08);
+  --ds-blue-border: rgba(63, 184, 229, 0.30);
 
   --ds-error: #FF8080;
   --ds-error-bg: rgba(255, 128, 128, 0.12);
@@ -117,11 +125,12 @@
   --ds-mic-recording: #F87171;
   --ds-mic-recording-bg: rgba(248, 113, 113, 0.15);
 
-  /* Im Dark-Mode wird --ds-blue heller (#3FB8E5) — fuer guten Kontrast (~7:1)
-   * den FG dunkel (#1E1E1E) statt weiss; Hover hellt weiter auf statt ab. */
+  /* Im Dark-Mode: gleicher Hue wie --ds-blue, Hover-Stufe etwas dunkler/gesaettigter. */
   --ds-btn-primary-bg: var(--ds-blue);
-  --ds-btn-primary-bg-hover: color-mix(in srgb, var(--ds-blue) 80%, white);
-  --ds-btn-primary-fg: #1E1E1E;
+  --ds-btn-primary-bg-hover: #2a9fc7;
+  --ds-btn-primary-fg: #1e1e1e;
+  --ds-btn-primary-active-shadow: 0 5px 16px rgba(0, 0, 0, 0.45);
+  --ds-icon-btn-active-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
 }
 
 /* ── Reduced-Motion-Token-Override ─────────────────────────────────────────

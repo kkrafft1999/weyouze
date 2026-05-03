@@ -8,48 +8,39 @@
   --bg-primary: #ffffff;
   --bg-secondary: #f3f3f3;
   --bg-tertiary: #e8e8e8;
-  --chat-output-bg: #fbfaf7;
+  --chat-output-bg: var(--ds-grey-bg);
   --bg-hover: #e8e8e8;
   --bg-active: #d6d6d6;
   --bg-header: #e8e8e8;
   --text-primary: #1e1e1e;
   --text-secondary: #616161;
-  --text-muted: var(--ds-grey-muted);   /* Phase 1: 4.84:1 statt 2.85:1 */
+  --text-muted: var(--ds-grey-muted);   /* 4.84:1 statt 2.85:1 */
   --text-muted-strong: var(--ds-grey-strong); /* fuer Text < 14px */
-  --accent: var(--ds-cyan);             /* Phase 1: nur Form (Border, Outline, BG) */
-  --accent-text: var(--ds-blue);        /* Phase 1: fuer farbigen Text (Links etc.) */
-  --accent-hover: var(--ds-blue);       /* Hover-Stufe = Blue */
+  --accent: var(--ds-blue);             /* Mono-Blue: einzige Akzentfarbe — Border, Outline, BG, Schrift */
+  --accent-text: var(--ds-blue);        /* Alias bleibt fuer farbigen Text (Links etc.) */
+  --accent-hover: var(--ds-btn-primary-bg-hover); /* dunklere Akzent-Stufe, z. B. Primary-Hover */
   --border: #d4d4d4;
   --scrollbar-thumb: #c1c1c1;
   --scrollbar-track: transparent;
 
   /* Horizontaler Innenrand im Chat (Text, Header, Eingabe) */
   --chat-gutter-x: 64px;
-  /* Eigene Nachricht + Eingabebox: identischer, sehr dezent getönter Glow */
-  --chat-user-surface-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.035),
-    0 2px 11px color-mix(in srgb, var(--accent) 5.5%, transparent);
-  /* Zusätzlicher Schwerpunkt bei fokussierter Eingabe (nur Grautöne) */
-  --chat-input-focus-extras:
-    0 2px 8px rgba(0, 0, 0, 0.1),
-    0 10px 44px rgba(0, 0, 0, 0.11),
-    0 0 56px rgba(0, 0, 0, 0.07),
-    0 0 0 4px rgba(0, 0, 0, 0.06);
-  --font-ui: var(--ds-font-ui);         /* Phase 1: Inter mit Fallback-Kette */
+  /* Mono-Blue: keine box-shadow auf Chat-Flaechen (Regel ui-design-tokens). */
+  --font-ui: var(--ds-font-ui);
   --font-mono: var(--ds-font-mono);
 
   /* ── Button design tokens ──
-   * Radius 999 px = Pill-Form fuer alle Text-Buttons (Modal-Save,
-   * Modal-Secondary). Bewusst weicher/freundlicher als die 6 px aus der
-   * Designsystem-Referenz; siehe phase-5-backlog.md (2026-05-03). Icon-
-   * Buttons 32x32 (Send, Mic) nutzen `border-radius: 50%` direkt, weil das
-   * fuer Quadrate einen echten Kreis ergibt. */
+   * Mono-Blue-Mantra: Pill-Form (999px) fuer alle Text-Buttons und Card-
+   * artige klickbare Items. Icon-Buttons 32x32 nutzen `border-radius: 50%`
+   * direkt, weil das fuer Quadrate einen echten Kreis ergibt (visuell
+   * identisch zu 999px). Padding/FW folgen dem Mono-Blue-Mockup. */
   --btn-radius: 999px;
   --btn-padding-x: 18px;
-  --btn-padding-y: 9px;
+  --btn-padding-y: 8px;
   --btn-font-size: 13px;
-  --btn-font-weight: 500;
-  --btn-transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+  --btn-font-weight: 600;
+  --btn-transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s,
+    box-shadow 0.1s ease;
 
   /* Phase 5: Button-Tokens kommen jetzt aus tokens.css (--ds-btn-primary-*).
    * Die alten --btn-primary-*-Aliase bleiben erhalten, damit komponenten-
@@ -77,18 +68,7 @@
   --scrollbar-thumb: #424242;
   --scrollbar-track: transparent;
 
-  --chat-user-surface-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.22),
-    0 0 13px color-mix(in srgb, var(--accent) 9%, transparent);
-
-  --chat-input-focus-extras:
-    0 3px 16px rgba(0, 0, 0, 0.52),
-    0 0 52px rgba(0, 0, 0, 0.44),
-    0 0 72px rgba(0, 0, 0, 0.28),
-    0 0 0 4px rgba(255, 255, 255, 0.1);
-
-  /* Phase 5: Dark-Mode-Override jetzt in tokens.css. Sekundaer-Buttons
-   * teilen sich den Cyan-Hover-Border mit dem Light-Mode (Brand-Akzent). */
+  /* Phase 5: Dark-Mode-Override jetzt in tokens.css. */
 }
 
 html, body {
@@ -105,7 +85,7 @@ html, body {
  * Pflicht aus docs/ui-design/doubleslash-a11y-regeln.md: jedes interaktive
  * Element bekommt einen sichtbaren Ring bei Tastatur-Navigation.
  * - `:focus` (Maus-/Click-Fokus) wird unsichtbar gehalten.
- * - `:focus-visible` zeigt 2px Cyan + 2px Offset.
+ * - `:focus-visible` zeigt `var(--ds-focus-ring)` (Mono-Blue) + Offset.
  * - `outline: none` ohne Ersatz ist verboten — Komponenten-Stylesheets
  *   weiter unten duerfen den Ring NICHT mehr unterdruecken.
  */
@@ -168,9 +148,12 @@ summary:focus-visible,
 }
 
 .titlebar-eyebrow {
+  display: inline-flex;
+  align-items: baseline;
+  column-gap: 0.2em;
   font-family: var(--ds-font-mono);
   font-size: 10px;
-  letter-spacing: 1.2px;
+  letter-spacing: normal;
   color: var(--ds-blue);
   text-transform: none;
 }
@@ -189,15 +172,20 @@ summary:focus-visible,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--ds-touch-min);          /* Phase 1: 32x32 statt ~20x20 */
+  width: var(--ds-touch-min);          /* 32x32 */
   height: var(--ds-touch-min);
   background: transparent;
   color: var(--text-secondary);
   border: none;
-  border-radius: var(--ds-radius-md);
+  border-radius: 50%;                  /* Mockup-konform: Icon-Btn als Kreis */
   padding: 0;
   cursor: pointer;
-  transition: background var(--ds-motion-fast), color var(--ds-motion-fast);
+  box-shadow: none;
+  transition:
+    background var(--ds-motion-fast),
+    color var(--ds-motion-fast),
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
   flex-shrink: 0;
 }
 
@@ -207,15 +195,20 @@ summary:focus-visible,
   color: var(--text-primary);
 }
 
-#tree-header #btn-open-folder:active,
-#tree-header #btn-folder-history:active,
 #tree-header #btn-folder-history[aria-expanded="true"] {
   background: var(--bg-active);
   color: var(--text-primary);
 }
 
+#tree-header #btn-open-folder:active,
+#tree-header #btn-folder-history:active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  transform: scale(0.97);
+  box-shadow: var(--ds-icon-btn-active-shadow);
+}
+
 #folder-history-wrapper {
-  position: relative;
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
@@ -224,14 +217,14 @@ summary:focus-visible,
 #folder-history-menu {
   position: absolute;
   top: calc(100% + 4px);
+  left: 0;
   right: 0;
   z-index: 50;
-  min-width: 240px;
-  max-width: 360px;
+  min-width: 0;
+  max-width: none;
   background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--ds-grey-divider);
+  border-radius: 6px;
   padding: 4px 0;
   overflow: hidden;
 }
@@ -300,16 +293,21 @@ summary:focus-visible,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--ds-touch-min);          /* Phase 1: 32x32 statt 28x28 */
+  width: var(--ds-touch-min);          /* 32x32 */
   height: var(--ds-touch-min);
   background: transparent;
   border: none;
-  border-radius: var(--ds-radius-md);
+  border-radius: 50%;                  /* Mockup-konform: Icon-Btn als Kreis */
   padding: 0;
   cursor: pointer;
   color: var(--text-secondary);
   flex-shrink: 0;
-  transition: background var(--ds-motion-fast), color var(--ds-motion-fast);
+  box-shadow: none;
+  transition:
+    background var(--ds-motion-fast),
+    color var(--ds-motion-fast),
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
 /* Hover/Active im Titlebar: --bg-hover ist identisch mit --bg-header,
@@ -327,6 +325,8 @@ summary:focus-visible,
 #btn-toggle-content-pane:active {
   background: color-mix(in srgb, var(--text-primary) 16%, transparent);
   color: var(--text-primary);
+  transform: scale(0.97);
+  box-shadow: var(--ds-icon-btn-active-shadow);
 }
 
 /* ── Main Layout ── */
@@ -350,10 +350,11 @@ summary:focus-visible,
 
 /* Phase 5 D: Tree-Header bekommt das doubleSlash Eyebrow + Titel-Pattern.
  * Vorher: einzeilig 12 px UPPERCASE. Jetzt: Mono-Eyebrow "// projekt" als
- * 10 px Cyan-Light, darunter der Projektname als Inter 13 px Bold. Buttons
+ * 10 px Mono-Eyebrow "// projekt" in Akzentblau (--accent-text / --ds-blue), darunter der Projektname als Inter 13 px Bold. Buttons
  * rechts bleiben 32×32 (Phase 1).
  */
 #tree-header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -374,11 +375,19 @@ summary:focus-visible,
 }
 
 .tree-header-eyebrow {
+  display: inline-flex;
+  align-items: baseline;
+  column-gap: 0.2em;
   font-family: var(--ds-font-mono);
   font-size: 10px;
-  letter-spacing: 1.2px;
+  letter-spacing: normal;
   color: var(--ds-blue);
   white-space: nowrap;
+}
+
+/* Zwei Slashes enger (system-ui Monos haben oft breite Solidus-Bearing). */
+.eyebrow-prefix {
+  letter-spacing: -0.14em;
 }
 
 #tree-header #project-name {
@@ -405,6 +414,7 @@ summary:focus-visible,
   align-items: center;
   height: 26px;
   padding-right: 8px;
+  border-left: 2px solid transparent;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.1s;
@@ -414,10 +424,10 @@ summary:focus-visible,
   background: var(--bg-hover);
 }
 
-/* Phase 3: Aktiv-Zustand kombiniert Farbe + Form (a11y-konform). */
+/* Aktiv-Zustand: linker Blue-Streifen ohne box-shadow (Mono-Blue). */
 .tree-item.active {
   background: var(--bg-active);
-  box-shadow: inset 2px 0 0 0 var(--ds-cyan);
+  border-left-color: var(--ds-blue);
 }
 
 .tree-item .indent {
@@ -563,18 +573,14 @@ summary:focus-visible,
   flex: 1;
 }
 
-/* Phase 5 E: Live-Dot mit echtem Status. State wird per data-state gesetzt:
- *   "live"      → cyan, pulst (Provider konfiguriert, idle)
- *   "streaming" → cyan, pulst schneller (gerade LLM-Anfrage)
- *   "offline"   → grau, kein Pulse (kein Provider konfiguriert)
- * Reduced-Motion deaktiviert den Pulse generell.
- */
+/* Live-Dot: Status per data-state (Provider/Stream). Puls nur wenn
+ * prefers-reduced-motion es erlaubt — siehe Media-Query am Dateiende. */
 .chat-live-dot {
   display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--ds-cyan);
+  background: var(--ds-blue);
   animation: chatPulse var(--ds-motion-pulse) ease-in-out infinite;
   flex-shrink: 0;
   transition: background var(--ds-motion-fast);
@@ -587,7 +593,7 @@ summary:focus-visible,
 }
 
 .chat-live-dot[data-state='streaming'] {
-  background: var(--ds-cyan);
+  background: var(--ds-blue);
   animation: chatPulse 0.9s ease-in-out infinite;
 }
 
@@ -618,10 +624,6 @@ summary:focus-visible,
   min-width: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .chat-live-dot { animation: none; }
-}
-
 .chat-header-actions {
   display: flex;
   align-items: center;
@@ -634,15 +636,20 @@ summary:focus-visible,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--ds-touch-min);          /* Phase 1: 32x32 statt 26x26 */
+  width: var(--ds-touch-min);          /* 32x32 */
   height: var(--ds-touch-min);
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: var(--ds-radius-md);
+  border-radius: 50%;                  /* Mockup-konform: Icon-Btn als Kreis */
   cursor: pointer;
   color: var(--text-secondary);
-  transition: background var(--ds-motion-fast), color var(--ds-motion-fast);
+  box-shadow: none;
+  transition:
+    background var(--ds-motion-fast),
+    color var(--ds-motion-fast),
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
 #btn-chat-history:hover,
@@ -657,13 +664,22 @@ summary:focus-visible,
   color: var(--text-primary);
 }
 
+#btn-chat-history:active,
+#btn-chat-new:active,
+#btn-chat-settings:active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  transform: scale(0.97);
+  box-shadow: var(--ds-icon-btn-active-shadow);
+}
+
 #chat-history-drawer {
   flex-shrink: 0;
   max-height: 220px;
   overflow-y: auto;
   margin: 0 var(--chat-gutter-x) 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--ds-grey-divider);
+  border-radius: 6px;
   background: var(--bg-primary);
 }
 
@@ -732,20 +748,32 @@ summary:focus-visible,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--ds-touch-min);          /* Phase 1: 32x32 statt 26x26 */
+  width: var(--ds-touch-min);          /* 32x32 */
   height: var(--ds-touch-min);
   padding: 0;
   border: none;
-  border-radius: var(--ds-radius-sm);
+  border-radius: 50%;                  /* Mockup-konform: Icon-Btn als Kreis */
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background var(--ds-motion-fast), color var(--ds-motion-fast);
+  box-shadow: none;
+  transition:
+    background var(--ds-motion-fast),
+    color var(--ds-motion-fast),
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
 .chat-history-row-delete:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.chat-history-row-delete:active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  transform: scale(0.97);
+  box-shadow: var(--ds-icon-btn-active-shadow);
 }
 
 #chat-messages {
@@ -776,19 +804,17 @@ summary:focus-visible,
   user-select: text;
 }
 
-/* Phase 3: User-Bubble bekommt linken Cyan-Akzent (Marken-Signal "hier
- * spricht der Nutzer") zusaetzlich zum Schatten. */
+/* User-Nachricht: Karte ohne Schatten, linker Blue-Akzent (Mono-Blue). */
 .chat-msg.user {
   align-self: flex-end;
   background: var(--bg-primary);
   color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--ds-cyan);
+  border: 1px solid var(--ds-grey-divider);
+  border-left: 2px solid var(--ds-blue);
   margin-left: 32px;
   padding: 9px 13px;
-  border-radius: 14px;
+  border-radius: 6px;
   white-space: pre-wrap;
-  box-shadow: var(--chat-user-surface-shadow);
 }
 
 /* Phase 3: AI-Antwort in der Referenz-Typo (17px / 1.55) — luftiger zu lesen. */
@@ -814,7 +840,7 @@ summary:focus-visible,
 
 /* Phase 3: Tool-Log als Karten-Container (Hero/Compact-Pattern).
  * Compact (done): dezente Karte mit Border, Status rechts.
- * Hero (running): hellblauer Header, Cyan-Border-Left, body luftiger.
+ * Hero (running): hellblauer Header, linker Rand in --ds-blue, body luftiger.
  */
 .chat-tool-log {
   margin: 0 0 8px;
@@ -826,7 +852,7 @@ summary:focus-visible,
 }
 
 .chat-tool-log--running {
-  border-color: var(--ds-cyan);
+  border-color: var(--ds-blue);
   border-left-width: 2px;
   padding-left: 0;                    /* der ueberschriebene Phase-2-Wert */
   /* Phase 5 B: Min-Display-Time. Wenn ein Tool unter 500 ms zurueckkommt,
@@ -844,10 +870,10 @@ summary:focus-visible,
 
 .chat-tool-log--done {
   background: color-mix(in srgb, var(--bg-primary) 92%, var(--ds-grey-divider));
-  /* Phase 5 B: dezenter linker Border in --ds-blue, damit die DONE-Karte
-   * im Chat-Strom schneller als "abgeschlossener Tool-Aufruf" erkennbar ist.
-   * Cyan ist reserviert fuer RUNNING (Form-Akzent), Blue fuer DONE (passt
-   * farblich zur DONE-Pill und zum Check-Icon). */
+  /* Dezenter linker Border in --ds-blue, damit die DONE-Karte im Chat-Strom
+   * schneller als "abgeschlossener Tool-Aufruf" erkennbar ist. RUNNING und
+   * DONE differenzieren sich jetzt nicht mehr ueber Farbe (beide Blue),
+   * sondern ueber Border-Saettigung: RUNNING voll, DONE nur 55%. */
   border-left-width: 2px;
   border-left-color: color-mix(in srgb, var(--ds-blue) 55%, transparent);
 }
@@ -870,8 +896,8 @@ summary:focus-visible,
 }
 
 .chat-tool-log--running .chat-tool-summary {
-  background: color-mix(in srgb, var(--ds-cyan) 5%, var(--bg-primary));
-  border-bottom-color: color-mix(in srgb, var(--ds-blue) 20%, transparent);
+  background: var(--ds-blue-soft);
+  border-bottom-color: var(--ds-blue-border);
 }
 
 .chat-tool-summary::-webkit-details-marker {
@@ -920,14 +946,14 @@ summary:focus-visible,
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--ds-cyan);
+  background: var(--ds-blue);
   animation: chatPulse var(--ds-motion-pulse) ease-in-out infinite;
 }
 
 .chat-tool-status-check {
   width: 14px;
   height: 14px;
-  stroke: var(--ds-blue);          /* Blue (5:1) statt Cyan (3:1), weil Schrift-naher Indikator */
+  stroke: var(--ds-blue);
   fill: none;
   stroke-width: 2;
   stroke-linecap: round;
@@ -949,7 +975,7 @@ summary:focus-visible,
 
 .chat-pill--running,
 .chat-pill--done {
-  background: var(--ds-blue);       /* nicht --ds-cyan: Weiss-auf-Cyan nur 3.06:1 */
+  background: var(--ds-blue);
   color: var(--ds-white);
 }
 
@@ -958,9 +984,9 @@ summary:focus-visible,
   50% { opacity: 0.35; }
 }
 
-/* Streaming-Variante des Tool-Logs visuell hervorheben (zarte Cyan-Border). */
+/* Streaming-Variante des Tool-Logs visuell hervorheben (zarte Blue-Border). */
 .chat-tool-log--running {
-  border-left: 2px solid var(--ds-cyan);
+  border-left: 2px solid var(--ds-blue);
   padding-left: 8px;
 }
 
@@ -998,7 +1024,6 @@ summary:focus-visible,
   color: var(--text-muted);
   opacity: 0.68;
   margin-bottom: 6px;
-  font-style: italic;
   animation: chatThinkingPulse 1.35s ease-in-out infinite;
 }
 
@@ -1028,9 +1053,9 @@ summary:focus-visible,
   color: var(--text-muted-strong);              /* Phase 4 (a11y): 7.1:1 statt 4.84*0.72 */
   white-space: pre-wrap;
   word-break: break-word;
-  background: color-mix(in srgb, var(--bg-primary) 88%, var(--border));
+  background: var(--ds-grey-card);
   border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border: 1px solid var(--ds-grey-divider);
 }
 
 .chat-reasoning-stream.hidden {
@@ -1060,9 +1085,9 @@ summary:focus-visible,
   color: var(--text-muted-strong);
   white-space: pre-wrap;
   word-break: break-word;
-  background: color-mix(in srgb, var(--bg-primary) 88%, var(--border));
+  background: var(--ds-grey-card);
   border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border: 1px solid var(--ds-grey-divider);
 }
 
 .chat-md-streaming {
@@ -1132,8 +1157,8 @@ summary:focus-visible,
   font-size: 0.92em;
   padding: 0.1em 0.35em;
   border-radius: 4px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--ds-grey-card);
+  border: 1px solid var(--ds-grey-divider);
 }
 
 .chat-md pre {
@@ -1142,7 +1167,7 @@ summary:focus-visible,
   overflow-x: auto;
   border-radius: 6px;
   background: var(--bg-primary);
-  border: 1px solid var(--border);
+  border: 1px solid var(--ds-grey-divider);
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.4;
@@ -1156,7 +1181,7 @@ summary:focus-visible,
 }
 
 .chat-md a {
-  color: var(--accent-text);           /* Phase 1: --ds-blue (5.0:1) statt Cyan (3.06:1) */
+  color: var(--accent-text);           /* Mono-Blue: --ds-blue, Kontrast sicher */
   text-decoration: underline;
   cursor: pointer;
 }
@@ -1169,7 +1194,7 @@ summary:focus-visible,
 
 .chat-md th,
 .chat-md td {
-  border: 1px solid var(--border);
+  border: 1px solid var(--ds-grey-divider);
   padding: 4px 8px;
   text-align: left;
 }
@@ -1180,7 +1205,7 @@ summary:focus-visible,
 
 .chat-md hr {
   border: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--ds-grey-divider);
   margin: 0.75em 0;
 }
 
@@ -1197,7 +1222,7 @@ summary:focus-visible,
 }
 
 .chat-msg.error::before {
-  content: '⚠ Fehler:';
+  content: 'Fehler:';
   display: inline-block;
   margin-right: 6px;
   font-weight: var(--ds-font-weight-bold);
@@ -1220,12 +1245,11 @@ summary:focus-visible,
   padding: 6px 6px 6px 4px;
   margin: 8px var(--chat-gutter-x) 12px;
   background: var(--chat-output-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--ds-grey-divider);
   border-radius: 14px;
   flex-shrink: 0;
   align-items: center;
-  transition: border-color 0.15s, box-shadow 0.15s;
-  box-shadow: var(--chat-user-surface-shadow);
+  transition: border-color 0.15s;
 }
 
 /* Mehrzeilig: Mic/Senden unten am wachsenden Textfeld ausrichten */
@@ -1234,8 +1258,7 @@ summary:focus-visible,
 }
 
 #chat-input-row:focus-within {
-  border-color: color-mix(in srgb, var(--border) 32%, var(--text-secondary));
-  box-shadow: var(--chat-user-surface-shadow), var(--chat-input-focus-extras);
+  border-color: var(--ds-blue);
 }
 
 #chat-input {
@@ -1245,7 +1268,7 @@ summary:focus-visible,
   resize: none;
   overflow: hidden;
   scrollbar-width: none;
-  padding: 8px 10px;
+  padding: 9px 12px;
   font-size: 14px;
   line-height: 1.45;
   font-family: var(--font-ui);
@@ -1278,8 +1301,12 @@ summary:focus-visible,
   border-radius: 50%;                  /* 32x32 Quadrate -> Kreis */
   cursor: pointer;
   flex-shrink: 0;
-  transition: background var(--ds-motion-fast), color var(--ds-motion-fast),
-              transform var(--ds-motion-fast);
+  box-shadow: none;
+  transition:
+    background var(--ds-motion-fast),
+    color var(--ds-motion-fast),
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
 #btn-chat-mic {
@@ -1290,6 +1317,13 @@ summary:focus-visible,
 #btn-chat-mic:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+#btn-chat-mic:active:not(:disabled):not(.recording) {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  transform: scale(0.97);
+  box-shadow: var(--ds-icon-btn-active-shadow);
 }
 
 #btn-chat-mic:disabled {
@@ -1308,23 +1342,20 @@ summary:focus-visible,
   50% { opacity: 0.55; }
 }
 
-/* Send-Button als Brand-CTA in Cyan; folgt der Designsystem-Referenz
- * docs/ui-design/doubleslash-chat-design-states-a11y.html (.ds-send) und
- * dem Cyan-Token-Kommentar in tokens.css ("Send-BG"). Hover wechselt auf
- * --ds-blue (Clickable-Blue), damit der Hover-Kontrast > 4,5:1 bleibt.
- * Kreis-Form (50% via gemeinsamer Mic/Send-Definition) — passt zum
- * Pill-Look der uebrigen Buttons (--btn-radius: 999px). */
+/* Send-Button wie Primary-Text-Button: dunkleres Blau bei Hover, Active
+ * leicht eingedrueckt (scale) mit Brand-Schatten. */
 #btn-chat-send {
-  background: var(--ds-cyan);
-  color: var(--ds-white);
+  background: var(--ds-btn-primary-bg);
+  color: var(--ds-btn-primary-fg);
 }
 
 #btn-chat-send:hover:not(:disabled) {
-  background: var(--ds-blue);
+  background: var(--ds-btn-primary-bg-hover);
 }
 
 #btn-chat-send:active:not(:disabled) {
-  transform: scale(0.94);
+  transform: scale(0.97);
+  box-shadow: var(--ds-btn-primary-active-shadow);
 }
 
 #btn-chat-send:disabled {
@@ -1342,7 +1373,7 @@ summary:focus-visible,
   margin: 2px 6px 0;
 }
 
-/* ── Settings modal ── */
+/* ── Settings modal (Mono-Blue: Header + Body + Footer, kein Schatten) ── */
 
 .modal {
   position: fixed;
@@ -1351,7 +1382,13 @@ summary:focus-visible,
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 56px 32px;
+}
+
+@media (max-width: 600px) {
+  .modal {
+    padding: 32px 16px;
+  }
 }
 
 .modal.hidden {
@@ -1361,50 +1398,95 @@ summary:focus-visible,
 .modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .modal-dialog {
   position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  max-width: 420px;
+  max-width: 480px;
   max-height: 90vh;
-  overflow-y: auto;
-  padding: 20px 22px;
+  overflow: hidden;
   background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--ds-grey-divider);
+  border-radius: 6px;
 }
 
-.modal-dialog.modal-dialog--llm {
-  max-width: 600px;
-  padding: 28px 32px;
+.modal-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--ds-grey-divider);
 }
 
-.modal-dialog.modal-dialog--llm h2 {
-  font-size: 19px;
-  margin-bottom: 12px;
+.modal-dialog__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-primary);
 }
 
-.modal-dialog.modal-dialog--llm .modal-note {
-  font-size: 13.5px;
-  margin-bottom: 18px;
+.modal-dialog__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ds-touch-min);
+  height: var(--ds-touch-min);
+  padding: 0;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    background var(--ds-motion-fast),
+    color var(--ds-motion-fast),
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
 }
 
-.modal-dialog.modal-dialog--llm .modal-label {
-  font-size: 12px;
-  margin-top: 14px;
+.modal-dialog__close:hover {
+  background: var(--ds-grey-bg);
+  color: var(--text-primary);
 }
 
-.modal-dialog.modal-dialog--llm .modal-input {
-  padding: 10px 12px;
-  font-size: 14px;
+.modal-dialog__close:active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  transform: scale(0.97);
+  box-shadow: var(--ds-icon-btn-active-shadow);
 }
 
-.modal-dialog.modal-dialog--llm .modal-actions {
-  margin-top: 26px;
-  gap: 10px;
+.modal-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 24px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modal-dialog__footer {
+  flex-shrink: 0;
+  padding: 14px 20px;
+  background: var(--ds-grey-bg);
+  border-top: 1px solid var(--ds-grey-divider);
+}
+
+.modal-dialog__footer .modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 0;
 }
 
 .modal-row {
@@ -1420,8 +1502,8 @@ summary:focus-visible,
 
 .modal-hint {
   margin-top: 4px;
-  font-size: var(--ds-font-size-md);            /* Phase 4 (a11y): 13px */
-  color: var(--text-muted-strong);              /* Phase 4 (a11y): 7.1:1 */
+  font-size: var(--ds-font-size-md);
+  color: var(--text-muted-strong);
   line-height: 1.4;
   min-height: 1em;
 }
@@ -1430,10 +1512,14 @@ summary:focus-visible,
   color: var(--ds-error);
 }
 
-/* Sekundaer-Button: Default-Border in --ds-grey-divider, Hover wechselt
- * auf Cyan-Border + leichten Cyan-Tint — gleiches Pattern wie die .chip-
- * Quick-Actions in der Designsystem-Referenz (Welcome-CTA / chat-states).
- * Fokus-Ring kommt aus dem globalen :focus-visible-Block. */
+/* Sekundaer-Button: Default-Border in --ds-grey-divider, Hover wechselt auf
+ * neutralen --ds-grey-muted-Border (kein einladender Blue-Wash, weil der
+ * Secondary-Button nicht mit der Primary-Aktion konkurrieren soll). Fokus-
+ * Ring kommt aus dem globalen :focus-visible-Block.
+ *
+ * Hinweis: Die einladende Blue-Hover-Variante (Border --ds-blue + BG
+ * --ds-blue-soft) ist den Card-artigen Items wie .chip / .welcome-cta /
+ * Radio-Rows vorbehalten. */
 .btn-secondary {
   padding: var(--btn-padding-y) var(--btn-padding-x);
   font-size: var(--btn-font-size);
@@ -1449,12 +1535,11 @@ summary:focus-visible,
 }
 
 .btn-secondary:hover:not(:disabled) {
-  border-color: var(--ds-cyan);
-  background: color-mix(in srgb, var(--ds-cyan) 4%, transparent);
+  border-color: var(--ds-grey-muted);
 }
 
 .btn-secondary:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 .btn-secondary:disabled {
@@ -1465,17 +1550,12 @@ summary:focus-visible,
 select.modal-input {
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23888' d='M0 0l5 6 5-6z'/></svg>");
+  /* Chevron in --ds-grey-muted (#6D6D6D), wie Mono-Blue-Mockup */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%236D6D6D' d='M0 0l5 6 5-6z'/></svg>");
   background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 28px;
-}
-
-.modal-dialog h2 {
-  font-size: 17px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  color: var(--text-primary);
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
 }
 
 .modal-note {
@@ -1512,20 +1592,25 @@ select.modal-input {
 
 .modal-input {
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 12px;
   font-size: 14px;
   font-family: var(--font-ui);
   color: var(--text-primary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  /* Wie Mockup: Fläche an Dialog-Karte angeglichen; Rand definiert das Feld */
+  background: var(--bg-primary);
+  border: 1px solid var(--ds-grey-divider);
   border-radius: 6px;
   user-select: text;
+  transition: border-color var(--ds-motion-fast);
 }
 
 .modal-input:focus {
-  border-color: var(--accent);          /* zusaetzliches visuelles Feedback;
-                                           Fokus-Ring kommt aus dem globalen
-                                           input:focus-visible (Phase 1). */
+  border-color: var(--ds-blue);
+}
+
+/* Mono-Blue-Form: Fokus nur über Border (Mockup), nicht zusätzlich Outline */
+.modal-input:focus-visible {
+  outline: none;
 }
 
 .modal-actions {
@@ -1545,6 +1630,7 @@ select.modal-input {
   border: 1px solid transparent;
   border-radius: var(--btn-radius);
   cursor: pointer;
+  box-shadow: none;
   transition: var(--btn-transition);
 }
 
@@ -1553,12 +1639,30 @@ select.modal-input {
 }
 
 .modal-actions .btn-primary:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.97);
+  box-shadow: var(--ds-btn-primary-active-shadow);
 }
 
 .modal-actions .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-actions .btn-primary:active:not(:disabled),
+  #theme-toggle:active,
+  #btn-toggle-content-pane:active,
+  #tree-header #btn-open-folder:active,
+  #tree-header #btn-folder-history:active,
+  #btn-chat-history:active,
+  #btn-chat-new:active,
+  #btn-chat-settings:active,
+  #btn-chat-mic:active:not(:disabled),
+  #btn-chat-send:active:not(:disabled),
+  .modal-dialog__close:active,
+  .chat-history-row-delete:active {
+    transform: none;
+  }
 }
 
 /* Phase 5 D: alle Modal-Buttons sind jetzt explizit .btn-primary oder
@@ -1576,10 +1680,7 @@ select.modal-input {
   background: var(--bg-primary);
 }
 
-/* ── Phase 3: Welcome / Empty-State im doubleSlash-Pattern ──────────────────
- * Eyebrow (mono) -> H1 -> Sub-Text -> CTA. Linksbuendig statt zentriert,
- * mit grosszuegigem Innenabstand wie in der Referenz-HTML.
- */
+/* ── Welcome / Empty-State (Mono-Blue Mockup: Eyebrow → H1 → Sub → CTA) ─── */
 #welcome {
   display: flex;
   flex-direction: column;
@@ -1593,16 +1694,19 @@ select.modal-input {
 }
 
 .welcome-eyebrow {
+  display: flex;
+  align-items: baseline;
+  column-gap: 0.2em;
   font-family: var(--ds-font-mono);
   font-size: var(--ds-font-size-sm);
-  color: var(--ds-blue);             /* a11y: nicht --ds-cyan auf Schrift */
-  letter-spacing: 1px;
+  color: var(--ds-blue);
+  letter-spacing: normal;
   margin-bottom: 14px;
 }
 
 .welcome-headline {
   font-size: var(--ds-font-size-h1);
-  font-weight: var(--ds-font-weight-heavy);   /* Phase 5 F: 700 fuer Hero */
+  font-weight: var(--ds-font-weight-bold);   /* Mockup: 600, kein 700 (Mono-Blue-Regel) */
   line-height: var(--ds-line-height-tight);
   letter-spacing: -0.5px;
   margin-bottom: 8px;
@@ -1619,20 +1723,21 @@ select.modal-input {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 10px 18px;                  /* Mono-Blue-Mockup: 12/18 fuer Chips,
+                                          leicht reduzierte y-Achse fuer Welcome-CTA mit Icon */
   font-size: var(--ds-font-size-base);
   color: var(--text-primary);
   background: transparent;
   border: 1px solid var(--ds-grey-divider);
-  border-radius: var(--ds-radius-md);
+  border-radius: var(--ds-radius-pill); /* Pill: klickbares Card-Item */
   cursor: pointer;
   transition: border-color var(--ds-motion-fast),
               background var(--ds-motion-fast);
 }
 
 .welcome-cta:hover {
-  border-color: var(--ds-cyan);
-  background: color-mix(in srgb, var(--ds-cyan) 4%, transparent);
+  border-color: var(--ds-blue);
+  background: var(--ds-blue-soft);
 }
 
 .welcome-cta svg {
@@ -1657,10 +1762,15 @@ select.modal-input {
 }
 
 .welcome-section-label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 0.2em;
+  row-gap: 0.15em;
   font-family: var(--ds-font-mono);
   font-size: 11px;
   font-weight: var(--ds-font-weight-bold);
-  letter-spacing: 1px;
+  letter-spacing: normal;
   color: var(--ds-blue);
   margin-bottom: 12px;
   text-transform: lowercase;
@@ -1669,16 +1779,19 @@ select.modal-input {
 .chip-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-/* Chip im Cursor-Style: Mono-Cmd + Beschreibung + Pfeil rechts. Hover hebt
- * den linken Border auf Cyan, damit der Klick-Hint deutlich wird. */
+/* Chip im Mono-Blue-Mockup-Style: Mono-Cmd + Beschreibung + Pfeil rechts.
+ * Pill-Form (klickbares Card-Item), Hover hebt den Border auf --ds-blue +
+ * sanften --ds-blue-soft-Wash (einladendes Card-Hover-Pattern, anders als
+ * der neutrale .btn-secondary-Hover). */
 .chip {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 9px 13px;
+  padding: 10px 18px;                  /* Mono-Blue-Mockup: 12/18; leicht
+                                          reduziert wegen kompakter Sidebar */
   width: 100%;
   text-align: left;
   font-family: var(--ds-font-ui);
@@ -1686,15 +1799,15 @@ select.modal-input {
   color: var(--text-primary);
   background: transparent;
   border: 1px solid var(--ds-grey-divider);
-  border-radius: var(--ds-radius-md);
+  border-radius: var(--ds-radius-pill); /* Pill: klickbares Card-Item */
   cursor: pointer;
   transition: border-color var(--ds-motion-fast),
               background var(--ds-motion-fast);
 }
 
 .chip:hover {
-  border-color: var(--ds-cyan);
-  background: color-mix(in srgb, var(--ds-cyan) 4%, transparent);
+  border-color: var(--ds-blue);
+  background: var(--ds-blue-soft);
 }
 
 .chip-cmd {
@@ -1785,8 +1898,8 @@ select.modal-input {
   align-items: center;
   gap: 12px;
   padding: 8px 16px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--ds-grey-bg);
+  border-bottom: 1px solid var(--ds-grey-divider);
 }
 
 #preview-filename {
@@ -1842,7 +1955,7 @@ select.modal-input {
 
 #file-info h2 {
   font-size: 17px;
-  font-weight: 500;
+  font-weight: var(--ds-font-weight-bold);
   color: var(--text-primary);
 }
 
@@ -1888,11 +2001,9 @@ select.modal-input {
 }
 
 /* ── Phase 1 (a11y): Reduced-Motion ─────────────────────────────────────────
- * Pflicht aus docs/ui-design/doubleslash-a11y-regeln.md: Endlos-Animationen
- * werden im Reduced-Motion-Modus deaktiviert. Token-basierte Transitions
- * (var(--ds-motion-fast)) sind bereits durch tokens.css auf ~0s reduziert.
- * Fuer benannte @keyframes-Animationen muessen wir hier explizit ausschalten.
- */
+ * Endlos-Animationen (Pulse, Tool-Fade, Mic-Aufnahme, Phase-Denken) aus.
+ * Wichtig: .chat-live-dot[data-state='streaming'] hat hoehere Spezifitaet —
+ * muss hier ebenfalls zurueckgenommen werden. */
 @media (prefers-reduced-motion: reduce) {
   .chat-phase {
     animation: none;
@@ -1901,7 +2012,12 @@ select.modal-input {
   #btn-chat-mic.recording {
     animation: none;
   }
-  .chat-tool-status-dot {
-    animation: none;          /* Live-Dot bleibt durchgehend sichtbar (Phase 2) */
+  .chat-tool-status-dot,
+  .chat-live-dot,
+  .chat-live-dot[data-state='streaming'] {
+    animation: none;
+  }
+  .chat-tool-log--running {
+    animation: none;
   }
 }

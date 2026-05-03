@@ -1673,10 +1673,14 @@ function openSettingsModal() {
   applyProviderToForm(settingsDraftProviderId);
 
   modalSettings.addEventListener('keydown', handleModalKeydown);
-  const focusable = getFocusableModalElements();
-  if (focusable.length > 0) {
-    queueMicrotask(() => focusable[0].focus());
-  }
+  queueMicrotask(() => {
+    try {
+      selectProvider.focus();
+    } catch {
+      const focusable = getFocusableModalElements();
+      if (focusable.length > 0) focusable[0].focus();
+    }
+  });
 }
 
 function closeSettingsModal() {
