@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, dialog, safeStorage, session } = require('electron');
+const { app, ipcMain, dialog, safeStorage, session } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 const providers = require('./providers');
+const { createWindow, getMainWindow } = require('./src/main/window');
 const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('./src/shared/ipc-channels');
 
 const LLM_CONFIG_FILENAME = 'llm-config.json';
@@ -59,8 +60,6 @@ const WORKSPACE_TOOLS = [
     },
   },
 ];
-
-let mainWindow;
 
 function resolveWorkspacePath(workspaceRoot, relativePath) {
   const root = path.resolve(workspaceRoot);
@@ -515,24 +514,6 @@ async function getValidatedFolderHistory() {
   return out;
 }
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 420,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-    titleBarStyle: 'hiddenInset',
-    backgroundColor: '#ffffff',
-  });
-
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-}
-
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     if (permission === 'media' || permission === 'audioCapture') {
@@ -545,7 +526,7 @@ app.whenReady().then(() => {
   createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!getMainWindow()) {
       createWindow();
     }
   });
@@ -560,7 +541,7 @@ app.on('window-all-closed', () => {
 // ── IPC Handlers ──
 
 ipcMain.handle(REQ.DIALOG_OPEN_FOLDER, async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const result = await dialog.showOpenDialog(getMainWindow(), {
     title: 'Ordner auswählen',
     buttonLabel: 'Ordner öffnen',
     message: 'Wähle einen Ordner aus, der angezeigt werden soll',
