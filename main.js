@@ -5,13 +5,10 @@ const providers = require('./providers');
 const { createWindow, getMainWindow } = require('./src/main/window');
 const { registerMediaCapturePermissions } = require('./src/main/permissions');
 const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('./src/shared/ipc-channels');
+const { createStorageService } = require('./src/main/services/storage-service');
+const { createFsService } = require('./src/main/services/fs-service');
+const { createWhisperService } = require('./src/main/services/whisper-service');
 
-const LLM_CONFIG_FILENAME = 'llm-config.json';
-const LEGACY_OPENAI_CONFIG_FILENAME = 'openai-config.json';
-const LAST_FOLDER_FILENAME = 'last-folder.json';
-const FOLDER_HISTORY_FILENAME = 'folder-history.json';
-const UI_PREFS_FILENAME = 'ui-preferences.json';
-const CHAT_HISTORY_FILENAME = 'chat-history.json';
 const MAX_CHAT_SESSIONS = 200;
 const MAX_FOLDER_HISTORY = 10;
 const DEFAULT_PROVIDER = 'openai';
@@ -62,16 +59,27 @@ const WORKSPACE_TOOLS = [
   },
 ];
 
-function resolveWorkspacePath(workspaceRoot, relativePath) {
-  const root = path.resolve(workspaceRoot);
-  const raw = typeof relativePath === 'string' ? relativePath.trim() : '';
-  const joined = path.resolve(root, raw.length ? raw : '.');
-  const rel = path.relative(root, joined);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) {
-    return { error: 'Pfad liegt außerhalb des Arbeitsordners.' };
-  }
-  return { absPath: joined };
-}
+const storage = createStorageService({
+  app,
+  safeStorage,
+  fs,
+  path,
+  providers,
+  maxChatSessions: MAX_CHAT_SESSIONS,
+  maxFolderHistory: MAX_FOLDER_HISTORY,
+  defaultProviderId: DEFAULT_PROVIDER,
+});
+
+const fsService = createFsService({
+  fs,
+  path,
+  maxReadFileBytes: MAX_READ_FILE_BYTES,
+});
+
+const whisperService = createWhisperService({
+  fetchImpl: fetch,
+  getOpenAIApiKey: () => storage.getOpenAIApiKey(),
+});
 
 function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirectory) {
   const name = path.basename(workspaceRoot);
@@ -87,73 +95,6 @@ function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirecto
       `Beziehe dich bei Fragen ohne expliziten Pfad auf diese Auswahl.`;
   }
   return prompt;
-}
-
-async function runWorkspaceTool(toolName, args, workspaceRoot) {
-  if (toolName === 'list_directory') {
-    const relArg = args.relative_path;
-    const rel = typeof relArg === 'string' ? relArg : '';
-    const { absPath, error } = resolveWorkspacePath(workspaceRoot, rel);
-    if (error) return JSON.stringify({ error });
-    try {
-      const st = await fs.stat(absPath);
-      if (!st.isDirectory()) {
-        return JSON.stringify({ error: 'Pfad ist kein Ordner.' });
-      }
-      const entries = await fs.readdir(absPath, { withFileTypes: true });
-      const items = entries
-        .filter((e) => !e.name.startsWith('.'))
-        .map((e) => ({
-          name: e.name,
-          kind: e.isDirectory() ? 'directory' : 'file',
-        }))
-        .sort((a, b) => {
-          if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
-          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-        });
-      return JSON.stringify({ relative_path: rel || '.', items });
-    } catch (e) {
-      return JSON.stringify({ error: e.message });
-    }
-  }
-
-  if (toolName === 'read_file_text') {
-    const rel = typeof args.relative_path === 'string' ? args.relative_path.trim() : '';
-    if (!rel) {
-      return JSON.stringify({ error: 'relative_path ist erforderlich.' });
-    }
-    let maxChars = Number.isFinite(args.max_characters) ? Math.floor(args.max_characters) : 32000;
-    maxChars = Math.min(Math.max(1000, maxChars), 200000);
-    const { absPath, error } = resolveWorkspacePath(workspaceRoot, rel);
-    if (error) return JSON.stringify({ error });
-    try {
-      const st = await fs.stat(absPath);
-      if (st.isDirectory()) {
-        return JSON.stringify({ error: 'Pfad ist ein Ordner, keine Datei.' });
-      }
-      if (st.size > MAX_READ_FILE_BYTES) {
-        return JSON.stringify({
-          error: `Datei zu groß (>${MAX_READ_FILE_BYTES} Bytes). Bitte andere Datei wählen.`,
-        });
-      }
-      const buf = await fs.readFile(absPath);
-      let text = buf.toString('utf8');
-      const truncated = text.length > maxChars;
-      if (truncated) {
-        text = `${text.slice(0, maxChars)}\n… [gekürzt auf ${maxChars} Zeichen]`;
-      }
-      return JSON.stringify({
-        relative_path: rel,
-        size_bytes: st.size,
-        truncated,
-        content: text,
-      });
-    } catch (e) {
-      return JSON.stringify({ error: e.message });
-    }
-  }
-
-  return JSON.stringify({ error: `Unbekanntes Tool: ${toolName}` });
 }
 
 function truncateToolLabel(s, max = 48) {
@@ -208,313 +149,6 @@ function makeStreamCallbacks(webContents) {
   };
 }
 
-// ── LLM config (multi-provider) ──
-
-function getLLMConfigPath() {
-  return path.join(app.getPath('userData'), LLM_CONFIG_FILENAME);
-}
-
-function getLegacyOpenAIConfigPath() {
-  return path.join(app.getPath('userData'), LEGACY_OPENAI_CONFIG_FILENAME);
-}
-
-function defaultLLMConfig() {
-  return { version: 2, activeProvider: DEFAULT_PROVIDER, providers: {} };
-}
-
-async function readLLMConfigRaw() {
-  try {
-    const raw = await fs.readFile(getLLMConfigPath(), 'utf8');
-    const data = JSON.parse(raw);
-    if (!data || typeof data !== 'object') return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-async function readLegacyOpenAIConfig() {
-  try {
-    const raw = await fs.readFile(getLegacyOpenAIConfigPath(), 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-async function readLLMConfig() {
-  const existing = await readLLMConfigRaw();
-  if (existing && existing.version === 2 && existing.providers) {
-    if (!existing.providers || typeof existing.providers !== 'object') {
-      existing.providers = {};
-    }
-    if (!existing.activeProvider) existing.activeProvider = DEFAULT_PROVIDER;
-    return existing;
-  }
-  // Migrate from legacy openai-config.json (if present)
-  const legacy = await readLegacyOpenAIConfig();
-  const migrated = defaultLLMConfig();
-  if (legacy && legacy.apiKeyEnc) {
-    migrated.providers.openai = {
-      apiKeyEnc: legacy.apiKeyEnc,
-      model: legacy.model || providers.getProvider('openai').defaultModel,
-    };
-    migrated.activeProvider = 'openai';
-  }
-  await writeLLMConfig(migrated);
-  return migrated;
-}
-
-async function writeLLMConfig(config) {
-  await fs.mkdir(path.dirname(getLLMConfigPath()), { recursive: true });
-  await fs.writeFile(getLLMConfigPath(), JSON.stringify(config), 'utf8');
-}
-
-function decryptIfPossible(b64) {
-  if (!b64) return null;
-  if (!safeStorage.isEncryptionAvailable()) return null;
-  try {
-    return safeStorage.decryptString(Buffer.from(b64, 'base64'));
-  } catch {
-    return null;
-  }
-}
-
-async function getEffectiveProviderConfig(providerId) {
-  const provider = providers.getProvider(providerId);
-  if (!provider) return null;
-  const config = await readLLMConfig();
-  const entry = (config.providers && config.providers[providerId]) || {};
-  const out = { model: entry.model || provider.defaultModel };
-  if (provider.fields?.apiKey && entry.apiKeyEnc) {
-    const k = decryptIfPossible(entry.apiKeyEnc);
-    if (k) out.apiKey = k;
-  }
-  if (provider.fields?.baseUrl) {
-    out.baseUrl = entry.baseUrl || provider.defaultBaseUrl || '';
-  }
-  return out;
-}
-
-async function getOpenAIApiKey() {
-  const cfg = await getEffectiveProviderConfig('openai');
-  return cfg?.apiKey || null;
-}
-
-// ── Last folder, folder history, UI prefs, chat history ──
-
-function getLastFolderConfigPath() {
-  return path.join(app.getPath('userData'), LAST_FOLDER_FILENAME);
-}
-
-async function readLastFolderRaw() {
-  try {
-    const raw = await fs.readFile(getLastFolderConfigPath(), 'utf8');
-    const data = JSON.parse(raw);
-    return typeof data.path === 'string' ? data.path : null;
-  } catch {
-    return null;
-  }
-}
-
-async function clearLastFolderFile() {
-  try {
-    await fs.unlink(getLastFolderConfigPath());
-  } catch {
-    /* ignore */
-  }
-}
-
-async function getValidatedLastFolder() {
-  const p = await readLastFolderRaw();
-  if (!p || !p.trim()) return null;
-  const resolved = path.resolve(p.trim());
-  try {
-    const st = await fs.stat(resolved);
-    if (!st.isDirectory()) {
-      await clearLastFolderFile();
-      return null;
-    }
-    return resolved;
-  } catch {
-    await clearLastFolderFile();
-    return null;
-  }
-}
-
-function getUIPrefsPath() {
-  return path.join(app.getPath('userData'), UI_PREFS_FILENAME);
-}
-
-async function readUIPrefs() {
-  try {
-    const raw = await fs.readFile(getUIPrefsPath(), 'utf8');
-    const data = JSON.parse(raw);
-    return {
-      contentPaneVisible: data.contentPaneVisible !== false,
-    };
-  } catch {
-    return { contentPaneVisible: true };
-  }
-}
-
-function getChatHistoryPath() {
-  return path.join(app.getPath('userData'), CHAT_HISTORY_FILENAME);
-}
-
-const NO_WORKSPACE_KEY = '__none__';
-
-function defaultChatHistoryStore() {
-  return { version: 2, activeByWorkspace: {}, sessions: [] };
-}
-
-function normalizeWorkspaceRoot(raw) {
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  return path.resolve(trimmed);
-}
-
-function workspaceBucketKey(workspaceRoot) {
-  return workspaceRoot ? workspaceRoot : NO_WORKSPACE_KEY;
-}
-
-function sanitizeChatMessagesForStore(raw) {
-  if (!Array.isArray(raw)) return [];
-  const out = [];
-  for (const m of raw) {
-    if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue;
-    const content = typeof m.content === 'string' ? m.content : '';
-    if (m.role === 'user') {
-      out.push({ role: 'user', content });
-      continue;
-    }
-    const row = { role: 'assistant', content };
-    if (m.isError === true) row.isError = true;
-    if (Array.isArray(m.toolTrace) && m.toolTrace.length) row.toolTrace = m.toolTrace;
-    if (typeof m.reasoningText === 'string' && m.reasoningText.trim()) {
-      row.reasoningText = m.reasoningText;
-    }
-    out.push(row);
-  }
-  return out;
-}
-
-function normalizeSessionForStore(s) {
-  if (!s || typeof s.id !== 'string' || !s.id.trim()) return null;
-  const messages = sanitizeChatMessagesForStore(s.messages);
-  const titleRaw = typeof s.title === 'string' ? s.title.trim() : '';
-  const workspaceRoot = normalizeWorkspaceRoot(s.workspaceRoot);
-  return {
-    id: s.id.trim(),
-    workspaceRoot,
-    title: titleRaw ? titleRaw.slice(0, 200) : 'Chat',
-    updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : Date.now(),
-    messages,
-  };
-}
-
-async function readChatHistoryStore() {
-  try {
-    const raw = await fs.readFile(getChatHistoryPath(), 'utf8');
-    const data = JSON.parse(raw);
-    if (!data || typeof data !== 'object') return defaultChatHistoryStore();
-    const sessionsIn = Array.isArray(data.sessions) ? data.sessions : [];
-    const sessions = sessionsIn
-      .map((x) => normalizeSessionForStore(x))
-      .filter(Boolean);
-
-    const activeByWorkspace = {};
-    if (data.activeByWorkspace && typeof data.activeByWorkspace === 'object') {
-      for (const [k, v] of Object.entries(data.activeByWorkspace)) {
-        if (typeof k === 'string' && k && typeof v === 'string' && v) {
-          activeByWorkspace[k] = v;
-        }
-      }
-    } else if (typeof data.activeChatId === 'string' && data.activeChatId) {
-      activeByWorkspace[NO_WORKSPACE_KEY] = data.activeChatId;
-    }
-
-    return {
-      version: 2,
-      activeByWorkspace,
-      sessions,
-    };
-  } catch {
-    return defaultChatHistoryStore();
-  }
-}
-
-async function writeChatHistoryStore(store) {
-  await fs.mkdir(path.dirname(getChatHistoryPath()), { recursive: true });
-  await fs.writeFile(getChatHistoryPath(), JSON.stringify(store), 'utf8');
-}
-
-async function persistLastFolder(folderPath) {
-  const raw = typeof folderPath === 'string' ? folderPath.trim() : '';
-  if (!raw) return;
-  const resolved = path.resolve(raw);
-  try {
-    const st = await fs.stat(resolved);
-    if (!st.isDirectory()) return;
-  } catch {
-    return;
-  }
-  await fs.mkdir(path.dirname(getLastFolderConfigPath()), { recursive: true });
-  await fs.writeFile(getLastFolderConfigPath(), JSON.stringify({ path: resolved }), 'utf8');
-  await addFolderToHistory(resolved);
-}
-
-function getFolderHistoryPath() {
-  return path.join(app.getPath('userData'), FOLDER_HISTORY_FILENAME);
-}
-
-async function readFolderHistoryRaw() {
-  try {
-    const raw = await fs.readFile(getFolderHistoryPath(), 'utf8');
-    const data = JSON.parse(raw);
-    if (Array.isArray(data?.paths)) {
-      return data.paths.filter((p) => typeof p === 'string' && p.trim());
-    }
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-async function writeFolderHistory(paths) {
-  await fs.mkdir(path.dirname(getFolderHistoryPath()), { recursive: true });
-  await fs.writeFile(getFolderHistoryPath(), JSON.stringify({ paths }), 'utf8');
-}
-
-async function addFolderToHistory(resolvedPath) {
-  const list = await readFolderHistoryRaw();
-  const filtered = list.filter((p) => p !== resolvedPath);
-  filtered.unshift(resolvedPath);
-  const trimmed = filtered.slice(0, MAX_FOLDER_HISTORY);
-  await writeFolderHistory(trimmed);
-}
-
-async function getValidatedFolderHistory() {
-  const list = await readFolderHistoryRaw();
-  const out = [];
-  let changed = false;
-  for (const p of list) {
-    try {
-      const st = await fs.stat(p);
-      if (st.isDirectory()) {
-        out.push(p);
-      } else {
-        changed = true;
-      }
-    } catch {
-      changed = true;
-    }
-  }
-  if (changed) await writeFolderHistory(out);
-  return out;
-}
-
 app.whenReady().then(() => {
   registerMediaCapturePermissions();
 
@@ -548,34 +182,7 @@ ipcMain.handle(REQ.DIALOG_OPEN_FOLDER, async () => {
 
 ipcMain.handle(REQ.FS_READ_DIRECTORY, async (_event, dirPath) => {
   try {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    const items = await Promise.all(
-      entries
-        .filter((entry) => !entry.name.startsWith('.'))
-        .map(async (entry) => {
-          const fullPath = path.join(dirPath, entry.name);
-          let stats = null;
-          try {
-            stats = await fs.stat(fullPath);
-          } catch {
-            // skip inaccessible files
-          }
-          return {
-            name: entry.name,
-            path: fullPath,
-            isDirectory: entry.isDirectory(),
-            size: stats ? stats.size : 0,
-            modified: stats ? stats.mtimeMs : 0,
-          };
-        })
-    );
-
-    items.sort((a, b) => {
-      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-    });
-
-    return items;
+    return await fsService.readDirectory(dirPath);
   } catch (err) {
     console.error('readDirectory error:', err.message);
     return [];
@@ -584,39 +191,7 @@ ipcMain.handle(REQ.FS_READ_DIRECTORY, async (_event, dirPath) => {
 
 ipcMain.handle(REQ.FS_MOVE_ITEM, async (_event, sourcePath, destDir) => {
   try {
-    const srcStat = await fs.stat(sourcePath);
-    const dstStat = await fs.stat(destDir);
-    if (!dstStat.isDirectory()) {
-      return { error: 'Ziel ist kein Ordner.' };
-    }
-    const baseName = path.basename(sourcePath);
-    let targetPath = path.join(destDir, baseName);
-
-    const srcParent = path.dirname(sourcePath);
-    if (path.resolve(srcParent) === path.resolve(destDir)) {
-      return { error: 'Quelle liegt bereits in diesem Ordner.' };
-    }
-
-    if (srcStat.isDirectory() && path.resolve(destDir).startsWith(path.resolve(sourcePath) + path.sep)) {
-      return { error: 'Ordner kann nicht in sich selbst verschoben werden.' };
-    }
-
-    try {
-      await fs.access(targetPath);
-      const ext = path.extname(baseName);
-      const nameNoExt = ext ? baseName.slice(0, -ext.length) : baseName;
-      let i = 2;
-      do {
-        targetPath = path.join(destDir, `${nameNoExt} (${i})${ext}`);
-        i++;
-        try { await fs.access(targetPath); } catch { break; }
-      } while (true);
-    } catch {
-      // target does not exist – good
-    }
-
-    await fs.rename(sourcePath, targetPath);
-    return { ok: true, newPath: targetPath };
+    return await fsService.moveItem(sourcePath, destDir);
   } catch (err) {
     return { error: err.message };
   }
@@ -624,13 +199,7 @@ ipcMain.handle(REQ.FS_MOVE_ITEM, async (_event, sourcePath, destDir) => {
 
 ipcMain.handle(REQ.FS_READ_FILE, async (_event, filePath) => {
   try {
-    const stats = await fs.stat(filePath);
-    const MAX_SIZE = 1024 * 1024; // 1 MB limit for preview
-    if (stats.size > MAX_SIZE) {
-      return { error: 'File too large for preview', size: stats.size };
-    }
-    const content = await fs.readFile(filePath, 'utf-8');
-    return { content, size: stats.size, modified: stats.mtimeMs };
+    return await fsService.readFilePreview(filePath);
   } catch (err) {
     return { error: err.message };
   }
@@ -639,60 +208,14 @@ ipcMain.handle(REQ.FS_READ_FILE, async (_event, filePath) => {
 // ── Whisper speech-to-text (uses OpenAI provider key) ──
 
 ipcMain.handle(REQ.WHISPER_TRANSCRIBE, async (_event, audioBuffer) => {
-  const apiKey = await getOpenAIApiKey();
-  if (!apiKey) return { error: 'Kein OpenAI-Key hinterlegt (Whisper benötigt einen).' };
-
-  const boundary = `----ElectronWhisper${Date.now()}`;
-  const fileName = 'voice.webm';
-
-  const fieldParts = [];
-  fieldParts.push(
-    `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n`
-  );
-  fieldParts.push(
-    `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nde\r\n`
-  );
-  fieldParts.push(
-    `--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\njson\r\n`
-  );
-  const fileHeader = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: audio/webm\r\n\r\n`
-  );
-  const fileFooter = Buffer.from(`\r\n--${boundary}--\r\n`);
-  const textParts = Buffer.from(fieldParts.join(''));
-  const fileBuf = Buffer.from(audioBuffer);
-  const body = Buffer.concat([textParts, fileHeader, fileBuf, fileFooter]);
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body,
-    });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      let msg = res.statusText;
-      try {
-        const j = JSON.parse(errText);
-        msg = j.error?.message || msg;
-      } catch { /* ignore */ }
-      return { error: msg };
-    }
-    const json = await res.json();
-    return { text: json.text || '' };
-  } catch (err) {
-    return { error: err.message || 'Transkription fehlgeschlagen.' };
-  }
+  return whisperService.transcribeAudio(audioBuffer);
 });
 
 // ── LLM provider settings ──
 
 ipcMain.handle(REQ.SETTINGS_GET_LLM_STATE, async () => {
   const encryptionAvailable = safeStorage.isEncryptionAvailable();
-  const config = await readLLMConfig();
+  const config = await storage.readLLMConfig();
   const meta = providers.listProviderMeta();
   const list = meta.map((m) => {
     const entry = (config.providers && config.providers[m.id]) || {};
@@ -720,7 +243,7 @@ ipcMain.handle(REQ.SETTINGS_SET_PROVIDER, async (_event, payload) => {
   const provider = providers.getProvider(providerId);
   if (!provider) return { ok: false, error: 'Unbekannter Provider.' };
 
-  const config = await readLLMConfig();
+  const config = await storage.readLLMConfig();
   const prevEntry = (config.providers && config.providers[providerId]) || {};
   const next = { ...prevEntry };
 
@@ -758,13 +281,13 @@ ipcMain.handle(REQ.SETTINGS_SET_PROVIDER, async (_event, payload) => {
   } else if (!config.activeProvider) {
     config.activeProvider = providerId;
   }
-  await writeLLMConfig(config);
+  await storage.writeLLMConfig(config);
   return { ok: true };
 });
 
 ipcMain.handle(REQ.SETTINGS_CLEAR_PROVIDER, async (_event, providerId) => {
   if (!providers.getProvider(providerId)) return { ok: false, error: 'Unbekannter Provider.' };
-  const config = await readLLMConfig();
+  const config = await storage.readLLMConfig();
   if (config.providers) delete config.providers[providerId];
   if (config.activeProvider === providerId) {
     const fallback = providers.PROVIDER_ORDER.find(
@@ -772,7 +295,7 @@ ipcMain.handle(REQ.SETTINGS_CLEAR_PROVIDER, async (_event, providerId) => {
     );
     config.activeProvider = fallback || DEFAULT_PROVIDER;
   }
-  await writeLLMConfig(config);
+  await storage.writeLLMConfig(config);
   return { ok: true };
 });
 
@@ -780,9 +303,9 @@ ipcMain.handle(REQ.SETTINGS_SET_ACTIVE_PROVIDER, async (_event, providerId) => {
   if (!providers.getProvider(providerId)) {
     return { ok: false, error: 'Unbekannter Provider.' };
   }
-  const config = await readLLMConfig();
+  const config = await storage.readLLMConfig();
   config.activeProvider = providerId;
-  await writeLLMConfig(config);
+  await storage.writeLLMConfig(config);
   return { ok: true };
 });
 
@@ -791,7 +314,7 @@ ipcMain.handle(REQ.SETTINGS_LIST_MODELS, async (_event, payload) => {
   const provider = providers.getProvider(providerId);
   if (!provider) return { error: 'Unbekannter Provider.' };
 
-  const stored = (await getEffectiveProviderConfig(providerId)) || {};
+  const stored = (await storage.getEffectiveProviderConfig(providerId)) || {};
   const incomingKey = typeof payload?.apiKey === 'string' && payload.apiKey.trim()
     ? payload.apiKey.trim()
     : null;
@@ -813,88 +336,83 @@ ipcMain.handle(REQ.SETTINGS_LIST_MODELS, async (_event, payload) => {
 // ── Last folder, UI prefs, chat history ──
 
 ipcMain.handle(REQ.SETTINGS_GET_LAST_FOLDER, async () => {
-  const folderPath = await getValidatedLastFolder();
+  const folderPath = await storage.getValidatedLastFolder();
   return { folderPath };
 });
 
 ipcMain.handle(REQ.SETTINGS_SET_LAST_FOLDER, async (_event, folderPath) => {
-  await persistLastFolder(folderPath);
+  await storage.persistLastFolder(folderPath);
   return { ok: true };
 });
 
 ipcMain.handle(REQ.SETTINGS_GET_FOLDER_HISTORY, async () => {
-  const paths = await getValidatedFolderHistory();
+  const paths = await storage.getValidatedFolderHistory();
   return { paths };
 });
 
-ipcMain.handle(REQ.SETTINGS_GET_UI_PREFS, async () => readUIPrefs());
+ipcMain.handle(REQ.SETTINGS_GET_UI_PREFS, async () => storage.readUIPrefs());
 
 ipcMain.handle(REQ.SETTINGS_SET_UI_PREFS, async (_event, partial) => {
   const patch = partial && typeof partial === 'object' ? partial : {};
-  const out = { ...await readUIPrefs() };
+  const out = { ...await storage.readUIPrefs() };
   if (typeof patch.contentPaneVisible === 'boolean') {
     out.contentPaneVisible = patch.contentPaneVisible;
   }
-  await fs.mkdir(path.dirname(getUIPrefsPath()), { recursive: true });
-  await fs.writeFile(getUIPrefsPath(), JSON.stringify(out), 'utf8');
+  await fs.mkdir(path.dirname(storage.getUIPrefsPath()), { recursive: true });
+  await fs.writeFile(storage.getUIPrefsPath(), JSON.stringify(out), 'utf8');
   return out;
 });
 
 // ── Chat history (local JSON) ──
 
-function sessionMatchesWorkspace(session, workspaceRoot) {
-  const sessionWs = session.workspaceRoot || null;
-  return sessionWs === (workspaceRoot || null);
-}
-
 ipcMain.handle(REQ.CHAT_HISTORY_GET, async (_event, workspaceRoot) => {
-  const store = await readChatHistoryStore();
-  const wsRoot = normalizeWorkspaceRoot(workspaceRoot);
-  const sessions = store.sessions.filter((s) => sessionMatchesWorkspace(s, wsRoot));
-  const activeChatId = store.activeByWorkspace[workspaceBucketKey(wsRoot)] || null;
+  const store = await storage.readChatHistoryStore();
+  const wsRoot = storage.normalizeWorkspaceRoot(workspaceRoot);
+  const sessions = store.sessions.filter((s) => storage.sessionMatchesWorkspace(s, wsRoot));
+  const activeChatId = store.activeByWorkspace[storage.workspaceBucketKey(wsRoot)] || null;
   return { sessions, activeChatId, workspaceRoot: wsRoot };
 });
 
-ipcMain.handle(REQ.CHAT_HISTORY_UPSERT, async (_event, session) => {
-  const normalized = normalizeSessionForStore(session);
+ipcMain.handle(REQ.CHAT_HISTORY_UPSERT, async (_event, sessionRow) => {
+  const normalized = storage.normalizeSessionForStore(sessionRow);
   if (!normalized) return { ok: false };
-  const store = await readChatHistoryStore();
+  const store = await storage.readChatHistoryStore();
   const idx = store.sessions.findIndex((x) => x.id === normalized.id);
   if (idx >= 0) store.sessions[idx] = normalized;
   else store.sessions.push(normalized);
   store.sessions.sort((a, b) => b.updatedAt - a.updatedAt);
-  if (store.sessions.length > MAX_CHAT_SESSIONS) {
-    const dropped = store.sessions.slice(MAX_CHAT_SESSIONS);
-    store.sessions = store.sessions.slice(0, MAX_CHAT_SESSIONS);
+  if (store.sessions.length > storage.MAX_CHAT_SESSIONS) {
+    const dropped = store.sessions.slice(storage.MAX_CHAT_SESSIONS);
+    store.sessions = store.sessions.slice(0, storage.MAX_CHAT_SESSIONS);
     const droppedIds = new Set(dropped.map((s) => s.id));
     for (const [k, v] of Object.entries(store.activeByWorkspace)) {
       if (droppedIds.has(v)) delete store.activeByWorkspace[k];
     }
   }
-  await writeChatHistoryStore(store);
+  await storage.writeChatHistoryStore(store);
   return { ok: true };
 });
 
 ipcMain.handle(REQ.CHAT_HISTORY_DELETE, async (_event, id) => {
   if (typeof id !== 'string' || !id.trim()) return { ok: false };
-  const store = await readChatHistoryStore();
+  const store = await storage.readChatHistoryStore();
   store.sessions = store.sessions.filter((s) => s.id !== id);
   for (const [k, v] of Object.entries(store.activeByWorkspace)) {
     if (v === id) delete store.activeByWorkspace[k];
   }
-  await writeChatHistoryStore(store);
+  await storage.writeChatHistoryStore(store);
   return { ok: true };
 });
 
 ipcMain.handle(REQ.CHAT_HISTORY_SET_ACTIVE, async (_event, workspaceRoot, id) => {
-  const store = await readChatHistoryStore();
-  const wsKey = workspaceBucketKey(normalizeWorkspaceRoot(workspaceRoot));
+  const store = await storage.readChatHistoryStore();
+  const wsKey = storage.workspaceBucketKey(storage.normalizeWorkspaceRoot(workspaceRoot));
   if (id === null || id === undefined || id === '') {
     delete store.activeByWorkspace[wsKey];
   } else if (typeof id === 'string') {
     store.activeByWorkspace[wsKey] = id;
   }
-  await writeChatHistoryStore(store);
+  await storage.writeChatHistoryStore(store);
   return { ok: true };
 });
 
@@ -906,13 +424,13 @@ ipcMain.handle(REQ.CHAT_SEND, async (event, payload) => {
     return { error: 'Keine Nachrichten übergeben.', code: 'INVALID' };
   }
 
-  const config = await readLLMConfig();
+  const config = await storage.readLLMConfig();
   const activeId = config.activeProvider || DEFAULT_PROVIDER;
   const provider = providers.getProvider(activeId);
   if (!provider) {
     return { error: `Unbekannter Provider: ${activeId}.`, code: 'INVALID' };
   }
-  const providerConfig = await getEffectiveProviderConfig(activeId);
+  const providerConfig = await storage.getEffectiveProviderConfig(activeId);
   const model = providerConfig?.model || provider.defaultModel;
 
   if (provider.fields?.apiKey && !providerConfig?.apiKey) {
@@ -1027,7 +545,7 @@ ipcMain.handle(REQ.CHAT_SEND, async (event, payload) => {
           const line = summarizeToolCall(toolName, args);
           toolTrace.push(line);
           emitToolLine(line);
-          const out = await runWorkspaceTool(toolName, args, workspaceRoot);
+          const out = await fsService.runWorkspaceTool(toolName, args, workspaceRoot);
           apiMessages.push({
             role: 'tool',
             tool_call_id: tc.id,
