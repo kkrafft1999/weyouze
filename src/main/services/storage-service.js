@@ -1,3 +1,5 @@
+const { randomUUID } = require('crypto');
+
 function createStorageService({
   app,
   safeStorage,
@@ -30,7 +32,102 @@ function createStorageService({
   }
 
   function defaultLLMConfig() {
-    return { version: 2, activeProvider: DEFAULT_PROVIDER, providers: {} };
+    return {
+      version: 3,
+      activeProvider: DEFAULT_PROVIDER,
+      activePresetId: null,
+      presets: [],
+      providers: {},
+    };
+  }
+
+  function normalizePresetEntry(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : null;
+    const providerId = typeof raw.providerId === 'string' && raw.providerId.trim()
+      ? raw.providerId.trim()
+      : null;
+    if (!id || !providerId || !providers.getProvider(providerId)) return null;
+    let model =
+      typeof raw.model === 'string' && raw.model.trim()
+        ? raw.model.trim()
+        : providers.getProvider(providerId).defaultModel;
+    const menuVisible = raw.menuVisible !== false;
+    let reasoningEffort = null;
+    if (
+      providerId === 'openai'
+      && typeof raw.reasoningEffort === 'string'
+      && raw.reasoningEffort.trim()
+    ) {
+      reasoningEffort = raw.reasoningEffort.trim();
+    }
+    return { id, providerId, model, reasoningEffort, menuVisible };
+  }
+
+  /** Chat-Ziel aus LLM-Konfiguration (Preset-first, Fallback aktiv/Provider-Modell). */
+  function resolveChatModelTarget(llmConfig) {
+    const list = Array.isArray(llmConfig.presets) ? llmConfig.presets : [];
+    const preset = list.find((p) => p && p.id === llmConfig.activePresetId);
+    if (preset && providers.getProvider(preset.providerId)) {
+      const pMeta = providers.getProvider(preset.providerId);
+      return {
+        providerId: preset.providerId,
+        model: typeof preset.model === 'string' && preset.model.trim()
+          ? preset.model.trim()
+          : pMeta.defaultModel,
+        reasoningEffort: preset.reasoningEffort || null,
+      };
+    }
+    const ap = llmConfig.activeProvider || DEFAULT_PROVIDER;
+    const pMeta = providers.getProvider(ap);
+    const entry = (llmConfig.providers && llmConfig.providers[ap]) || {};
+    return {
+      providerId: ap,
+      model:
+        typeof entry.model === 'string' && entry.model.trim()
+          ? entry.model.trim()
+          : (pMeta && pMeta.defaultModel) || '',
+      reasoningEffort: null,
+    };
+  }
+
+  async function migrateLLMConfigToV3(existing) {
+    const out = { ...existing };
+    out.version = 3;
+    if (!Array.isArray(out.presets)) out.presets = [];
+    if (
+      (!out.presets || out.presets.length === 0)
+      && typeof out.activeProvider === 'string'
+      && providers.getProvider(out.activeProvider)
+    ) {
+      const ap = out.activeProvider;
+      const pMeta = providers.getProvider(ap);
+      const entry = (out.providers && out.providers[ap]) || {};
+      const model =
+        typeof entry.model === 'string' && entry.model.trim()
+          ? entry.model.trim()
+          : pMeta.defaultModel;
+      const id = randomUUID();
+      out.presets = [
+        {
+          id,
+          providerId: ap,
+          model,
+          reasoningEffort: null,
+          menuVisible: true,
+        },
+      ];
+      out.activePresetId = id;
+    }
+    if (out.presets.length > 0) {
+      if (!out.activePresetId || !out.presets.some((p) => p && p.id === out.activePresetId)) {
+        out.activePresetId = out.presets[0].id;
+      }
+      const cur = resolveChatModelTarget(out);
+      out.activeProvider = cur.providerId;
+    }
+    await writeLLMConfig(out);
+    return out;
   }
 
   async function readLLMConfigRaw() {
@@ -55,12 +152,20 @@ function createStorageService({
 
   async function readLLMConfig() {
     const existing = await readLLMConfigRaw();
+    if (existing && existing.version === 3 && existing.providers) {
+      if (!existing.providers || typeof existing.providers !== 'object') {
+        existing.providers = {};
+      }
+      if (!existing.activeProvider) existing.activeProvider = DEFAULT_PROVIDER;
+      if (!Array.isArray(existing.presets)) existing.presets = [];
+      return existing;
+    }
     if (existing && existing.version === 2 && existing.providers) {
       if (!existing.providers || typeof existing.providers !== 'object') {
         existing.providers = {};
       }
       if (!existing.activeProvider) existing.activeProvider = DEFAULT_PROVIDER;
-      return existing;
+      return migrateLLMConfigToV3(existing);
     }
     // Migrate from legacy openai-config.json (if present)
     const legacy = await readLegacyOpenAIConfig();
@@ -72,8 +177,8 @@ function createStorageService({
       };
       migrated.activeProvider = 'openai';
     }
-    await writeLLMConfig(migrated);
-    return migrated;
+    const withV3 = await migrateLLMConfigToV3(migrated);
+    return withV3;
   }
 
   async function writeLLMConfig(config) {
@@ -166,11 +271,18 @@ function createStorageService({
     try {
       const raw = await fs.readFile(getUIPrefsPath(), 'utf8');
       const data = JSON.parse(raw);
+      let baseSystemPrompt = '';
+      if (typeof data.baseSystemPrompt === 'string') {
+        baseSystemPrompt = data.baseSystemPrompt;
+      }
+      const appLocale = data.appLocale === 'en' ? 'en' : 'de';
       return {
         contentPaneVisible: data.contentPaneVisible !== false,
+        baseSystemPrompt,
+        appLocale,
       };
     } catch {
-      return { contentPaneVisible: true };
+      return { contentPaneVisible: true, baseSystemPrompt: '', appLocale: 'de' };
     }
   }
 
@@ -344,6 +456,9 @@ function createStorageService({
     getUIPrefsPath,
     readLLMConfig,
     writeLLMConfig,
+    resolveChatModelTarget,
+    normalizePresetEntry,
+    migrateLLMConfigToV3,
     getEffectiveProviderConfig,
     getOpenAIApiKey,
     getValidatedLastFolder,

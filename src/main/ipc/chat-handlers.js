@@ -87,13 +87,17 @@ function registerChatHandlers({
     }
 
     const config = await storage.readLLMConfig();
-    const activeId = config.activeProvider || defaultProviderId;
+    const chatTarget = storage.resolveChatModelTarget(config);
+    const activeId = chatTarget.providerId;
     const provider = providers.getProvider(activeId);
     if (!provider) {
       return { error: `Unbekannter Provider: ${activeId}.`, code: 'INVALID' };
     }
     const providerConfig = await storage.getEffectiveProviderConfig(activeId);
-    const model = providerConfig?.model || provider.defaultModel;
+    const model = chatTarget.model || providerConfig?.model || provider.defaultModel;
+    if (chatTarget.reasoningEffort && activeId === 'openai') {
+      providerConfig.reasoningEffort = chatTarget.reasoningEffort;
+    }
 
     if (provider.fields?.apiKey && !providerConfig?.apiKey) {
       return {
@@ -123,16 +127,25 @@ function registerChatHandlers({
       }
     }
 
+    const uiPrefsAll = await storage.readUIPrefs();
+    const extraSystem =
+      typeof uiPrefsAll.baseSystemPrompt === 'string' ? uiPrefsAll.baseSystemPrompt.trim() : '';
+
     const apiMessages = [];
-    if (workspaceRoot) {
+    const workspaceSystem = workspaceRoot
+      ? workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirectory, pathMod)
+      : '';
+    let combinedSystem = workspaceSystem;
+    if (extraSystem && combinedSystem) {
+      combinedSystem = `${extraSystem}\n\n${combinedSystem}`;
+    } else if (extraSystem) {
+      combinedSystem = extraSystem;
+    }
+
+    if (combinedSystem) {
       apiMessages.push({
         role: 'system',
-        content: workspaceSystemPrompt(
-          workspaceRoot,
-          selectedRelPath,
-          selectedIsDirectory,
-          pathMod
-        ),
+        content: combinedSystem,
       });
     }
     for (const m of messages) {

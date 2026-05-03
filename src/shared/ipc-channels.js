@@ -19,8 +19,9 @@ const REQUEST_CHANNELS = Object.freeze({
 
   SETTINGS_GET_LLM_STATE: 'settings:getLLMState',
   SETTINGS_SET_PROVIDER: 'settings:setProvider',
-  SETTINGS_CLEAR_PROVIDER: 'settings:clearProvider',
   SETTINGS_SET_ACTIVE_PROVIDER: 'settings:setActiveProvider',
+  SETTINGS_SET_ACTIVE_PRESET: 'settings:setActivePreset',
+  SETTINGS_COMMIT_SETTINGS: 'settings:commitSettings',
   SETTINGS_LIST_MODELS: 'settings:listModels',
 
   SETTINGS_GET_LAST_FOLDER: 'settings:getLastFolder',

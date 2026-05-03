@@ -53,10 +53,19 @@ const chatHistoryDrawer = document.getElementById('chat-history-drawer');
 const chatHistoryList = document.getElementById('chat-history-list');
 const chatHistoryEmpty = document.getElementById('chat-history-empty');
 const chatTitleEl = document.getElementById('chat-title');
-const chatModelPill = document.getElementById('chat-model-pill');
+const chatModelPickerWrap = document.getElementById('chat-model-picker-wrap');
+const btnChatModelPicker = document.getElementById('btn-chat-model-picker');
+const chatModelPillLabel = document.getElementById('chat-model-pill-label');
+const chatModelMenu = document.getElementById('chat-model-menu');
 const chatLiveDot = document.getElementById('chat-live-dot');
 const modalSettings = document.getElementById('modal-settings');
 const modalSettingsBackdrop = document.getElementById('modal-settings-backdrop');
+const settingsPanelHeadingEl = document.getElementById('settings-panel-heading');
+const settingsNavTabs = [...document.querySelectorAll('.settings-nav-item[role=\"tab\"]')];
+const prefModelList = document.getElementById('pref-model-list');
+const prefListEmpty = document.getElementById('pref-list-empty');
+const btnOpenAddModel = document.getElementById('btn-open-add-model');
+const addModelOverlay = document.getElementById('add-model-overlay');
 const selectProvider = document.getElementById('select-provider');
 const providerStatus = document.getElementById('provider-status');
 const providerKeyRow = document.getElementById('provider-key-row');
@@ -65,14 +74,27 @@ const inputApiKey = document.getElementById('input-api-key');
 const inputBaseUrl = document.getElementById('input-base-url');
 const providerInsecureRow = document.getElementById('provider-insecure-row');
 const inputInsecureTls = document.getElementById('input-insecure-tls');
+const openaiReasoningSection = document.getElementById('openai-reasoning-section');
+const selectPopupReasoning = document.getElementById('select-popup-reasoning');
 const selectModel = document.getElementById('select-model');
 const btnLoadModels = document.getElementById('btn-load-models');
+const modelLoadProviderLabel = document.getElementById('model-load-provider-label');
 const modelStatus = document.getElementById('model-status');
+const btnAddPresetRow = document.getElementById('btn-add-preset-row');
+const btnAddModelCloseX = document.getElementById('btn-add-model-close-x');
+const btnAddModelClose = document.getElementById('btn-add-model-close');
 const btnSettingsSave = document.getElementById('btn-settings-save');
-const btnSettingsClear = document.getElementById('btn-settings-clear');
 const btnSettingsClose = document.getElementById('btn-settings-close');
+const btnSettingsFooterClose = document.getElementById('btn-settings-footer-close');
+const inputGlobalSystemPrompt = document.getElementById('input-global-system-prompt');
+const selectAppLocale = document.getElementById('select-app-locale');
 const modalEncryptionWarning = document.getElementById('modal-encryption-warning');
 const modalSaveError = document.getElementById('modal-save-error');
+
+let settingsDraftPresets = [];
+let settingsDraftActivePresetId = null;
+let settingsCredentialDraft = {};
+let chatModelMenuOpen = false;
 
 initTheme({ themeToggle, iconSun, iconMoon });
 initSidebarResizer({ divider, sidebar, workspace, chatDivider, chatPanel });
@@ -1005,21 +1027,125 @@ function findProviderMeta(providerId) {
   return (appStore.llmState.providers || []).find((p) => p.id === providerId) || null;
 }
 
+function presetSummaryForMenu(pr) {
+  const meta = findProviderMeta(pr.providerId);
+  if (!meta) return '';
+  const parts = [];
+  if (pr.providerId === 'openai' && pr.reasoningEffort) {
+    parts.push(`reasoning_effort: ${pr.reasoningEffort}`);
+  }
+  if (meta.fields?.baseUrl) {
+    const url = (meta.baseUrl || meta.defaultBaseUrl || '').trim();
+    const host = url ? url.replace(/^https?:\/\//, '') : 'Server';
+    const tls = !!meta.insecureTls;
+    parts.push(`Server ${host} · TLS ${tls ? 'insecure' : 'geprüft'}`);
+  }
+  return parts.join(' · ');
+}
+
 function activeProviderConfigured() {
-  const p = findProviderMeta(appStore.llmState.activeProvider);
+  const pid = appStore.llmState.chatTarget?.providerId;
+  const p = pid ? findProviderMeta(pid) : null;
   return !!(p && p.configured);
+}
+
+function presetDetailRowForDraft(pr) {
+  const meta = findProviderMeta(pr.providerId);
+  if (!meta) return '';
+  const d = settingsCredentialDraft[pr.providerId] || {};
+  if (pr.providerId === 'openai' && pr.reasoningEffort) {
+    return `reasoning_effort: ${pr.reasoningEffort}`;
+  }
+  if (meta.fields?.baseUrl) {
+    const url = (d.baseUrl || meta.baseUrl || meta.defaultBaseUrl || '').trim();
+    const host = url ? url.replace(/^https?:\/\//, '') : 'Server';
+    const tls = typeof d.insecureTls === 'boolean' ? d.insecureTls : !!meta.insecureTls;
+    return `Server: ${host} · TLS ${tls ? 'insecure' : 'geprüft'}`;
+  }
+  return meta.apiBase || '';
+}
+
+function closeChatModelMenu(/* restoreFocus */) {
+  chatModelMenuOpen = false;
+  if (chatModelMenu) chatModelMenu.classList.add('hidden');
+  if (btnChatModelPicker) {
+    btnChatModelPicker.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function rebuildChatModelMenu() {
+  if (!chatModelMenu) return 0;
+  chatModelMenu.innerHTML = '';
+  const presets = Array.isArray(appStore.llmState.presets) ? appStore.llmState.presets : [];
+  const activeId = appStore.llmState.activePresetId;
+  let count = 0;
+  for (const pr of presets) {
+    if (pr.menuVisible === false) continue;
+    const meta = findProviderMeta(pr.providerId);
+    if (!meta || !meta.configured) continue;
+    count += 1;
+    const li = document.createElement('li');
+    li.setAttribute('role', 'none');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chat-model-menu-option';
+    btn.setAttribute('role', 'option');
+    btn.setAttribute('aria-selected', pr.id === activeId ? 'true' : 'false');
+    btn.dataset.presetId = pr.id;
+
+    const main = document.createElement('span');
+    main.className = 'chat-model-menu-opt-main';
+
+    const t = document.createElement('span');
+    t.className = 'chat-model-menu-opt-title';
+    t.lang = 'en';
+    t.textContent = `${meta.name} · ${pr.model || meta.defaultModel}`;
+    main.appendChild(t);
+
+    const sub = document.createElement('span');
+    sub.className = 'chat-model-menu-opt-meta';
+    sub.textContent = presetSummaryForMenu(pr);
+    main.appendChild(sub);
+
+    btn.appendChild(main);
+    li.appendChild(btn);
+    chatModelMenu.appendChild(li);
+  }
+  return count;
+}
+
+async function persistActivePreset(presetId) {
+  try {
+    const res = await api.setActivePreset(presetId);
+    if (!res?.ok) return false;
+    await refreshLLMState();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function refreshLLMState() {
   appStore.llmState = await api.getLLMState();
+  if (!appStore.llmState.presets) appStore.llmState.presets = [];
+  const ct = appStore.llmState.chatTarget;
+  if (!ct || !ct.providerId) {
+    const ap = appStore.llmState.activeProvider;
+    const m = findProviderMeta(ap);
+    appStore.llmState.chatTarget = {
+      providerId: ap,
+      model: m?.model || '',
+      reasoningEffort: null,
+    };
+  }
   updateChatChrome();
 }
 
 function updateChatChrome() {
-  const active = findProviderMeta(appStore.llmState.activeProvider);
+  const target = appStore.llmState.chatTarget;
+  const active = target?.providerId ? findProviderMeta(target.providerId) : null;
   const isConfigured = activeProviderConfigured();
 
-  // Phase 3: Chat-Header-Meta dynamisch (Mono-Projektname + Modell-Pille).
   if (chatTitleEl) {
     if (appStore.rootPath) {
       const projectName = appStore.rootPath.split('/').pop() || appStore.rootPath;
@@ -1030,14 +1156,28 @@ function updateChatChrome() {
       chatTitleEl.removeAttribute('lang');
     }
   }
-  if (chatModelPill) {
-    if (active && active.model) {
-      chatModelPill.textContent = active.model;
-      chatModelPill.classList.remove('hidden');
+
+  if (chatModelPickerWrap && btnChatModelPicker && chatModelPillLabel) {
+    if (active && target?.model && isConfigured) {
+      chatModelPickerWrap.classList.remove('hidden');
+      btnChatModelPicker.classList.remove('hidden');
+      chatModelPillLabel.textContent = `${active.name} · ${target.model}`;
     } else {
-      chatModelPill.textContent = '';
-      chatModelPill.classList.add('hidden');
+      chatModelPickerWrap.classList.add('hidden');
+      btnChatModelPicker.classList.add('hidden');
+      chatModelPillLabel.textContent = '';
     }
+  }
+  if (!chatModelMenuOpen) {
+    closeChatModelMenu(false);
+    if (chatModelMenu) chatModelMenu.innerHTML = '';
+  }
+
+  let modelHint = '';
+  if (active && target?.model) {
+    modelHint = `${active.name} · ${target.model}`;
+  } else if (active) {
+    modelHint = `${active.name}`;
   }
 
   if (!isConfigured) {
@@ -1051,7 +1191,7 @@ function updateChatChrome() {
     btnChatSend.disabled = true;
   } else if (!appStore.rootPath) {
     chatHint.textContent =
-      `Aktiv: ${active.name} · ${active.model || '(Modell nicht gesetzt)'} – Tipp: Öffne einen Ordner, damit der Assistent Dateien per Tool einlesen kann.`;
+      `${modelHint ? `Aktiv: ${modelHint}` : 'Aktives Modell'} – Tipp: Öffne einen Ordner, damit der Assistent Dateien per Tool einlesen kann.`;
     chatHint.classList.remove('hidden');
     btnChatSend.disabled = false;
   } else {
@@ -1429,14 +1569,32 @@ function setModelStatus(text, isError = false) {
   modelStatus.classList.toggle('error', !!isError);
 }
 
+const SETTINGS_NAV_LABELS = { models: 'Modelle', tools: 'Tools', general: 'Allgemein' };
+
+function hydrateCredentialDraftFromLlmState() {
+  settingsCredentialDraft = {};
+  for (const p of appStore.llmState.providers || []) {
+    settingsCredentialDraft[p.id] = {
+      apiKey: '',
+      baseUrl: (p.baseUrl || p.defaultBaseUrl || '').trim(),
+      insecureTls: !!p.insecureTls,
+    };
+  }
+}
+
+function stashPopupCredentialInputs() {
+  const id = selectProvider?.value;
+  if (!id || !settingsCredentialDraft[id]) return;
+  settingsCredentialDraft[id].apiKey = (inputApiKey.value || '').trim();
+  settingsCredentialDraft[id].baseUrl = (inputBaseUrl.value || '').trim();
+  settingsCredentialDraft[id].insecureTls = !!inputInsecureTls.checked;
+}
+
 function renderProviderSelect() {
   selectProvider.innerHTML = '';
-  for (const p of appStore.llmState.providers) {
+  for (const p of appStore.llmState.providers || []) {
     const opt = document.createElement('option');
     opt.value = p.id;
-    // a11y (Phase 2): Provider-Namen sind englische Eigennamen (OpenAI,
-    // Anthropic, Google, Ollama). lang=en sorgt dafuer, dass Screenreader
-    // sie englisch aussprechen.
     opt.setAttribute('lang', 'en');
     const tags = [];
     if (p.id === appStore.llmState.activeProvider) tags.push('aktiv');
@@ -1444,7 +1602,11 @@ function renderProviderSelect() {
     opt.textContent = tags.length ? `${p.name} – ${tags.join(', ')}` : p.name;
     selectProvider.appendChild(opt);
   }
-  selectProvider.value = appStore.settingsDraftProviderId || appStore.llmState.activeProvider;
+  const presetFromActive = settingsDraftPresets.find((x) => x.id === settingsDraftActivePresetId);
+  selectProvider.value =
+    presetFromActive?.providerId ||
+    appStore.llmState.chatTarget?.providerId ||
+    appStore.llmState.activeProvider;
 }
 
 function renderModelSelect(currentValue, options) {
@@ -1455,8 +1617,6 @@ function renderModelSelect(currentValue, options) {
     seen.add(id);
     const opt = document.createElement('option');
     opt.value = id;
-    // a11y (Phase 2): Modell-IDs (gpt-4o-mini, claude-opus-4.7, ...) sind
-    // technische englische Identifier — lang=en hilft dem Screenreader.
     opt.setAttribute('lang', 'en');
     opt.textContent = label || id;
     selectModel.appendChild(opt);
@@ -1476,15 +1636,25 @@ function renderModelSelect(currentValue, options) {
   }
 }
 
-function applyProviderToForm(providerId) {
+function syncPopupProviderUI(providerId, skipStash) {
   const meta = findProviderMeta(providerId);
   if (!meta) return;
-  appStore.settingsDraftProviderId = providerId;
+  if (!skipStash) stashPopupCredentialInputs();
+
   selectProvider.value = providerId;
+
+  if (!settingsCredentialDraft[providerId]) {
+    settingsCredentialDraft[providerId] = {
+      apiKey: '',
+      baseUrl: (meta.baseUrl || meta.defaultBaseUrl || '').trim(),
+      insecureTls: !!meta.insecureTls,
+    };
+  }
+  const draft = settingsCredentialDraft[providerId];
 
   if (meta.fields?.apiKey) {
     providerKeyRow.classList.remove('hidden');
-    inputApiKey.value = '';
+    inputApiKey.value = draft.apiKey || '';
     if (meta.hasKey) {
       inputApiKey.placeholder = 'Gespeicherter Key bleibt erhalten';
     } else if (meta.id === 'openai') {
@@ -1503,7 +1673,7 @@ function applyProviderToForm(providerId) {
 
   if (meta.fields?.baseUrl) {
     providerBaseUrlRow.classList.remove('hidden');
-    inputBaseUrl.value = meta.baseUrl || meta.defaultBaseUrl || '';
+    inputBaseUrl.value = draft.baseUrl || meta.baseUrl || meta.defaultBaseUrl || '';
     inputBaseUrl.placeholder = meta.defaultBaseUrl || 'http://localhost:11434';
   } else {
     providerBaseUrlRow.classList.add('hidden');
@@ -1512,17 +1682,27 @@ function applyProviderToForm(providerId) {
 
   if (meta.fields?.insecureTls) {
     providerInsecureRow.classList.remove('hidden');
-    inputInsecureTls.checked = !!meta.insecureTls;
+    inputInsecureTls.checked = !!draft.insecureTls;
   } else {
     providerInsecureRow.classList.add('hidden');
     inputInsecureTls.checked = false;
+  }
+
+  if (providerId === 'openai') {
+    openaiReasoningSection.classList.remove('hidden');
+  } else {
+    openaiReasoningSection.classList.add('hidden');
+  }
+
+  if (modelLoadProviderLabel) {
+    modelLoadProviderLabel.textContent = meta.name;
   }
 
   renderModelSelect(meta.model || meta.defaultModel || '', null);
 
   const lines = [];
   if (meta.apiBase) lines.push(`API: ${meta.apiBase}`);
-  if (meta.id === appStore.llmState.activeProvider) lines.push('Aktuell aktiv');
+  if (meta.id === appStore.llmState.activeProvider) lines.push('Aktueller Chat-Anbieter');
   if (meta.configured) {
     lines.push(meta.fields?.apiKey ? 'Key gespeichert' : 'Konfiguriert');
   }
@@ -1531,24 +1711,151 @@ function applyProviderToForm(providerId) {
   setModalError('');
 }
 
-// Phase 5 (Review #12-#13): Modal-A11y — Element merken, Focus-Trap auf Tab,
-// Escape schliesst, beim Schliessen Focus zurueck auf den Trigger.
-function getFocusableModalElements() {
-  const dialog = modalSettings.querySelector('.modal-dialog');
-  if (!dialog) return [];
-  return [...dialog.querySelectorAll(
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-  )].filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
+function renderDraftPresetList() {
+  if (!prefModelList) return;
+  prefModelList.innerHTML = '';
+  const empty = settingsDraftPresets.length === 0;
+  prefListEmpty.classList.toggle('hidden', !empty);
+  const trashSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+
+  for (const pr of settingsDraftPresets) {
+    const meta = findProviderMeta(pr.providerId);
+    if (!meta) continue;
+    const li = document.createElement('li');
+
+    const row = document.createElement('div');
+    row.className = 'settings-pref-row-inner';
+    row.dataset.presetId = pr.id;
+    if (pr.menuVisible === false) row.setAttribute('data-pref-menu-off', 'true');
+    else row.removeAttribute('data-pref-menu-off');
+
+    const main = document.createElement('div');
+    main.className = 'settings-pref-main';
+    const title = document.createElement('strong');
+    title.lang = 'en';
+    title.textContent = `${meta.name} · ${pr.model || meta.defaultModel}`;
+    const detail = document.createElement('span');
+    detail.className = pr.providerId === 'openai' && pr.reasoningEffort ? 'settings-pref-detail settings-pref-detail--mono' : 'settings-pref-detail';
+    detail.textContent = presetDetailRowForDraft(pr);
+    main.appendChild(title);
+    main.appendChild(detail);
+
+    const actions = document.createElement('div');
+    actions.className = 'settings-pref-actions';
+
+    const sw = document.createElement('button');
+    sw.type = 'button';
+    sw.className = 'settings-pref-switch';
+    sw.setAttribute('role', 'switch');
+    sw.setAttribute('aria-checked', pr.menuVisible !== false ? 'true' : 'false');
+    sw.setAttribute(
+      'aria-label',
+      `${meta.name} · ${pr.model} — ${pr.menuVisible !== false ? 'im Chat-Modellmenü sichtbar' : 'im Chat ausgeblendet'}`
+    );
+    sw.dataset.presetId = pr.id;
+    const track = document.createElement('span');
+    track.className = 'settings-pref-switch-track';
+    track.setAttribute('aria-hidden', 'true');
+    const knob = document.createElement('span');
+    knob.className = 'settings-pref-switch-knob';
+    track.appendChild(knob);
+    sw.appendChild(track);
+
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'settings-icon-trash';
+    rm.setAttribute(
+      'aria-label',
+      `${meta.name} ${pr.model} aus der Liste entfernen`
+    );
+    rm.dataset.presetId = pr.id;
+    rm.innerHTML = trashSvg;
+
+    actions.appendChild(sw);
+    actions.appendChild(rm);
+    row.appendChild(main);
+    row.appendChild(actions);
+    li.appendChild(row);
+    prefModelList.appendChild(li);
+  }
+}
+
+function activateSettingsPanel(panelKey) {
+  document.querySelectorAll('.settings-panel').forEach((p) => {
+    const on = p.id === `panel-settings-${panelKey}`;
+    p.classList.toggle('settings-panel--active', on);
+    p.hidden = !on;
+    p.toggleAttribute('hidden', !on);
+  });
+  settingsNavTabs.forEach((tab) => {
+    const on = tab.dataset.settingsPanel === panelKey;
+    tab.setAttribute('aria-selected', on ? 'true' : 'false');
+    tab.tabIndex = on ? 0 : -1;
+  });
+  settingsPanelHeadingEl.textContent =
+    SETTINGS_NAV_LABELS[panelKey] || SETTINGS_NAV_LABELS.models;
+}
+
+function toggleChatModelDropdown() {
+  if (!chatModelMenu || !btnChatModelPicker) return;
+  if (!chatModelMenu.classList.contains('hidden')) {
+    closeChatModelMenu(false);
+    return;
+  }
+  const n = rebuildChatModelMenu();
+  if (n === 0) return;
+  chatModelMenuOpen = true;
+  chatModelMenu.classList.remove('hidden');
+  btnChatModelPicker.setAttribute('aria-expanded', 'true');
+}
+
+function setupDraftFromServerState() {
+  const raw = appStore.llmState.presets || [];
+  try {
+    settingsDraftPresets = structuredClone(raw);
+  } catch {
+    settingsDraftPresets = JSON.parse(JSON.stringify(raw));
+  }
+  settingsDraftActivePresetId =
+    appStore.llmState.activePresetId || settingsDraftPresets[0]?.id || null;
+  hydrateCredentialDraftFromLlmState();
+}
+
+function applyShellLocale(lc) {
+  document.documentElement.lang = lc === 'en' ? 'en' : 'de';
+}
+
+function getFocusableInSettingsModal() {
+  if (addModelOverlay && !addModelOverlay.classList.contains('hidden')) {
+    const nested = addModelOverlay.querySelector('.add-model-dialog');
+    if (!nested) return [];
+    return [...nested.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter((el) => el.offsetParent !== null);
+  }
+  const dlg = modalSettings.querySelector('.modal-dialog.settings-dialog');
+  if (!dlg) return [];
+  return [...dlg.querySelectorAll(
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter((el) => {
+    const inOverlay = !!el.closest('.add-model-overlay');
+    return !inOverlay && el.offsetParent !== null;
+  });
 }
 
 function handleModalKeydown(e) {
   if (e.key === 'Escape') {
     e.preventDefault();
+    if (addModelOverlay && !addModelOverlay.classList.contains('hidden')) {
+      closeAddModelOverlay();
+      return;
+    }
     closeSettingsModal();
     return;
   }
   if (e.key !== 'Tab') return;
-  const focusable = getFocusableModalElements();
+  const focusable = getFocusableInSettingsModal();
   if (focusable.length === 0) return;
   const first = focusable[0];
   const last = focusable[focusable.length - 1];
@@ -1562,73 +1869,90 @@ function handleModalKeydown(e) {
   }
 }
 
+function openAddModelOverlay() {
+  stashPopupCredentialInputs();
+  addModelOverlay.classList.remove('hidden');
+  addModelOverlay.setAttribute('aria-hidden', 'false');
+  renderProviderSelect();
+  const pid = selectProvider.value;
+  syncPopupProviderUI(pid, true);
+}
+
+function closeAddModelOverlay() {
+  stashPopupCredentialInputs();
+  addModelOverlay.classList.add('hidden');
+  addModelOverlay.setAttribute('aria-hidden', 'true');
+  btnOpenAddModel?.focus?.();
+}
+
 async function openSettingsModal() {
   stopChatVoiceListening();
   setModalError('');
   setProviderStatus('');
   setModelStatus('');
-
+  btnSettingsSave.disabled = true;
+  closeChatModelMenu(false);
   appStore.lastFocusBeforeModal = document.activeElement;
-
   modalSettings.classList.remove('hidden');
   modalSettings.setAttribute('aria-hidden', 'false');
   modalSettings.addEventListener('keydown', handleModalKeydown);
-
-  selectProvider.disabled = true;
-  btnLoadModels.disabled = true;
-  btnSettingsSave.disabled = true;
-  setProviderStatus('Lade Anbieter ...');
   try {
     await refreshLLMState();
+    setupDraftFromServerState();
   } catch (err) {
-    setProviderStatus('', false);
-    setModalError(`Anbieter konnten nicht geladen werden: ${err.message || 'Unbekannter Fehler'}`);
+    setModalError(`Einstellungen konnten nicht geladen werden: ${err.message || 'Unbekannter Fehler'}`);
+    modalEncryptionWarning.classList.add('hidden');
     return;
   } finally {
-    btnLoadModels.disabled = false;
     btnSettingsSave.disabled = false;
   }
-
   modalEncryptionWarning.classList.toggle('hidden', appStore.llmState.encryptionAvailable);
-  appStore.settingsDraftProviderId = appStore.llmState.activeProvider;
-  renderProviderSelect();
-  selectProvider.disabled = false;
-  if (!appStore.llmState.providers.length) {
-    setProviderStatus('', false);
-    setModalError('Keine Anbieter verfügbar.');
-    return;
+  activateSettingsPanel('models');
+  try {
+    const up = await api.getUIPrefs();
+    inputGlobalSystemPrompt.value = typeof up.baseSystemPrompt === 'string' ? up.baseSystemPrompt : '';
+    selectAppLocale.value = up.appLocale === 'en' ? 'en' : 'de';
+  } catch {
+    inputGlobalSystemPrompt.value = '';
+    selectAppLocale.value = 'de';
   }
-  applyProviderToForm(appStore.settingsDraftProviderId);
+  renderDraftPresetList();
+  renderProviderSelect();
+  syncPopupProviderUI(selectProvider.value, true);
 
   queueMicrotask(() => {
     try {
-      selectProvider.focus();
+      settingsNavTabs[0]?.focus();
     } catch {
-      const focusable = getFocusableModalElements();
-      if (focusable.length > 0) focusable[0].focus();
+      const fb = getFocusableInSettingsModal();
+      fb[0]?.focus();
     }
   });
 }
 
 function closeSettingsModal() {
+  closeChatModelMenu(false);
+  stashPopupCredentialInputs();
+  closeAddModelOverlay();
   modalSettings.classList.add('hidden');
   modalSettings.setAttribute('aria-hidden', 'true');
   modalSettings.removeEventListener('keydown', handleModalKeydown);
-  appStore.settingsDraftProviderId = null;
   if (appStore.lastFocusBeforeModal && typeof appStore.lastFocusBeforeModal.focus === 'function') {
     try { appStore.lastFocusBeforeModal.focus(); } catch { /* ignore */ }
   }
   appStore.lastFocusBeforeModal = null;
 }
 
-async function loadModelsForCurrentDraft() {
-  const providerId = appStore.settingsDraftProviderId;
+async function loadModelsForPopup() {
+  const providerId = selectProvider.value;
   const meta = findProviderMeta(providerId);
   if (!meta) return;
+  stashPopupCredentialInputs();
 
-  const apiKey = (inputApiKey.value || '').trim();
-  const baseUrl = (inputBaseUrl.value || '').trim();
-  const insecureTls = meta.fields?.insecureTls ? !!inputInsecureTls.checked : undefined;
+  const d = settingsCredentialDraft[providerId] || {};
+  const apiKey = d.apiKey;
+  const baseUrl = (d.baseUrl || '').trim();
+  const insecureTls = meta.fields?.insecureTls ? !!d.insecureTls : undefined;
 
   if (meta.fields?.apiKey && !apiKey && !meta.hasKey) {
     setModelStatus('Bitte zuerst einen API-Key eingeben.', true);
@@ -1673,6 +1997,91 @@ async function loadModelsForCurrentDraft() {
   }
 }
 
+function addPresetDraftFromPopup() {
+  stashPopupCredentialInputs();
+  const pv = selectProvider.value;
+  const meta = findProviderMeta(pv);
+  if (!meta) return false;
+  const model = (selectModel.value || '').trim() || meta.defaultModel || '';
+  const reasoning =
+    pv === 'openai' && selectPopupReasoning ? selectPopupReasoning.value : null;
+
+  const dup = settingsDraftPresets.some(
+    (row) =>
+      row.providerId === pv &&
+      row.model === model &&
+      (pv !== 'openai' || row.reasoningEffort === reasoning)
+  );
+  if (dup) {
+    setModalError('Diese Kombination gibt es bereits in der Liste.');
+    return false;
+  }
+  setModalError('');
+  const id =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `p-${Date.now()}`;
+  settingsDraftPresets.push({
+    id,
+    providerId: pv,
+    model,
+    reasoningEffort: reasoning,
+    menuVisible: true,
+  });
+  if (!settingsDraftActivePresetId) settingsDraftActivePresetId = id;
+  renderDraftPresetList();
+  return true;
+}
+
+async function commitSettingsFromModal() {
+  stashPopupCredentialInputs();
+  setModalError('');
+  if (settingsDraftPresets.length === 0) {
+    setModalError('Die Präferenzliste darf nicht leer sein.');
+    return;
+  }
+  let activePresetId = settingsDraftActivePresetId || settingsDraftPresets[0].id;
+  if (!settingsDraftPresets.some((p) => p.id === activePresetId)) {
+    activePresetId = settingsDraftPresets[0].id;
+  }
+
+  const providerPatches = {};
+  const ids = new Set(settingsDraftPresets.map((p) => p.providerId));
+  for (const pid of ids) {
+    const d = settingsCredentialDraft[pid];
+    const meta = findProviderMeta(pid);
+    if (!meta || !d) continue;
+    const patch = {};
+    if (typeof d.apiKey === 'string' && d.apiKey.trim()) patch.apiKey = d.apiKey.trim();
+    const bu = typeof d.baseUrl === 'string' ? d.baseUrl.trim() : '';
+    if (bu && meta.fields?.baseUrl) patch.baseUrl = bu;
+    if (meta.fields?.insecureTls) patch.insecureTls = !!d.insecureTls;
+    providerPatches[pid] = patch;
+  }
+
+  btnSettingsSave.disabled = true;
+  try {
+    const res = await api.commitSettings({
+      presets: settingsDraftPresets,
+      activePresetId,
+      providerPatches,
+      uiPrefs: {
+        baseSystemPrompt: inputGlobalSystemPrompt.value || '',
+        appLocale: selectAppLocale.value === 'en' ? 'en' : 'de',
+      },
+    });
+    if (!res?.ok) {
+      setModalError(res?.error || 'Speichern fehlgeschlagen.');
+      return;
+    }
+    applyShellLocale(selectAppLocale.value === 'en' ? 'en' : 'de');
+    await refreshLLMState();
+    closeSettingsModal();
+  } finally {
+    btnSettingsSave.disabled = false;
+  }
+}
+
 btnChatHistory.addEventListener('click', async (e) => {
   e.stopPropagation();
   const open = chatHistoryDrawer.classList.contains('hidden');
@@ -1680,9 +2089,15 @@ btnChatHistory.addEventListener('click', async (e) => {
   setHistoryDrawerOpen(open);
 });
 
-document.addEventListener('click', () => {
+document.addEventListener('click', (e) => {
   if (!chatHistoryDrawer.classList.contains('hidden')) {
     setHistoryDrawerOpen(false);
+  }
+  if (chatModelMenuOpen && chatModelMenu && btnChatModelPicker) {
+    const t = e.target;
+    if (!t?.closest?.('.chat-model-picker-wrap')) {
+      closeChatModelMenu(false);
+    }
   }
 });
 
@@ -1690,79 +2105,104 @@ chatHistoryDrawer.addEventListener('click', (e) => e.stopPropagation());
 
 btnChatNew.addEventListener('click', () => startNewChat());
 btnChatSettings.addEventListener('click', openSettingsModal);
+
+if (btnChatModelPicker) {
+  btnChatModelPicker.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleChatModelDropdown();
+  });
+}
+
+if (chatModelMenu) {
+  chatModelMenu.addEventListener('click', async (e) => {
+    const opt = e.target.closest('.chat-model-menu-option');
+    if (!opt) return;
+    const pid = opt.dataset.presetId;
+    if (!pid) return;
+    closeChatModelMenu(false);
+    await persistActivePreset(pid);
+  });
+}
+
 modalSettingsBackdrop.addEventListener('click', closeSettingsModal);
 btnSettingsClose.addEventListener('click', closeSettingsModal);
+btnSettingsFooterClose?.addEventListener('click', closeSettingsModal);
+
+settingsNavTabs.forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const key = tab.dataset.settingsPanel;
+    if (key) activateSettingsPanel(key);
+  });
+});
+
+btnOpenAddModel?.addEventListener('click', () => {
+  openAddModelOverlay();
+  queueMicrotask(() => {
+    try {
+      selectProvider.focus();
+    } catch { /* ignore */ }
+  });
+});
+
+btnAddModelCloseX?.addEventListener('click', closeAddModelOverlay);
+btnAddModelClose?.addEventListener('click', closeAddModelOverlay);
+
+addModelOverlay?.addEventListener('click', (e) => {
+  if (e.target === addModelOverlay) closeAddModelOverlay();
+});
 
 selectProvider.addEventListener('change', () => {
+  syncPopupProviderUI(selectProvider.value);
+});
+
+inputBaseUrl.addEventListener('input', () => {
   const id = selectProvider.value;
-  if (!id) return;
-  applyProviderToForm(id);
+  if (id && settingsCredentialDraft[id]) {
+    settingsCredentialDraft[id].baseUrl = inputBaseUrl.value;
+    renderDraftPresetList();
+  }
+});
+
+inputInsecureTls.addEventListener('change', () => {
+  const id = selectProvider.value;
+  if (id && settingsCredentialDraft[id]) {
+    settingsCredentialDraft[id].insecureTls = !!inputInsecureTls.checked;
+    renderDraftPresetList();
+  }
 });
 
 btnLoadModels.addEventListener('click', () => {
-  loadModelsForCurrentDraft();
+  loadModelsForPopup();
 });
 
-btnSettingsSave.addEventListener('click', async () => {
-  setModalError('');
-  const providerId = appStore.settingsDraftProviderId || appStore.llmState.activeProvider;
-  const meta = findProviderMeta(providerId);
-  if (!meta) {
-    setModalError('Kein Anbieter ausgewählt.');
+btnAddPresetRow?.addEventListener('click', () => {
+  if (addPresetDraftFromPopup()) {
+    closeAddModelOverlay();
+  }
+});
+
+btnSettingsSave.addEventListener('click', () => {
+  commitSettingsFromModal();
+});
+
+prefModelList?.addEventListener('click', (e) => {
+  const sw = e.target.closest('.settings-pref-switch');
+  if (sw && prefModelList.contains(sw)) {
+    const id = sw.dataset.presetId;
+    const row = settingsDraftPresets.find((p) => p.id === id);
+    if (!row) return;
+    row.menuVisible = !(row.menuVisible !== false);
+    renderDraftPresetList();
     return;
   }
-
-  const apiKey = (inputApiKey.value || '').trim();
-  const baseUrl = (inputBaseUrl.value || '').trim();
-  const model = (selectModel.value || '').trim() || meta.defaultModel || '';
-
-  if (meta.fields?.apiKey && !apiKey && !meta.hasKey) {
-    setModalError('Bitte API-Key eingeben.');
-    return;
-  }
-  if (meta.fields?.baseUrl && !baseUrl && !meta.baseUrl) {
-    setModalError('Bitte Server-URL angeben.');
-    return;
-  }
-
-  const payload = { providerId, model, makeActive: true };
-  if (apiKey) payload.apiKey = apiKey;
-  if (baseUrl) payload.baseUrl = baseUrl;
-  if (meta.fields?.insecureTls) payload.insecureTls = !!inputInsecureTls.checked;
-
-  btnSettingsSave.disabled = true;
-  try {
-    const res = await api.setProvider(payload);
-    if (!res?.ok) {
-      setModalError(res?.error || 'Speichern fehlgeschlagen.');
-      return;
+  const rm = e.target.closest('.settings-icon-trash');
+  if (rm && prefModelList.contains(rm)) {
+    const id = rm.dataset.presetId;
+    settingsDraftPresets = settingsDraftPresets.filter((p) => p.id !== id);
+    if (settingsDraftActivePresetId === id) {
+      settingsDraftActivePresetId = settingsDraftPresets[0]?.id || null;
     }
-    await refreshLLMState();
-    closeSettingsModal();
-  } finally {
-    btnSettingsSave.disabled = false;
-  }
-});
-
-btnSettingsClear.addEventListener('click', async () => {
-  const providerId = appStore.settingsDraftProviderId || appStore.llmState.activeProvider;
-  if (!providerId) return;
-  stopChatVoiceListening();
-  await api.clearProvider(providerId);
-  appStore.chatSessionId += 1;
-  appStore.currentChatId = crypto.randomUUID();
-  appStore.currentChatWorkspace = appStore.rootPath || null;
-  appStore.chatMessages = [];
-  chatInput.value = '';
-  syncChatInputHeight();
-  await api.setActiveChatId(appStore.currentChatWorkspace, null);
-  renderChatMessages();
-  await refreshLLMState();
-  // Reflect the cleared state in the modal (if still open)
-  if (!modalSettings.classList.contains('hidden')) {
-    appStore.settingsDraftProviderId = appStore.llmState.activeProvider;
-    renderProviderSelect();
-    applyProviderToForm(appStore.settingsDraftProviderId);
+    renderDraftPresetList();
   }
 });
 
@@ -1772,6 +2212,7 @@ refreshLLMState();
   try {
     const uiPrefs = await api.getUIPrefs();
     setContentPaneVisible(uiPrefs.contentPaneVisible !== false);
+    applyShellLocale(uiPrefs.appLocale === 'en' ? 'en' : 'de');
   } catch {
     setContentPaneVisible(true);
   }
