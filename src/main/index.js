@@ -1,5 +1,15 @@
-const { app, ipcMain, dialog, safeStorage } = require('electron');
+const { app, ipcMain, dialog, safeStorage, Menu, shell } = require('electron');
 const path = require('path');
+
+// macOS: damit in der Menue-Bar ueber dem Bildschirm "Weyouze Anything" statt
+// "Electron" erscheint (zumindest in den Submenus: "Ueber Weyouze Anything",
+// "Weyouze Anything beenden" usw.). Im Packaged-Build kommt der Name aus dem
+// productName in package.json -> Info.plist; im Dev-Mode liest macOS den
+// FETTEN App-Title links neben dem Apfel allerdings aus dem Bundle der
+// laufenden node_modules/electron/dist/Electron.app, daher kann dort trotz
+// app.setName() weiterhin "Electron" stehen. Das ist ein bekanntes macOS-
+// Limit, kein Bug der App.
+app.setName('Weyouze Anything');
 const fs = require('fs/promises');
 const providers = require('./providers');
 const { createWindow, getMainWindow } = require('./window');
@@ -112,8 +122,92 @@ registerChatHandlers({
   PUSH,
 });
 
+function buildApplicationMenu() {
+  // Auf macOS muss das ERSTE Submenu den App-Namen als label tragen — das ist
+  // der fett gedruckte Eintrag rechts neben dem Apfel. Auf Windows/Linux gibt
+  // es kein App-Menue, dort beginnen wir direkt mit Datei/Bearbeiten.
+  const isMac = process.platform === 'darwin';
+  const appName = app.getName();
+
+  const macAppMenu = {
+    label: appName,
+    submenu: [
+      { role: 'about' },
+      { type: 'separator' },
+      { role: 'services' },
+      { type: 'separator' },
+      { role: 'hide', label: `${appName} ausblenden` },
+      { role: 'hideOthers', label: 'Andere ausblenden' },
+      { role: 'unhide', label: 'Alle einblenden' },
+      { type: 'separator' },
+      { role: 'quit', label: `${appName} beenden` },
+    ],
+  };
+
+  const editMenu = {
+    label: 'Bearbeiten',
+    submenu: [
+      { role: 'undo', label: 'Rueckgaengig' },
+      { role: 'redo', label: 'Wiederholen' },
+      { type: 'separator' },
+      { role: 'cut', label: 'Ausschneiden' },
+      { role: 'copy', label: 'Kopieren' },
+      { role: 'paste', label: 'Einfuegen' },
+      { role: 'selectAll', label: 'Alles auswaehlen' },
+    ],
+  };
+
+  const viewMenu = {
+    label: 'Ansicht',
+    submenu: [
+      { role: 'reload', label: 'Neu laden' },
+      { role: 'forceReload', label: 'Hart neu laden' },
+      { role: 'toggleDevTools', label: 'Entwicklertools' },
+      { type: 'separator' },
+      { role: 'resetZoom', label: 'Zoom zuruecksetzen' },
+      { role: 'zoomIn', label: 'Vergroessern' },
+      { role: 'zoomOut', label: 'Verkleinern' },
+      { type: 'separator' },
+      { role: 'togglefullscreen', label: 'Vollbild' },
+    ],
+  };
+
+  const windowMenu = {
+    label: 'Fenster',
+    role: 'window',
+    submenu: [
+      { role: 'minimize', label: 'Im Dock ablegen' },
+      { role: 'zoom', label: 'Vollbild Fenster' },
+      ...(isMac ? [{ type: 'separator' }, { role: 'front', label: 'Alle nach vorne' }] : [{ role: 'close', label: 'Schliessen' }]),
+    ],
+  };
+
+  const helpMenu = {
+    label: 'Hilfe',
+    role: 'help',
+    submenu: [
+      {
+        label: 'Projekt auf GitHub',
+        click: () => shell.openExternal('https://github.com/kkrafft1999/weyouze'),
+      },
+    ],
+  };
+
+  const template = [
+    ...(isMac ? [macAppMenu] : []),
+    editMenu,
+    viewMenu,
+    windowMenu,
+    helpMenu,
+  ];
+
+  return Menu.buildFromTemplate(template);
+}
+
 app.whenReady().then(() => {
   registerMediaCapturePermissions();
+
+  Menu.setApplicationMenu(buildApplicationMenu());
 
   createWindow();
 
