@@ -283,6 +283,26 @@ summary:focus-visible,
 
 /* ── Theme Toggle ── */
 
+/* Toolbar-Zeilen: mehrere Kreis-Icon-Buttons horizontal — Abstaende zentral
+ * ueber tokens.css (--ds-icon-btn-row-gap, --ds-icon-btn-cluster-pull). */
+.icon-btn-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-icon-btn-row-gap);
+  flex-shrink: 0;
+}
+
+.icon-btn-row > :not(:last-child),
+.chat-header-actions > button:not(:last-child) {
+  margin-inline-end: calc(-1 * var(--ds-icon-btn-cluster-pull));
+}
+
+.icon-btn-row button:focus-visible,
+.chat-header-actions > button:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+
 .titlebar-spacer {
   flex: 1;
 }
@@ -627,7 +647,7 @@ summary:focus-visible,
 .chat-header-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--ds-icon-btn-row-gap);
 }
 
 #btn-chat-history,

@@ -90,6 +90,12 @@
   --ds-touch-ideal: 44px;      /* WCAG-Empfehlung */
   --ds-icon-size: 16px;        /* Standard-Icon-SVG */
 
+  /* Toolbar-Zeilen: horizontales Layout fuer Kreis-Icon-Buttons (32×32).
+   * Flex-`gap` zwischen Items; `cluster-pull` zieht Nachbarn per negativem
+   * Margin leicht ineinander — Glyphen wirken enger, Hitbox bleibt 32 px. */
+  --ds-icon-btn-row-gap: 0;
+  --ds-icon-btn-cluster-pull: 5px;
+
   /* ── Fokus-Ring ───────────────────────────────────────────────────────── */
   --ds-focus-ring: 2px solid var(--ds-blue);
   --ds-focus-offset: 2px;
