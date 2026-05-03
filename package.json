@@ -48,13 +48,13 @@
   "description": "Weyouze Anything – workspace-aware AI assistant on top of a file explorer.",
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
-    "dompurify": "^3.3.3",
+    "dompurify": "^3.4.2",
     "marked": "^17.0.5"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.1",
     "@electron-forge/maker-dmg": "^7.11.1",
     "@electron-forge/maker-zip": "^7.11.1",
-    "electron": "^41.0.3"
+    "electron": "^41.5.0"
   }
 }
