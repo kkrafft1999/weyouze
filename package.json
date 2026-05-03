@@ -48,7 +48,7 @@
   "description": "Weyouze Anything – workspace-aware AI assistant on top of a file explorer.",
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
-    "dompurify": "^3.3.3",
+    "dompurify": "^3.4.0",
     "marked": "^17.0.5"
   },
   "devDependencies": {
