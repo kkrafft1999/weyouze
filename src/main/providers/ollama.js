@@ -1,6 +1,37 @@
+const { Agent } = require('undici');
 const { iterStreamLines, readErrorMessage } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'http://localhost:11434';
+
+// Lazy gebauter undici-Agent, der TLS-Zertifikatspruefung deaktiviert. Wird
+// pro Request nur dann verwendet, wenn der Nutzer im Provider-Modal "TLS-
+// Zertifikat ignorieren (insecure)" aktiviert hat UND die Ziel-URL https ist.
+// Analog zum Go-Referenz-CLI (Flag --insecure) fuer Server mit selbstsigniertem
+// oder intern signiertem Zertifikat (z.B. https://ollama.intern.example).
+let _insecureDispatcher = null;
+function getInsecureDispatcher() {
+  if (!_insecureDispatcher) {
+    _insecureDispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+  }
+  return _insecureDispatcher;
+}
+
+function dispatcherFor(url, config) {
+  if (!config?.insecureTls) return undefined;
+  if (!url.startsWith('https://')) return undefined;
+  return getInsecureDispatcher();
+}
+
+function describeFetchError(err, baseUrl) {
+  const cause = err?.cause;
+  const causeCode = cause?.code || cause?.errno;
+  const causeMsg = cause?.message;
+  const main = err?.message || `Verbindung zu ${baseUrl} fehlgeschlagen.`;
+  if (causeCode || causeMsg) {
+    return `${main} (${[causeCode, causeMsg].filter(Boolean).join(': ')})`;
+  }
+  return main;
+}
 
 function baseUrlOf(config) {
   const raw = typeof config?.baseUrl === 'string' ? config.baseUrl.trim() : '';
@@ -8,12 +39,13 @@ function baseUrlOf(config) {
 }
 
 async function listModels(config) {
-  const url = `${baseUrlOf(config)}/api/tags`;
+  const base = baseUrlOf(config);
+  const url = `${base}/api/tags`;
   let res;
   try {
-    res = await fetch(url);
+    res = await fetch(url, { dispatcher: dispatcherFor(url, config) });
   } catch (err) {
-    return { error: err.message || `Verbindung zu ${baseUrlOf(config)} fehlgeschlagen.` };
+    return { error: describeFetchError(err, base) };
   }
   if (!res.ok) return { error: await readErrorMessage(res) };
   const json = await res.json().catch(() => null);
@@ -79,7 +111,8 @@ function translateToolsToOllama(tools) {
 }
 
 async function streamChatRound({ config, model, messages, tools, callbacks }) {
-  const url = `${baseUrlOf(config)}/api/chat`;
+  const base = baseUrlOf(config);
+  const url = `${base}/api/chat`;
   const body = {
     model,
     messages: translateMessagesToOllama(messages),
@@ -94,9 +127,10 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      dispatcher: dispatcherFor(url, config),
     });
   } catch (err) {
-    return { error: err.message || `Verbindung zu ${baseUrlOf(config)} fehlgeschlagen.`, code: 'NETWORK' };
+    return { error: describeFetchError(err, base), code: 'NETWORK' };
   }
   if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };
   if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };
@@ -158,9 +192,10 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
 module.exports = {
   id: 'ollama',
   name: 'Ollama (lokal)',
-  fields: { baseUrl: true },
+  fields: { baseUrl: true, insecureTls: true },
   defaultModel: 'llama3.2',
   defaultBaseUrl: DEFAULT_BASE,
+  defaultInsecureTls: false,
   apiBase: DEFAULT_BASE,
   listModels,
   streamChatRound,

@@ -104,6 +104,13 @@ function createStorageService({
     if (provider.fields?.baseUrl) {
       out.baseUrl = entry.baseUrl || provider.defaultBaseUrl || '';
     }
+    if (provider.fields?.insecureTls) {
+      // typeof check, damit ein bewusst gesetztes "false" nicht still auf
+      // den Default zurueckfaellt.
+      out.insecureTls = typeof entry.insecureTls === 'boolean'
+        ? entry.insecureTls
+        : (provider.defaultInsecureTls === true);
+    }
     return out;
   }
 

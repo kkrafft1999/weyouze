@@ -239,6 +239,14 @@
           <input type="text" id="input-base-url" class="modal-input" placeholder="http://localhost:11434" autocomplete="off" />
         </div>
 
+        <div id="provider-insecure-row" class="hidden modal-checkbox-row">
+          <label class="modal-checkbox">
+            <input type="checkbox" id="input-insecure-tls" />
+            <span>TLS-Zertifikat ignorieren (insecure)</span>
+          </label>
+          <p class="modal-hint">Nur aktivieren, wenn der Server ein selbstsigniertes oder intern signiertes Zertifikat verwendet, dem du vertraust.</p>
+        </div>
+
         <label class="modal-label" for="select-model">Modell</label>
         <div class="modal-row">
           <select id="select-model" class="modal-input modal-input--grow"></select>
