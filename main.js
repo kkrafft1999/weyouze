@@ -1,7 +1,7 @@
 const { app, ipcMain, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
-const providers = require('./providers');
+const providers = require('./src/main/providers');
 const { createWindow, getMainWindow } = require('./src/main/window');
 const { registerMediaCapturePermissions } = require('./src/main/permissions');
 const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('./src/shared/ipc-channels');
