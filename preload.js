@@ -1,53 +1,54 @@
 const { contextBridge, ipcRenderer, shell } = require('electron');
+const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('./src/shared/ipc-channels');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
-  readDirectory: (dirPath) => ipcRenderer.invoke('fs:readDirectory', dirPath),
-  readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
-  moveItem: (sourcePath, destDir) => ipcRenderer.invoke('fs:moveItem', sourcePath, destDir),
+  openFolder: () => ipcRenderer.invoke(REQ.DIALOG_OPEN_FOLDER),
+  readDirectory: (dirPath) => ipcRenderer.invoke(REQ.FS_READ_DIRECTORY, dirPath),
+  readFile: (filePath) => ipcRenderer.invoke(REQ.FS_READ_FILE, filePath),
+  moveItem: (sourcePath, destDir) => ipcRenderer.invoke(REQ.FS_MOVE_ITEM, sourcePath, destDir),
 
   // LLM provider settings (multi-provider)
-  getLLMState: () => ipcRenderer.invoke('settings:getLLMState'),
-  setProvider: (payload) => ipcRenderer.invoke('settings:setProvider', payload),
-  clearProvider: (providerId) => ipcRenderer.invoke('settings:clearProvider', providerId),
-  setActiveProvider: (providerId) => ipcRenderer.invoke('settings:setActiveProvider', providerId),
-  listModels: (payload) => ipcRenderer.invoke('settings:listModels', payload),
+  getLLMState: () => ipcRenderer.invoke(REQ.SETTINGS_GET_LLM_STATE),
+  setProvider: (payload) => ipcRenderer.invoke(REQ.SETTINGS_SET_PROVIDER, payload),
+  clearProvider: (providerId) => ipcRenderer.invoke(REQ.SETTINGS_CLEAR_PROVIDER, providerId),
+  setActiveProvider: (providerId) => ipcRenderer.invoke(REQ.SETTINGS_SET_ACTIVE_PROVIDER, providerId),
+  listModels: (payload) => ipcRenderer.invoke(REQ.SETTINGS_LIST_MODELS, payload),
 
-  getLastFolder: () => ipcRenderer.invoke('settings:getLastFolder'),
-  setLastFolder: (folderPath) => ipcRenderer.invoke('settings:setLastFolder', folderPath),
-  getFolderHistory: () => ipcRenderer.invoke('settings:getFolderHistory'),
-  getUIPrefs: () => ipcRenderer.invoke('settings:getUIPrefs'),
-  setUIPrefs: (partial) => ipcRenderer.invoke('settings:setUIPrefs', partial),
-  getChatHistory: (workspaceRoot) => ipcRenderer.invoke('chatHistory:get', workspaceRoot ?? null),
-  upsertChatSession: (session) => ipcRenderer.invoke('chatHistory:upsert', session),
-  deleteChatSession: (id) => ipcRenderer.invoke('chatHistory:delete', id),
-  setActiveChatId: (workspaceRoot, id) => ipcRenderer.invoke('chatHistory:setActive', workspaceRoot ?? null, id),
+  getLastFolder: () => ipcRenderer.invoke(REQ.SETTINGS_GET_LAST_FOLDER),
+  setLastFolder: (folderPath) => ipcRenderer.invoke(REQ.SETTINGS_SET_LAST_FOLDER, folderPath),
+  getFolderHistory: () => ipcRenderer.invoke(REQ.SETTINGS_GET_FOLDER_HISTORY),
+  getUIPrefs: () => ipcRenderer.invoke(REQ.SETTINGS_GET_UI_PREFS),
+  setUIPrefs: (partial) => ipcRenderer.invoke(REQ.SETTINGS_SET_UI_PREFS, partial),
+  getChatHistory: (workspaceRoot) => ipcRenderer.invoke(REQ.CHAT_HISTORY_GET, workspaceRoot ?? null),
+  upsertChatSession: (session) => ipcRenderer.invoke(REQ.CHAT_HISTORY_UPSERT, session),
+  deleteChatSession: (id) => ipcRenderer.invoke(REQ.CHAT_HISTORY_DELETE, id),
+  setActiveChatId: (workspaceRoot, id) => ipcRenderer.invoke(REQ.CHAT_HISTORY_SET_ACTIVE, workspaceRoot ?? null, id),
   chat: (messages, options) =>
-    ipcRenderer.invoke('openai:chat', {
+    ipcRenderer.invoke(REQ.CHAT_SEND, {
       messages,
       workspaceRoot: options?.workspaceRoot ?? null,
       selectedPath: options?.selectedPath ?? null,
       selectedIsDirectory: options?.selectedIsDirectory ?? false,
     }),
   onChatDelta: (callback) => {
-    const channel = 'openai:chat:delta';
+    const channel = PUSH.CHAT_DELTA;
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   },
   onChatToolLine: (callback) => {
-    const channel = 'openai:chat:tool-line';
+    const channel = PUSH.CHAT_TOOL_LINE;
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   },
   onChatProgress: (callback) => {
-    const channel = 'openai:chat:progress';
+    const channel = PUSH.CHAT_PROGRESS;
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   },
-  transcribeAudio: (audioBuffer) => ipcRenderer.invoke('whisper:transcribe', audioBuffer),
+  transcribeAudio: (audioBuffer) => ipcRenderer.invoke(REQ.WHISPER_TRANSCRIBE, audioBuffer),
   openExternal: (url) => {
     try {
       const u = new URL(url);

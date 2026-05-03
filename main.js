@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, safeStorage, session } = require('e
 const path = require('path');
 const fs = require('fs/promises');
 const providers = require('./providers');
+const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('./src/shared/ipc-channels');
 
 const LLM_CONFIG_FILENAME = 'llm-config.json';
 const LEGACY_OPENAI_CONFIG_FILENAME = 'openai-config.json';
@@ -178,7 +179,7 @@ function summarizeToolCall(toolName, args) {
 
 function emitChatProgress(webContents, payload) {
   if (webContents && !webContents.isDestroyed()) {
-    webContents.send('openai:chat:progress', payload);
+    webContents.send(PUSH.CHAT_PROGRESS, payload);
   }
 }
 
@@ -196,7 +197,7 @@ function makeStreamCallbacks(webContents) {
       if (!text) return;
       markGenerating();
       if (webContents && !webContents.isDestroyed()) {
-        webContents.send('openai:chat:delta', { text });
+        webContents.send(PUSH.CHAT_DELTA, { text });
       }
     },
     onReasoningDelta(text) {
@@ -558,7 +559,7 @@ app.on('window-all-closed', () => {
 
 // ── IPC Handlers ──
 
-ipcMain.handle('dialog:openFolder', async () => {
+ipcMain.handle(REQ.DIALOG_OPEN_FOLDER, async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Ordner auswählen',
     buttonLabel: 'Ordner öffnen',
@@ -569,7 +570,7 @@ ipcMain.handle('dialog:openFolder', async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle('fs:readDirectory', async (_event, dirPath) => {
+ipcMain.handle(REQ.FS_READ_DIRECTORY, async (_event, dirPath) => {
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const items = await Promise.all(
@@ -605,7 +606,7 @@ ipcMain.handle('fs:readDirectory', async (_event, dirPath) => {
   }
 });
 
-ipcMain.handle('fs:moveItem', async (_event, sourcePath, destDir) => {
+ipcMain.handle(REQ.FS_MOVE_ITEM, async (_event, sourcePath, destDir) => {
   try {
     const srcStat = await fs.stat(sourcePath);
     const dstStat = await fs.stat(destDir);
@@ -645,7 +646,7 @@ ipcMain.handle('fs:moveItem', async (_event, sourcePath, destDir) => {
   }
 });
 
-ipcMain.handle('fs:readFile', async (_event, filePath) => {
+ipcMain.handle(REQ.FS_READ_FILE, async (_event, filePath) => {
   try {
     const stats = await fs.stat(filePath);
     const MAX_SIZE = 1024 * 1024; // 1 MB limit for preview
@@ -661,7 +662,7 @@ ipcMain.handle('fs:readFile', async (_event, filePath) => {
 
 // ── Whisper speech-to-text (uses OpenAI provider key) ──
 
-ipcMain.handle('whisper:transcribe', async (_event, audioBuffer) => {
+ipcMain.handle(REQ.WHISPER_TRANSCRIBE, async (_event, audioBuffer) => {
   const apiKey = await getOpenAIApiKey();
   if (!apiKey) return { error: 'Kein OpenAI-Key hinterlegt (Whisper benötigt einen).' };
 
@@ -713,7 +714,7 @@ ipcMain.handle('whisper:transcribe', async (_event, audioBuffer) => {
 
 // ── LLM provider settings ──
 
-ipcMain.handle('settings:getLLMState', async () => {
+ipcMain.handle(REQ.SETTINGS_GET_LLM_STATE, async () => {
   const encryptionAvailable = safeStorage.isEncryptionAvailable();
   const config = await readLLMConfig();
   const meta = providers.listProviderMeta();
@@ -738,7 +739,7 @@ ipcMain.handle('settings:getLLMState', async () => {
   return { encryptionAvailable, activeProvider: active, providers: list };
 });
 
-ipcMain.handle('settings:setProvider', async (_event, payload) => {
+ipcMain.handle(REQ.SETTINGS_SET_PROVIDER, async (_event, payload) => {
   const providerId = payload?.providerId;
   const provider = providers.getProvider(providerId);
   if (!provider) return { ok: false, error: 'Unbekannter Provider.' };
@@ -785,7 +786,7 @@ ipcMain.handle('settings:setProvider', async (_event, payload) => {
   return { ok: true };
 });
 
-ipcMain.handle('settings:clearProvider', async (_event, providerId) => {
+ipcMain.handle(REQ.SETTINGS_CLEAR_PROVIDER, async (_event, providerId) => {
   if (!providers.getProvider(providerId)) return { ok: false, error: 'Unbekannter Provider.' };
   const config = await readLLMConfig();
   if (config.providers) delete config.providers[providerId];
@@ -799,7 +800,7 @@ ipcMain.handle('settings:clearProvider', async (_event, providerId) => {
   return { ok: true };
 });
 
-ipcMain.handle('settings:setActiveProvider', async (_event, providerId) => {
+ipcMain.handle(REQ.SETTINGS_SET_ACTIVE_PROVIDER, async (_event, providerId) => {
   if (!providers.getProvider(providerId)) {
     return { ok: false, error: 'Unbekannter Provider.' };
   }
@@ -809,7 +810,7 @@ ipcMain.handle('settings:setActiveProvider', async (_event, providerId) => {
   return { ok: true };
 });
 
-ipcMain.handle('settings:listModels', async (_event, payload) => {
+ipcMain.handle(REQ.SETTINGS_LIST_MODELS, async (_event, payload) => {
   const providerId = payload?.providerId;
   const provider = providers.getProvider(providerId);
   if (!provider) return { error: 'Unbekannter Provider.' };
@@ -835,24 +836,24 @@ ipcMain.handle('settings:listModels', async (_event, payload) => {
 
 // ── Last folder, UI prefs, chat history ──
 
-ipcMain.handle('settings:getLastFolder', async () => {
+ipcMain.handle(REQ.SETTINGS_GET_LAST_FOLDER, async () => {
   const folderPath = await getValidatedLastFolder();
   return { folderPath };
 });
 
-ipcMain.handle('settings:setLastFolder', async (_event, folderPath) => {
+ipcMain.handle(REQ.SETTINGS_SET_LAST_FOLDER, async (_event, folderPath) => {
   await persistLastFolder(folderPath);
   return { ok: true };
 });
 
-ipcMain.handle('settings:getFolderHistory', async () => {
+ipcMain.handle(REQ.SETTINGS_GET_FOLDER_HISTORY, async () => {
   const paths = await getValidatedFolderHistory();
   return { paths };
 });
 
-ipcMain.handle('settings:getUIPrefs', async () => readUIPrefs());
+ipcMain.handle(REQ.SETTINGS_GET_UI_PREFS, async () => readUIPrefs());
 
-ipcMain.handle('settings:setUIPrefs', async (_event, partial) => {
+ipcMain.handle(REQ.SETTINGS_SET_UI_PREFS, async (_event, partial) => {
   const patch = partial && typeof partial === 'object' ? partial : {};
   const out = { ...await readUIPrefs() };
   if (typeof patch.contentPaneVisible === 'boolean') {
@@ -870,7 +871,7 @@ function sessionMatchesWorkspace(session, workspaceRoot) {
   return sessionWs === (workspaceRoot || null);
 }
 
-ipcMain.handle('chatHistory:get', async (_event, workspaceRoot) => {
+ipcMain.handle(REQ.CHAT_HISTORY_GET, async (_event, workspaceRoot) => {
   const store = await readChatHistoryStore();
   const wsRoot = normalizeWorkspaceRoot(workspaceRoot);
   const sessions = store.sessions.filter((s) => sessionMatchesWorkspace(s, wsRoot));
@@ -878,7 +879,7 @@ ipcMain.handle('chatHistory:get', async (_event, workspaceRoot) => {
   return { sessions, activeChatId, workspaceRoot: wsRoot };
 });
 
-ipcMain.handle('chatHistory:upsert', async (_event, session) => {
+ipcMain.handle(REQ.CHAT_HISTORY_UPSERT, async (_event, session) => {
   const normalized = normalizeSessionForStore(session);
   if (!normalized) return { ok: false };
   const store = await readChatHistoryStore();
@@ -898,7 +899,7 @@ ipcMain.handle('chatHistory:upsert', async (_event, session) => {
   return { ok: true };
 });
 
-ipcMain.handle('chatHistory:delete', async (_event, id) => {
+ipcMain.handle(REQ.CHAT_HISTORY_DELETE, async (_event, id) => {
   if (typeof id !== 'string' || !id.trim()) return { ok: false };
   const store = await readChatHistoryStore();
   store.sessions = store.sessions.filter((s) => s.id !== id);
@@ -909,7 +910,7 @@ ipcMain.handle('chatHistory:delete', async (_event, id) => {
   return { ok: true };
 });
 
-ipcMain.handle('chatHistory:setActive', async (_event, workspaceRoot, id) => {
+ipcMain.handle(REQ.CHAT_HISTORY_SET_ACTIVE, async (_event, workspaceRoot, id) => {
   const store = await readChatHistoryStore();
   const wsKey = workspaceBucketKey(normalizeWorkspaceRoot(workspaceRoot));
   if (id === null || id === undefined || id === '') {
@@ -923,7 +924,7 @@ ipcMain.handle('chatHistory:setActive', async (_event, workspaceRoot, id) => {
 
 // ── Chat (dispatches to active provider) ──
 
-ipcMain.handle('openai:chat', async (event, payload) => {
+ipcMain.handle(REQ.CHAT_SEND, async (event, payload) => {
   const messages = payload?.messages;
   if (!Array.isArray(messages) || messages.length === 0) {
     return { error: 'Keine Nachrichten übergeben.', code: 'INVALID' };
@@ -986,7 +987,7 @@ ipcMain.handle('openai:chat', async (event, payload) => {
 
   const emitToolLine = (line) => {
     if (wc && !wc.isDestroyed()) {
-      wc.send('openai:chat:tool-line', { line });
+      wc.send(PUSH.CHAT_TOOL_LINE, { line });
     }
   };
 
