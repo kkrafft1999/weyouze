@@ -38,7 +38,12 @@
   --font-ui: var(--ds-font-ui);         /* Phase 1: Inter mit Fallback-Kette */
   --font-mono: var(--ds-font-mono);
 
-  /* ── Button design tokens ── */
+  /* ── Button design tokens ──
+   * Radius 999 px = Pill-Form fuer alle Text-Buttons (Modal-Save,
+   * Modal-Secondary). Bewusst weicher/freundlicher als die 6 px aus der
+   * Designsystem-Referenz; siehe phase-5-backlog.md (2026-05-03). Icon-
+   * Buttons 32x32 (Send, Mic) nutzen `border-radius: 50%` direkt, weil das
+   * fuer Quadrate einen echten Kreis ergibt. */
   --btn-radius: 999px;
   --btn-padding-x: 18px;
   --btn-padding-y: 9px;
@@ -54,7 +59,6 @@
   --btn-primary-bg-hover: var(--ds-btn-primary-bg-hover);
 
   --btn-secondary-fg: var(--text-primary);
-  --btn-secondary-border-hover: #b3b3b3;
 }
 
 [data-theme="dark"] {
@@ -83,9 +87,8 @@
     0 0 72px rgba(0, 0, 0, 0.28),
     0 0 0 4px rgba(255, 255, 255, 0.1);
 
-  /* Phase 5: Dark-Mode-Override jetzt in tokens.css; hier nur noch
-   * Sekundaer-Stufe + Border. */
-  --btn-secondary-border-hover: #5a5a5a;
+  /* Phase 5: Dark-Mode-Override jetzt in tokens.css. Sekundaer-Buttons
+   * teilen sich den Cyan-Hover-Border mit dem Light-Mode (Brand-Akzent). */
 }
 
 html, body {
@@ -799,7 +802,7 @@ summary:focus-visible,
 }
 
 .chat-msg.assistant .chat-md {
-  font-size: var(--ds-font-size-h3);    /* 17px */
+  font-size: var(--ds-font-size-lg);    /* 15px */
   line-height: var(--ds-line-height-prose);  /* 1.55 */
 }
 
@@ -1063,7 +1066,6 @@ summary:focus-visible,
 }
 
 .chat-md-streaming {
-  white-space: pre-wrap;
   font-size: 14px;
   line-height: 1.45;
   color: var(--text-primary);
@@ -1273,7 +1275,7 @@ summary:focus-visible,
   height: var(--ds-touch-min);
   padding: 0;
   border: none;
-  border-radius: 50%;
+  border-radius: 50%;                  /* 32x32 Quadrate -> Kreis */
   cursor: pointer;
   flex-shrink: 0;
   transition: background var(--ds-motion-fast), color var(--ds-motion-fast),
@@ -1306,14 +1308,19 @@ summary:focus-visible,
   50% { opacity: 0.55; }
 }
 
-/* Phase 5: Send-Button teilt sich --ds-btn-primary-* mit dem Modal-Save. */
+/* Send-Button als Brand-CTA in Cyan; folgt der Designsystem-Referenz
+ * docs/ui-design/doubleslash-chat-design-states-a11y.html (.ds-send) und
+ * dem Cyan-Token-Kommentar in tokens.css ("Send-BG"). Hover wechselt auf
+ * --ds-blue (Clickable-Blue), damit der Hover-Kontrast > 4,5:1 bleibt.
+ * Kreis-Form (50% via gemeinsamer Mic/Send-Definition) — passt zum
+ * Pill-Look der uebrigen Buttons (--btn-radius: 999px). */
 #btn-chat-send {
-  background: var(--ds-btn-primary-bg);
-  color: var(--ds-btn-primary-fg);
+  background: var(--ds-cyan);
+  color: var(--ds-white);
 }
 
 #btn-chat-send:hover:not(:disabled) {
-  background: var(--ds-btn-primary-bg-hover);
+  background: var(--ds-blue);
 }
 
 #btn-chat-send:active:not(:disabled) {
@@ -1321,7 +1328,8 @@ summary:focus-visible,
 }
 
 #btn-chat-send:disabled {
-  opacity: 0.35;
+  background: var(--ds-grey-divider);
+  color: var(--ds-grey-muted);
   cursor: not-allowed;
 }
 
@@ -1422,11 +1430,10 @@ summary:focus-visible,
   color: var(--ds-error);
 }
 
-/* Phase 5 D: Sekundaer-Button bekommt einen sichtbaren Default-Border in
- * --ds-grey-divider. Vorher nur transparenter Border, der erst bei :hover
- * sichtbar wurde — das entspricht dem doubleSlash-Look (Welcome-CTA hat das
- * gleiche Pattern). Fokus-Ring kommt aus dem globalen :focus-visible-Block.
- */
+/* Sekundaer-Button: Default-Border in --ds-grey-divider, Hover wechselt
+ * auf Cyan-Border + leichten Cyan-Tint — gleiches Pattern wie die .chip-
+ * Quick-Actions in der Designsystem-Referenz (Welcome-CTA / chat-states).
+ * Fokus-Ring kommt aus dem globalen :focus-visible-Block. */
 .btn-secondary {
   padding: var(--btn-padding-y) var(--btn-padding-x);
   font-size: var(--btn-font-size);
@@ -1442,8 +1449,12 @@ summary:focus-visible,
 }
 
 .btn-secondary:hover:not(:disabled) {
-  border-color: var(--btn-secondary-border-hover);
+  border-color: var(--ds-cyan);
   background: color-mix(in srgb, var(--ds-cyan) 4%, transparent);
+}
+
+.btn-secondary:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .btn-secondary:disabled {

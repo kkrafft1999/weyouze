@@ -38,11 +38,15 @@
   --ds-mic-recording: #DC2626;        /* 4,8:1 auf #FFF */
   --ds-mic-recording-bg: rgba(220, 38, 38, 0.12);
 
-  /* ── Primary-Button (Phase 5: aus styles.css herausgezogen). Light: Schwarz
-   *    mit Weiss; Dark: Hellgrau mit Dunkelgrau. So muss es nicht je Komponente
-   *    neu definiert werden (#chat-send teilt sich diese Tokens). */
-  --ds-btn-primary-bg: #111111;
-  --ds-btn-primary-bg-hover: #000000;
+  /* ── Primary-Button: Brand-CTA in --ds-blue (Clickable-Blue, 5:1 mit Weiss).
+   *    Bewusst NICHT --ds-cyan, weil Cyan auf Weiss nur ~2,5:1 ergibt und
+   *    damit die Designsystem-Regel "Cyan nicht als Schrift-/Pill-BG"
+   *    sowie WCAG-AA fuer Text verletzt. Der Chat-Send-Button verwendet
+   *    --ds-cyan, weil dort nur ein Icon liegt (graphical object, 3:1
+   *    Schwellwert). Hover wird per color-mix() um 20% Schwarz/Weiss
+   *    abgedunkelt/aufgehellt — passt sich automatisch an --ds-blue an. */
+  --ds-btn-primary-bg: var(--ds-blue);
+  --ds-btn-primary-bg-hover: color-mix(in srgb, var(--ds-blue) 80%, black);
   --ds-btn-primary-fg: var(--ds-white);
 
   /* ── Typografie ───────────────────────────────────────────────────────── */
@@ -113,8 +117,10 @@
   --ds-mic-recording: #F87171;
   --ds-mic-recording-bg: rgba(248, 113, 113, 0.15);
 
-  --ds-btn-primary-bg: #F5F5F5;
-  --ds-btn-primary-bg-hover: var(--ds-white);
+  /* Im Dark-Mode wird --ds-blue heller (#3FB8E5) — fuer guten Kontrast (~7:1)
+   * den FG dunkel (#1E1E1E) statt weiss; Hover hellt weiter auf statt ab. */
+  --ds-btn-primary-bg: var(--ds-blue);
+  --ds-btn-primary-bg-hover: color-mix(in srgb, var(--ds-blue) 80%, white);
   --ds-btn-primary-fg: #1E1E1E;
 }
 
