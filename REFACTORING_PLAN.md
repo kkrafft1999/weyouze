@@ -170,3 +170,74 @@ Wenn eine Phase deutlich länger braucht als hier veranschlagt, ist das ein Sign
   - Teste zusätzlich Voice Input, zuletzt geöffnete Ordner, Chat-Historie, Provider-Wechsel und Model-Loading.
   - Verifiziere, dass die Persistenz-Dateien aus Phase 0.3 unverändert weitergelesen werden — also dass ein vor dem Refactoring gespeicherter API-Key und eine bestehende Chat-Historie nach dem Refactoring noch da sind.
   - Führe `npm run make` aus, um sicherzustellen, dass der Electron-Forge Build-Prozess mit der neuen Struktur erfolgreich durchläuft.
+
+---
+
+## Anhang A: IPC-Inventur (Stand vor Refactoring)
+
+Quelle: `main.js`, `preload.js`. Diese Liste ist die Diff-Checkliste für Phase 5.3 — jeder Kanal muss nach dem Refactoring entweder unverändert existieren oder ein dokumentiertes Mapping haben.
+
+### A.1 Request/Response (`ipcMain.handle` ↔ `ipcRenderer.invoke`)
+
+| Kanal | Main-Handler | Preload-API (`window.electronAPI.*`) |
+| --- | --- | --- |
+| `dialog:openFolder` | `main.js` | `openFolder()` |
+| `fs:readDirectory` | `main.js` | `readDirectory(dirPath)` |
+| `fs:readFile` | `main.js` | `readFile(filePath)` |
+| `fs:moveItem` | `main.js` | `moveItem(sourcePath, destDir)` |
+| `settings:getLLMState` | `main.js` | `getLLMState()` |
+| `settings:setProvider` | `main.js` | `setProvider(payload)` |
+| `settings:clearProvider` | `main.js` | `clearProvider(providerId)` |
+| `settings:setActiveProvider` | `main.js` | `setActiveProvider(providerId)` |
+| `settings:listModels` | `main.js` | `listModels(payload)` |
+| `settings:getLastFolder` | `main.js` | `getLastFolder()` |
+| `settings:setLastFolder` | `main.js` | `setLastFolder(folderPath)` |
+| `settings:getFolderHistory` | `main.js` | `getFolderHistory()` |
+| `settings:getUIPrefs` | `main.js` | `getUIPrefs()` |
+| `settings:setUIPrefs` | `main.js` | `setUIPrefs(partial)` |
+| `chatHistory:get` | `main.js` | `getChatHistory(workspaceRoot)` |
+| `chatHistory:upsert` | `main.js` | `upsertChatSession(session)` |
+| `chatHistory:delete` | `main.js` | `deleteChatSession(id)` |
+| `chatHistory:setActive` | `main.js` | `setActiveChatId(workspaceRoot, id)` |
+| `openai:chat` | `main.js` | `chat(messages, options)` |
+| `whisper:transcribe` | `main.js` | `transcribeAudio(audioBuffer)` |
+
+### A.2 Push-Kanäle (`webContents.send` → `ipcRenderer.on`)
+
+Diese Kanäle werden **nicht** über `invoke` gerufen, sondern aktiv vom Main an den Renderer gepusht. Beim Refactoring leicht zu übersehen.
+
+| Kanal | Main-Sender | Preload-Subscriber |
+| --- | --- | --- |
+| `openai:chat:delta` | `main.js` (Streaming-Callback) | `onChatDelta(callback) → unsubscribe` |
+| `openai:chat:tool-line` | `main.js` (Tool-Use-Loop) | `onChatToolLine(callback) → unsubscribe` |
+| `openai:chat:progress` | `main.js` (Phase / Reasoning) | `onChatProgress(callback) → unsubscribe` |
+
+Hinweis: Die Preload-Wrapper geben jeweils eine `unsubscribe`-Funktion zurück, die den `ipcRenderer.removeListener`-Aufruf macht. Dieses Verhalten muss erhalten bleiben, sonst leakt der Renderer Listener bei jedem Chat-Send.
+
+### A.3 Sonstige Bridge-APIs
+
+Über `contextBridge.exposeInMainWorld('electronAPI', …)` ist zusätzlich freigegeben (kein eigener IPC-Kanal, aber Teil der Renderer-API):
+
+- `openExternal(url)` — direkt im Preload, ruft `shell.openExternal` mit Whitelist auf `http(s)`.
+
+---
+
+## Anhang B: Persistenz-Inventur (Stand vor Refactoring)
+
+Alle Dateien liegen unter `app.getPath('userData')` (siehe `main.js`). Format und Schlüssel **dürfen sich beim Refactoring nicht ändern**, sonst verlieren bestehende Nutzer ihre Daten.
+
+| Datei | Konstante in `main.js` | Inhalt | Verschlüsselt? |
+| --- | --- | --- | --- |
+| `llm-config.json` | `LLM_CONFIG_FILENAME` | `{ version: 2, activeProvider, providers: { <id>: { apiKeyEnc?, baseUrl?, model } } }` | `providers[*].apiKeyEnc` ist `safeStorage.encryptString(...).toString('base64')` |
+| `openai-config.json` | `LEGACY_OPENAI_CONFIG_FILENAME` | **Legacy:** `{ apiKeyEnc, model }` aus der Single-Provider-Ära. Wird beim ersten Lesen automatisch in `llm-config.json` migriert (`readLLMConfig`). Datei selbst bleibt liegen. | `apiKeyEnc` wie oben |
+| `last-folder.json` | `LAST_FOLDER_FILENAME` | `{ path: string }` — zuletzt geöffneter Ordner | nein |
+| `folder-history.json` | `FOLDER_HISTORY_FILENAME` | `{ paths: string[] }` — max. `MAX_FOLDER_HISTORY` (10) | nein |
+| `ui-preferences.json` | `UI_PREFS_FILENAME` | `{ contentPaneVisible: boolean }` | nein |
+| `chat-history.json` | `CHAT_HISTORY_FILENAME` | `{ version: 2, activeByWorkspace: { [wsKey]: id }, sessions: [{ id, workspaceRoot, title, updatedAt, messages }] }`; max. `MAX_CHAT_SESSIONS` (200). Workspace-Schlüssel `__none__` für globale Sessions ohne Ordner. | nein |
+
+**Worauf Phase 5.4 achten muss:**
+
+- Ein vor dem Refactoring gespeicherter API-Key muss nach dem Refactoring weiterhin entschlüsselbar sein. `safeStorage` ist OS-gebunden — als simpelster Test eine bestehende `llm-config.json` einmal vorher lesen, dann nach dem Refactoring `settings:getLLMState` im Renderer prüfen (`hasKey: true`).
+- `chat-history.json` Version 2 muss weitergelesen werden, inklusive `activeByWorkspace`-Map.
+- Die Legacy-Migrations­routine darf nicht doppelt laufen oder verlorengehen — sonst wird ein Nutzer mit nur `openai-config.json` "leer" gestartet.
+- Persistenz-Schlüssel und Sentinel-Werte (`NO_WORKSPACE_KEY = '__none__'`, `version: 2`) bleiben Konstanten — beim Verschieben in `storage-service.js` als gleiche Strings übernehmen.
