@@ -11,22 +11,24 @@ Die App ist sauber strukturiert (Main/Preload/Renderer klar getrennt, IPC zentra
 
 ## Priorisierung – Übersicht
 
-| #  | Schwere   | Bereich       | Befund                                                                                       |
-|----|-----------|---------------|----------------------------------------------------------------------------------------------|
-| 1  | Hoch      | Electron      | `sandbox: false` im Renderer trotz aktiver `contextIsolation`                                 |
-| 2  | Hoch      | Electron      | Keine Navigation-/Window-Open-Guards (`will-navigate`, `setWindowOpenHandler`)                 |
-| 3  | Hoch      | XSS           | `DOMPurify`-Konfiguration zu schwach (kein `target`/`rel`-Hardening, keine URI-Whitelist)      |
-| 4  | Hoch      | IPC           | `fs:readDirectory`, `fs:readFile`, `fs:moveItem` ohne Workspace-Bindung                        |
-| 5  | Hoch      | CSP           | CSP erlaubt `style-src 'unsafe-inline'`, kein `connect-src`/`img-src`/`script-src`             |
-| 6  | Mittel    | Daten         | `chat-history.json` enthält ganze Tool-Outputs / Reasoning unverschlüsselt                     |
-| 7  | Mittel    | TLS           | Globaler `Insecure-Dispatcher` in Ollama bleibt Prozess-Lifetime erhalten                      |
-| 8  | Mittel    | Atomicity     | Keine atomaren Writes (`writeFile` ohne tmp-rename) für `llm-config`, `chat-history`           |
-| 9  | Mittel    | Wartbarkeit   | `src/renderer/app.js` mit 2 227 Zeilen — Tree, Chat, Settings, IPC, Voice in einer Datei       |
-| 10 | Mittel    | Robustheit    | Race-Conditions im Chat-History-Store (`read–modify–write` ohne Lock)                          |
-| 11 | Niedrig   | UX/A11y       | `ResizeObserver` ohne `disconnect()`; `input`-Listener ohne Debounce                           |
-| 12 | Niedrig   | Provider      | Whisper hartkodiert Sprache `de`, Modell `whisper-1`; keine Konfigurierbarkeit                 |
-| 13 | Niedrig   | Build         | `package.json` hat keinen `engines`-Block, kein Lint-/Test-Script                              |
-| 14 | Niedrig   | Code-Stil     | `safeJsonParse` 3× dupliziert; magische Limits hartkodiert                                     |
+
+| #   | Schwere | Bereich     | Befund                                                                                    |
+| --- | ------- | ----------- | ----------------------------------------------------------------------------------------- |
+| 1   | Hoch    | Electron    | `sandbox: false` im Renderer trotz aktiver `contextIsolation`                             |
+| 2   | Hoch    | Electron    | Keine Navigation-/Window-Open-Guards (`will-navigate`, `setWindowOpenHandler`)            |
+| 3   | Hoch    | XSS         | `DOMPurify`-Konfiguration zu schwach (kein `target`/`rel`-Hardening, keine URI-Whitelist) |
+| 4   | Hoch    | IPC         | `fs:readDirectory`, `fs:readFile`, `fs:moveItem` ohne Workspace-Bindung                   |
+| 5   | Hoch    | CSP         | CSP erlaubt `style-src 'unsafe-inline'`, kein `connect-src`/`img-src`/`script-src`        |
+| 6   | Mittel  | Daten       | `chat-history.json` enthält ganze Tool-Outputs / Reasoning unverschlüsselt                |
+| 7   | Mittel  | TLS         | Globaler `Insecure-Dispatcher` in Ollama bleibt Prozess-Lifetime erhalten                 |
+| 8   | Mittel  | Atomicity   | Keine atomaren Writes (`writeFile` ohne tmp-rename) für `llm-config`, `chat-history`      |
+| 9   | Mittel  | Wartbarkeit | `src/renderer/app.js` mit 2 227 Zeilen — Tree, Chat, Settings, IPC, Voice in einer Datei  |
+| 10  | Mittel  | Robustheit  | Race-Conditions im Chat-History-Store (`read–modify–write` ohne Lock)                     |
+| 11  | Niedrig | UX/A11y     | `ResizeObserver` ohne `disconnect()`; `input`-Listener ohne Debounce                      |
+| 12  | Niedrig | Provider    | Whisper hartkodiert Sprache `de`, Modell `whisper-1`; keine Konfigurierbarkeit            |
+| 13  | Niedrig | Build       | `package.json` hat keinen `engines`-Block, kein Lint-/Test-Script                         |
+| 14  | Niedrig | Code-Stil   | `safeJsonParse` 3× dupliziert; magische Limits hartkodiert                                |
+
 
 ---
 
@@ -78,7 +80,7 @@ return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
 
 Der LLM-Output ist **untrusted** (Prompt-Injection via Tool-Output, Dateiinhalt, Web-Suche). Aktuell:
 
-- Keine Whitelist für Link-Schemata → `data:text/html,…`, `vbscript:`, `javascript:` werden je nach DOMPurify-Version geblockt, aber **`mailto:`, `file:`, `sms:` bleiben offen**.
+- Keine Whitelist für Link-Schemata → `data:text/html,…`, `vbscript:`, `javascript:` werden je nach DOMPurify-Version geblockt, aber `**mailto:`, `file:`, `sms:` bleiben offen**.
 - Keine forced `target="_blank"` + `rel="noopener noreferrer"` — Tabnabbing möglich, falls in Zukunft `BrowserWindow`-Öffnen erlaubt wird.
 - `<form>`, `<iframe>` (in HTML-Profile streng genommen geblockt, aber besser explizit forbidden).
 
@@ -131,9 +133,9 @@ Anders als die LLM-Tools (`runWorkspaceTool` mit `resolveWorkspacePath`) prüfen
       content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self' blob:;">
 ```
 
-- Kein **`connect-src`** → ein injizierter `fetch()` aus dem Renderer könnte zu beliebigen Hosts gehen. Der Renderer braucht eigentlich gar kein direktes Netzwerk (alle API-Calls laufen über IPC im Main).
-- Kein **`script-src`** → fällt auf `default-src 'self'` zurück (gut), aber explizit setzen ist robuster gegen versehentliche `default-src`-Änderungen.
-- Kein **`img-src`** → Markdown mit `<img src="https://attacker/..">` lädt remote Pixel (Tracking).
+- Kein `**connect-src**` → ein injizierter `fetch()` aus dem Renderer könnte zu beliebigen Hosts gehen. Der Renderer braucht eigentlich gar kein direktes Netzwerk (alle API-Calls laufen über IPC im Main).
+- Kein `**script-src**` → fällt auf `default-src 'self'` zurück (gut), aber explizit setzen ist robuster gegen versehentliche `default-src`-Änderungen.
+- Kein `**img-src**` → Markdown mit `<img src="https://attacker/..">` lädt remote Pixel (Tracking).
 - `style-src 'unsafe-inline'` ist nötig für die Inline-`hidden`-Klasse usw., aber besser via Klassen.
 
 **Fix:**
@@ -164,6 +166,7 @@ await fs.writeFile(getChatHistoryPath(), JSON.stringify(store), 'utf8');
 ```
 
 Der Chat-Verlauf enthält:
+
 - **Volle Inhalte** der Konversation (User-Prompts, LLM-Antworten, Reasoning).
 - Tool-Outputs mit Dateiinhalten — also potenziell Source-Code, `.env`-Inhalte, Zugangsdaten, die der LLM via `read_file_text` gesehen hat.
 
@@ -218,14 +221,16 @@ async function writeJsonAtomic(target, data) {
 
 In einer Datei: Tree-Rendering, Chat-UI, Settings-Modal, History-Drawer, Voice-Input, IPC-Subscriptions, State-Mutations. Konkret refactorierbare Schnittachsen:
 
-| Zeilen          | Verantwortung           | Vorschlag                                         |
-|-----------------|-------------------------|---------------------------------------------------|
-| ≈ 260–600       | Tree                    | `components/FileTree.js` (existiert mit 11 Z. — leer) |
-| ≈ 900–1 000     | Chat-Verlauf-Drawer     | `components/ChatHistoryDrawer.js`                 |
-| ≈ 1 070–1 220   | Modell-Picker           | `components/ChatModelPicker.js`                   |
-| ≈ 1 350–1 530   | Chat-Stream + Render    | `components/ChatStream.js`                        |
-| ≈ 1 590–2 000   | Settings + Add-Model    | `components/SettingsModal.js`                     |
-| ≈ 700–880       | Voice/Whisper           | `voice/WhisperRecorder.js`                        |
+
+| Zeilen        | Verantwortung        | Vorschlag                                             |
+| ------------- | -------------------- | ----------------------------------------------------- |
+| ≈ 260–600     | Tree                 | `components/FileTree.js` (existiert mit 11 Z. — leer) |
+| ≈ 900–1 000   | Chat-Verlauf-Drawer  | `components/ChatHistoryDrawer.js`                     |
+| ≈ 1 070–1 220 | Modell-Picker        | `components/ChatModelPicker.js`                       |
+| ≈ 1 350–1 530 | Chat-Stream + Render | `components/ChatStream.js`                            |
+| ≈ 1 590–2 000 | Settings + Add-Model | `components/SettingsModal.js`                         |
+| ≈ 700–880     | Voice/Whisper        | `voice/WhisperRecorder.js`                            |
+
 
 `components/FileTree.js` und `components/SidebarResizer.js` zeigen, dass das Modul-Pattern bereits etabliert ist — `FileTree.js` ist allerdings nur ein 11-Zeilen-Stub (`src/renderer/components/FileTree.js:1`).
 
@@ -328,3 +333,4 @@ Sauber — keine Beanstandung. Anmerkung: `notifications` und `clipboard-read` w
 2. **Diese Woche (½ Tag):** FS-Handler an Workspace binden (#4), atomare Writes (#8), Tests für reine Funktionen (#13).
 3. **Nächster Sprint:** `app.js` aufteilen (#9), Chat-Mutex (#10), Chat-Verlauf optional verschlüsseln (#6).
 4. **Nice-to-have:** Whisper-Sprache aus `appLocale` (#12), Code-Duplikate konsolidieren (#14), Default-Modelle aktualisieren (#16).
+
