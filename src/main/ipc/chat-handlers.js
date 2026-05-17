@@ -35,6 +35,17 @@ function summarizeToolCall(toolName, args) {
   return truncateToolLabel(toolName || 'tool');
 }
 
+function resolveToolRoundLimit(uiPrefs, mainDefault) {
+  const MIN = 1;
+  const MAX_CAP = 500;
+  let n =
+    typeof uiPrefs?.maxToolRounds === 'number' && Number.isFinite(uiPrefs.maxToolRounds)
+      ? Math.round(uiPrefs.maxToolRounds)
+      : mainDefault;
+  if (!Number.isFinite(n)) n = mainDefault;
+  return Math.min(MAX_CAP, Math.max(MIN, n));
+}
+
 function emitChatProgress(webContents, PUSH, payload) {
   if (webContents && !webContents.isDestroyed()) {
     webContents.send(PUSH.CHAT_PROGRESS, payload);
@@ -158,6 +169,7 @@ function registerChatHandlers({
     const toolTrace = [];
     const wc = event.sender;
     const callbacks = makeStreamCallbacks(wc, PUSH);
+    const toolRoundLimit = resolveToolRoundLimit(uiPrefsAll, maxToolRounds);
 
     const emitToolLine = (line) => {
       if (wc && !wc.isDestroyed()) {
@@ -166,7 +178,7 @@ function registerChatHandlers({
     };
 
     try {
-      for (let round = 0; round < maxToolRounds; round += 1) {
+      for (let round = 0; round < toolRoundLimit; round += 1) {
         emitChatProgress(wc, PUSH, { type: 'phase', phase: 'waiting' });
         callbacks.reset();
 
@@ -244,7 +256,12 @@ function registerChatHandlers({
         };
       }
       emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-      return { error: 'Zu viele Tool-Aufrufe in Folge.', code: 'TOOL_LIMIT' };
+      return {
+        error:
+          `Zu viele Tool-Runden (aktuell ${toolRoundLimit}). ` +
+          'Erhöhe das Limit unter Einstellungen › Allgemein oder formuliere die Frage enger.',
+        code: 'TOOL_LIMIT',
+      };
     } catch (err) {
       emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
       return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };

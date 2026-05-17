@@ -247,6 +247,7 @@ function registerSettingsHandlers({
       typeof uiPatch.baseSystemPrompt === 'string'
       || uiPatch.appLocale === 'en'
       || uiPatch.appLocale === 'de'
+      || typeof uiPatch.maxToolRounds === 'number'
     ) {
       const out = { ...(await storage.readUIPrefs()) };
       if (typeof uiPatch.baseSystemPrompt === 'string') {
@@ -254,6 +255,10 @@ function registerSettingsHandlers({
       }
       if (uiPatch.appLocale === 'en' || uiPatch.appLocale === 'de') {
         out.appLocale = uiPatch.appLocale;
+      }
+      if (typeof uiPatch.maxToolRounds === 'number' && Number.isFinite(uiPatch.maxToolRounds)) {
+        const clamped = Math.min(500, Math.max(1, Math.round(uiPatch.maxToolRounds)));
+        out.maxToolRounds = clamped;
       }
       await storage.writeUIPrefs(out);
     }
@@ -321,6 +326,10 @@ function registerSettingsHandlers({
     }
     if (patch.appLocale === 'en' || patch.appLocale === 'de') {
       out.appLocale = patch.appLocale;
+    }
+    if (typeof patch.maxToolRounds === 'number' && Number.isFinite(patch.maxToolRounds)) {
+      const clamped = Math.min(500, Math.max(1, Math.round(patch.maxToolRounds)));
+      out.maxToolRounds = clamped;
     }
     await storage.writeUIPrefs(out);
     return out;
