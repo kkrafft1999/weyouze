@@ -2,9 +2,10 @@ const openai = require('./openai');
 const anthropic = require('./anthropic');
 const google = require('./google');
 const ollama = require('./ollama');
+const mlxLm = require('./mlx-lm');
 
-const PROVIDERS = { openai, anthropic, google, ollama };
-const PROVIDER_ORDER = ['openai', 'anthropic', 'google', 'ollama'];
+const PROVIDERS = { openai, anthropic, google, ollama, 'mlx-lm': mlxLm };
+const PROVIDER_ORDER = ['openai', 'anthropic', 'google', 'ollama', 'mlx-lm'];
 
 function getProvider(id) {
   return PROVIDERS[id] || null;

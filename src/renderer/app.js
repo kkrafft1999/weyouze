@@ -88,6 +88,7 @@ const btnSettingsClose = document.getElementById('btn-settings-close');
 const btnSettingsFooterClose = document.getElementById('btn-settings-footer-close');
 const inputGlobalSystemPrompt = document.getElementById('input-global-system-prompt');
 const selectAppLocale = document.getElementById('select-app-locale');
+const inputMaxToolRounds = document.getElementById('input-max-tool-rounds');
 const modalEncryptionWarning = document.getElementById('modal-encryption-warning');
 const modalSaveError = document.getElementById('modal-save-error');
 
@@ -95,6 +96,8 @@ let settingsDraftPresets = [];
 let settingsDraftActivePresetId = null;
 let settingsCredentialDraft = {};
 let chatModelMenuOpen = false;
+
+const DEFAULT_MAX_TOOL_ROUNDS = 14;
 
 initTheme({ themeToggle, iconSun, iconMoon });
 initSidebarResizer({ divider, sidebar, workspace, chatDivider, chatPanel });
@@ -1912,9 +1915,15 @@ async function openSettingsModal() {
     const up = await api.getUIPrefs();
     inputGlobalSystemPrompt.value = typeof up.baseSystemPrompt === 'string' ? up.baseSystemPrompt : '';
     selectAppLocale.value = up.appLocale === 'en' ? 'en' : 'de';
+    const mtr =
+      typeof up.maxToolRounds === 'number' && Number.isFinite(up.maxToolRounds)
+        ? up.maxToolRounds
+        : DEFAULT_MAX_TOOL_ROUNDS;
+    if (inputMaxToolRounds) inputMaxToolRounds.value = String(mtr);
   } catch {
     inputGlobalSystemPrompt.value = '';
     selectAppLocale.value = 'de';
+    if (inputMaxToolRounds) inputMaxToolRounds.value = String(DEFAULT_MAX_TOOL_ROUNDS);
   }
   renderDraftPresetList();
   renderProviderSelect();
@@ -2068,6 +2077,10 @@ async function commitSettingsFromModal() {
       uiPrefs: {
         baseSystemPrompt: inputGlobalSystemPrompt.value || '',
         appLocale: selectAppLocale.value === 'en' ? 'en' : 'de',
+        maxToolRounds: (() => {
+          const n = parseInt(inputMaxToolRounds?.value || '', 10);
+          return Number.isFinite(n) ? n : DEFAULT_MAX_TOOL_ROUNDS;
+        })(),
       },
     });
     if (!res?.ok) {

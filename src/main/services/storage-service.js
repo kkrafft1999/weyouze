@@ -276,10 +276,15 @@ function createStorageService({
         baseSystemPrompt = data.baseSystemPrompt;
       }
       const appLocale = data.appLocale === 'en' ? 'en' : 'de';
+      let maxToolRounds;
+      if (typeof data.maxToolRounds === 'number' && Number.isFinite(data.maxToolRounds)) {
+        maxToolRounds = Math.round(data.maxToolRounds);
+      }
       return {
         contentPaneVisible: data.contentPaneVisible !== false,
         baseSystemPrompt,
         appLocale,
+        ...(typeof maxToolRounds === 'number' ? { maxToolRounds } : {}),
       };
     } catch {
       return { contentPaneVisible: true, baseSystemPrompt: '', appLocale: 'de' };

@@ -324,6 +324,23 @@
               </select>
               <p class="modal-hint">Steuert <code lang="en">lang</code> der App-Oberfläche; Übersetzungen werden nach und nach ergänzt.</p>
             </div>
+            <div class="modal-field-group">
+              <div class="modal-field-label eyebrow-row">Max. Tool-Runden</div>
+              <label class="visually-hidden" for="input-max-tool-rounds">Maximale Tool-Runden</label>
+              <input
+                type="number"
+                id="input-max-tool-rounds"
+                class="modal-input"
+                min="1"
+                max="500"
+                step="1"
+                inputmode="numeric"
+                aria-describedby="hint-max-tool-rounds"
+              />
+              <p id="hint-max-tool-rounds" class="modal-hint">
+                Wie oft das Modell hintereinander Datei-/Ordner-Tools aufrufen darf, bevor der Chat abbricht (Schutz vor Endlosschleifen). Standard 14, höchstens 500.
+              </p>
+            </div>
           </section>
         </div>
       </div>
