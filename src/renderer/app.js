@@ -205,6 +205,7 @@ const chatHistory = initChatHistoryDrawer({
   renderChatMessages: chatStream.renderChatMessages,
   updateChatChrome: () => modelPicker.updateChatChrome(),
   onInputChanged: syncChatInputHeight,
+  setChatTokenUsage: (usage) => chatStream.setChatTokenUsage(usage),
   resetChatTokenUsage: () => chatStream.resetChatTokenUsage(),
   onNewChatStarted: async () => {
     await chatStream.startNewChat();

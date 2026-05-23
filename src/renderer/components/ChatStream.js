@@ -104,6 +104,19 @@ function mergeChatTokenUsage(target, usage) {
   target.total += total;
 }
 
+function normalizeChatTokenUsage(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { prompt: 0, completion: 0, total: 0 };
+  }
+  const prompt = Math.max(0, Math.round(Number(raw.prompt) || 0));
+  const completion = Math.max(0, Math.round(Number(raw.completion) || 0));
+  let total = Math.max(0, Math.round(Number(raw.total) || 0));
+  if (total === 0 && (prompt > 0 || completion > 0)) {
+    total = prompt + completion;
+  }
+  return { prompt, completion, total };
+}
+
 function formatChatTokenUsage(total) {
   const n = Math.max(0, Math.round(Number(total) || 0));
   if (n < 1000) {
@@ -140,9 +153,13 @@ export function initChatStream({
   activeProviderConfigured,
   syncLiveDot,
 }) {
-  function resetChatTokenUsage() {
-    appStore.chatTokenUsage = { prompt: 0, completion: 0, total: 0 };
+  function setChatTokenUsage(usage) {
+    appStore.chatTokenUsage = normalizeChatTokenUsage(usage);
     syncChatTokenUsageDisplay();
+  }
+
+  function resetChatTokenUsage() {
+    setChatTokenUsage({ prompt: 0, completion: 0, total: 0 });
   }
 
   function syncChatTokenUsageDisplay() {
@@ -354,6 +371,7 @@ export function initChatStream({
       title,
       updatedAt: Date.now(),
       messages,
+      tokenUsage: { ...appStore.chatTokenUsage },
     });
     await api.setActiveChatId(appStore.currentChatWorkspace, appStore.currentChatId);
   }
@@ -371,7 +389,7 @@ export function initChatStream({
         appStore.currentChatId = s.id;
         appStore.currentChatWorkspace = workspaceRoot || null;
         appStore.chatMessages = normalizeLoadedMessages(s.messages);
-        resetChatTokenUsage();
+        setChatTokenUsage(s.tokenUsage);
         chatInput.value = '';
         onInputChanged();
         renderChatMessages();
@@ -643,5 +661,6 @@ export function initChatStream({
     sendChatMessage,
     syncChatSendButton,
     resetChatTokenUsage,
+    setChatTokenUsage,
   };
 }

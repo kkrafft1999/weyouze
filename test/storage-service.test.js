@@ -113,6 +113,29 @@ test('normalizeSessionForStore strips invalid roles and caps title', () => {
   assert.equal(session.messages[1].reasoningText, 'think');
 });
 
+test('normalizeSessionForStore persists tokenUsage totals', () => {
+  const storage = makeStorage('/tmp/unused');
+  const session = storage.normalizeSessionForStore({
+    id: 's1',
+    title: 'Chat',
+    updatedAt: 42,
+    workspaceRoot: '/tmp/ws',
+    messages: [{ role: 'user', content: 'hi' }],
+    tokenUsage: { prompt: 100, completion: 50, total: 150 },
+  });
+  assert.deepEqual(session.tokenUsage, { prompt: 100, completion: 50, total: 150 });
+});
+
+test('normalizeSessionForStore defaults missing tokenUsage to zero', () => {
+  const storage = makeStorage('/tmp/unused');
+  const session = storage.normalizeSessionForStore({
+    id: 's1',
+    title: 'Chat',
+    messages: [{ role: 'user', content: 'hi' }],
+  });
+  assert.deepEqual(session.tokenUsage, { prompt: 0, completion: 0, total: 0 });
+});
+
 test('writeJsonAtomic keeps previous file on interrupted write simulation', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-storage-'));
   const storage = makeStorage(tmpDir);

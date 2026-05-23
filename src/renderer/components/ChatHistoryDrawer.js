@@ -12,6 +12,7 @@ export function initChatHistoryDrawer({
   renderChatMessages,
   updateChatChrome,
   onInputChanged,
+  setChatTokenUsage,
   resetChatTokenUsage,
   onNewChatStarted,
 }) {
@@ -93,7 +94,7 @@ export function initChatHistoryDrawer({
     appStore.currentChatId = id;
     appStore.currentChatWorkspace = s.workspaceRoot || null;
     appStore.chatMessages = normalizeLoadedMessages(s.messages);
-    resetChatTokenUsage?.();
+    setChatTokenUsage?.(s.tokenUsage);
     onInputChanged();
     await api.setActiveChatId(appStore.currentChatWorkspace, id);
     renderChatMessages();

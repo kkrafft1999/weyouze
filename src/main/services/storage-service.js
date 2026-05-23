@@ -407,6 +407,19 @@ function createStorageService({
     return out;
   }
 
+  function normalizeTokenUsageForStore(raw) {
+    if (!raw || typeof raw !== 'object') {
+      return { prompt: 0, completion: 0, total: 0 };
+    }
+    const prompt = Math.max(0, Math.round(Number(raw.prompt) || 0));
+    const completion = Math.max(0, Math.round(Number(raw.completion) || 0));
+    let total = Math.max(0, Math.round(Number(raw.total) || 0));
+    if (total === 0 && (prompt > 0 || completion > 0)) {
+      total = prompt + completion;
+    }
+    return { prompt, completion, total };
+  }
+
   function normalizeSessionForStore(s) {
     if (!s || typeof s.id !== 'string' || !s.id.trim()) return null;
     const messages = sanitizeChatMessagesForStore(s.messages);
@@ -418,6 +431,7 @@ function createStorageService({
       title: titleRaw ? titleRaw.slice(0, 200) : 'Chat',
       updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : Date.now(),
       messages,
+      tokenUsage: normalizeTokenUsageForStore(s.tokenUsage),
     };
   }
 
