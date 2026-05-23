@@ -1,6 +1,7 @@
-function registerWhisperHandlers({ ipcMain, whisperService, REQ }) {
+function registerWhisperHandlers({ ipcMain, whisperService, storage, REQ }) {
   ipcMain.handle(REQ.WHISPER_TRANSCRIBE, async (_event, audioBuffer) => {
-    return whisperService.transcribeAudio(audioBuffer);
+    const uiPrefs = await storage.readUIPrefs();
+    return whisperService.transcribeAudio(audioBuffer, { language: uiPrefs.appLocale });
   });
 }
 

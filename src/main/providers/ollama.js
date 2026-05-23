@@ -1,5 +1,5 @@
 const { Agent } = require('undici');
-const { iterStreamLines, readErrorMessage } = require('./stream-helpers');
+const { iterStreamLines, readErrorMessage, safeJsonParse } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'http://localhost:11434';
 
@@ -9,6 +9,8 @@ const DEFAULT_BASE = 'http://localhost:11434';
 // Analog zum Go-Referenz-CLI (Flag --insecure) fuer Server mit selbstsigniertem
 // oder intern signiertem Zertifikat (z.B. https://ollama.intern.example).
 let _insecureDispatcher = null;
+const _warnedInsecureUrls = new Set();
+
 function getInsecureDispatcher() {
   if (!_insecureDispatcher) {
     _insecureDispatcher = new Agent({ connect: { rejectUnauthorized: false } });
@@ -16,9 +18,21 @@ function getInsecureDispatcher() {
   return _insecureDispatcher;
 }
 
+function destroyInsecureDispatcher() {
+  if (_insecureDispatcher) {
+    _insecureDispatcher.close?.();
+    _insecureDispatcher.destroy?.();
+    _insecureDispatcher = null;
+  }
+}
+
 function dispatcherFor(url, config) {
   if (!config?.insecureTls) return undefined;
   if (!url.startsWith('https://')) return undefined;
+  if (!_warnedInsecureUrls.has(url)) {
+    _warnedInsecureUrls.add(url);
+    console.warn(`[ollama] TLS-Zertifikatsprüfung deaktiviert für ${url}`);
+  }
   return getInsecureDispatcher();
 }
 
@@ -57,11 +71,6 @@ async function listModels(config) {
     .filter(Boolean)
     .sort((a, b) => a.id.localeCompare(b.id));
   return { models };
-}
-
-function safeJsonParse(s, fallback = {}) {
-  if (typeof s !== 'string' || !s.trim()) return fallback;
-  try { return JSON.parse(s); } catch { return fallback; }
 }
 
 function translateMessagesToOllama(messages) {
@@ -199,4 +208,7 @@ module.exports = {
   apiBase: DEFAULT_BASE,
   listModels,
   streamChatRound,
+  translateMessagesToOllama,
+  translateToolsToOllama,
+  destroyInsecureDispatcher,
 };

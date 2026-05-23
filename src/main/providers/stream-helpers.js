@@ -51,8 +51,18 @@ async function readErrorMessage(res) {
   return msg;
 }
 
+function safeJsonParse(s, fallback = {}) {
+  if (typeof s !== 'string' || !s.trim()) return fallback;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return fallback;
+  }
+}
+
 module.exports = {
   iterStreamLines,
   iterSseEvents,
   readErrorMessage,
+  safeJsonParse,
 };

@@ -242,8 +242,10 @@ module.exports = {
   id: 'anthropic',
   name: 'Anthropic (Claude)',
   fields: { apiKey: true },
-  defaultModel: 'claude-3-5-sonnet-latest',
+  defaultModel: 'claude-sonnet-4-6',
   apiBase: API_BASE,
   listModels,
   streamChatRound,
+  translateMessagesToAnthropic,
+  translateToolsToAnthropic,
 };

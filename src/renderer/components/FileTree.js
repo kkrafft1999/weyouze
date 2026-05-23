@@ -1,3 +1,12 @@
+import {
+  isTextFile,
+  getExtension,
+  formatSize,
+  svgChevron,
+  svgFolder,
+  svgFile,
+} from '../utils/helpers.js';
+
 /** Reine Hilfen für den Dateibaum (Phase 4.6.2 — Extraktion ohne DOM). */
 
 export function folderDepthSortKey(dirPath) {
@@ -8,4 +17,552 @@ export function parentDirFromItemPath(itemPath) {
   const parts = itemPath.split('/');
   parts.pop();
   return parts.join('/') || '/';
+}
+
+const QUICK_ACTION_PROMPTS = {
+  analyse:
+    'Erklaere mir die Struktur dieses Projekts: Welche Hauptordner gibt es, was machen sie, und wie ist der Code organisiert?',
+  review:
+    'Mach einen Code-Review der wichtigsten Dateien in diesem Projekt. Achte auf Architektur, Wartbarkeit und Auffaelligkeiten.',
+  test:
+    'Welche Tests sollten in diesem Projekt ergaenzt werden? Schlage konkrete Test-Faelle fuer die kritischen Code-Pfade vor.',
+  doc:
+    'Fasse zusammen, worum es in diesem Projekt geht. Nutze README, package.json und die wichtigsten Quellen.',
+};
+
+export function initFileTree(deps) {
+  const {
+    api,
+    appStore,
+    treeContainer,
+    welcomeEl,
+    filePreview,
+    fileInfo,
+    previewFilename,
+    previewMeta,
+    previewContent,
+    infoFilename,
+    infoSize,
+    infoModified,
+    infoType,
+    projectName,
+    btnFolderHistory,
+    folderHistoryMenu,
+    welcomeRecentSection,
+    welcomeRecentList,
+    welcomeActionsList,
+    chatInput,
+    onInputChanged,
+    onWorkspaceChanged,
+    onProjectOpened,
+    sendChatMessage,
+    activeProviderConfigured,
+  } = deps;
+
+  let historyDrawerCloseOnEscape = null;
+
+  function renderWelcomeRecent(paths) {
+    if (!welcomeRecentSection || !welcomeRecentList) return;
+    welcomeRecentList.innerHTML = '';
+    if (!paths || paths.length === 0) {
+      welcomeRecentSection.classList.add('hidden');
+      return;
+    }
+    // Top 4 reichen visuell — fuer mehr ist das Folder-History-Menu da.
+    const top = paths.slice(0, 4);
+    for (const p of top) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip chip--recent';
+      btn.setAttribute('role', 'listitem');
+      btn.title = p;
+
+      const main = document.createElement('span');
+      main.className = 'chip-recent-main';
+
+      const name = document.createElement('span');
+      name.className = 'chip-recent-name';
+      name.textContent = p.split('/').pop() || p;
+
+      const sub = document.createElement('span');
+      sub.className = 'chip-recent-path';
+      sub.textContent = p;
+
+      main.appendChild(name);
+      main.appendChild(sub);
+      btn.appendChild(main);
+
+      const arrow = document.createElement('span');
+      arrow.className = 'chip-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '\u2192';
+      btn.appendChild(arrow);
+
+      btn.addEventListener('click', () => {
+        if (p !== appStore.rootPath) openProject(p);
+      });
+      welcomeRecentList.appendChild(btn);
+    }
+    welcomeRecentSection.classList.remove('hidden');
+  }
+
+  async function refreshWelcomeRecent() {
+    if (!welcomeRecentSection) return;
+    try {
+      const { paths } = await api.getFolderHistory();
+      renderWelcomeRecent(Array.isArray(paths) ? paths : []);
+    } catch {
+      renderWelcomeRecent([]);
+    }
+  }
+
+  if (welcomeActionsList) {
+    welcomeActionsList.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip[data-action]');
+      if (!chip) return;
+      const action = chip.dataset.action;
+      const prompt = QUICK_ACTION_PROMPTS[action];
+      if (!prompt) return;
+      chatInput.value = prompt;
+      onInputChanged?.();
+      chatInput.focus();
+      if (appStore.rootPath && activeProviderConfigured()) {
+        sendChatMessage();
+      }
+    });
+  }
+
+  async function openProject(folderPath) {
+    const workspaceChanged = appStore.rootPath !== folderPath;
+    appStore.rootPath = folderPath;
+    const name = folderPath.split('/').pop() || folderPath;
+    projectName.textContent = name;
+    document.title = 'Weyouze Anything';
+
+    treeContainer.innerHTML = '';
+    showWelcome();
+
+    await api.setLastFolder(folderPath);
+    await loadTreeLevel(treeContainer, folderPath, 0);
+    if (workspaceChanged) {
+      await onWorkspaceChanged?.(folderPath, workspaceChanged);
+    }
+    refreshFolderHistory();
+    refreshWelcomeRecent();
+    onProjectOpened?.();
+  }
+
+  async function refreshFolderHistory() {
+    try {
+      const { paths } = await api.getFolderHistory();
+      renderFolderHistory(Array.isArray(paths) ? paths : []);
+    } catch {
+      renderFolderHistory([]);
+    }
+  }
+
+  function renderFolderHistory(paths) {
+    folderHistoryMenu.innerHTML = '';
+    if (!paths.length) {
+      const empty = document.createElement('div');
+      empty.className = 'folder-history-empty';
+      empty.textContent = 'Noch keine zuletzt geöffneten Ordner.';
+      folderHistoryMenu.appendChild(empty);
+      return;
+    }
+    for (const p of paths) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'folder-history-item';
+      btn.setAttribute('role', 'menuitem');
+      btn.title = p;
+
+      const name = document.createElement('span');
+      name.className = 'folder-history-name';
+      name.textContent = p.split('/').pop() || p;
+
+      const sub = document.createElement('span');
+      sub.className = 'folder-history-path';
+      sub.textContent = p;
+
+      btn.appendChild(name);
+      btn.appendChild(sub);
+      btn.addEventListener('click', () => {
+        closeFolderHistoryMenu();
+        if (p !== appStore.rootPath) openProject(p);
+      });
+      folderHistoryMenu.appendChild(btn);
+    }
+  }
+
+  function openFolderHistoryMenu() {
+    folderHistoryMenu.classList.remove('hidden');
+    folderHistoryMenu.setAttribute('aria-hidden', 'false');
+    btnFolderHistory.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeFolderHistoryMenu() {
+    folderHistoryMenu.classList.add('hidden');
+    folderHistoryMenu.setAttribute('aria-hidden', 'true');
+    btnFolderHistory.setAttribute('aria-expanded', 'false');
+  }
+
+  btnFolderHistory.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const isOpen = btnFolderHistory.getAttribute('aria-expanded') === 'true';
+    if (isOpen) {
+      closeFolderHistoryMenu();
+      return;
+    }
+    await refreshFolderHistory();
+    openFolderHistoryMenu();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (folderHistoryMenu.classList.contains('hidden')) return;
+    if (folderHistoryMenu.contains(e.target) || btnFolderHistory.contains(e.target)) return;
+    closeFolderHistoryMenu();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    // Phase 5 (Review #21): Escape schliesst auch den Chat-History-Drawer.
+    // Reihenfolge: Folder-History zuerst, dann Chat-History.
+    if (!folderHistoryMenu.classList.contains('hidden')) {
+      closeFolderHistoryMenu();
+      return;
+    }
+    if (typeof historyDrawerCloseOnEscape === 'function') {
+      historyDrawerCloseOnEscape();
+    }
+  });
+
+  treeContainer.addEventListener('dragover', (e) => {
+    if (!appStore.rootPath || !appStore.dragSourcePath) return;
+    const overItem = e.target.closest('.tree-item');
+    if (overItem && overItem.dataset.isDirectory === 'true') return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    treeContainer.classList.add('drop-target-root');
+  });
+
+  treeContainer.addEventListener('dragleave', (e) => {
+    if (!treeContainer.contains(e.relatedTarget)) {
+      treeContainer.classList.remove('drop-target-root');
+    }
+  });
+
+  treeContainer.addEventListener('drop', async (e) => {
+    clearDragVisualState();
+    if (!appStore.rootPath || !appStore.dragSourcePath) return;
+    const overItem = e.target.closest('.tree-item');
+    if (overItem && overItem.dataset.isDirectory === 'true') return;
+    e.preventDefault();
+    const sourcePath = appStore.dragSourcePath;
+    if (!sourcePath) return;
+    const expandedBefore = collectExpandedFolderPaths();
+    const result = await api.moveItem(sourcePath, appStore.rootPath);
+    if (result.error) {
+      console.error('Move failed:', result.error);
+      clearDragVisualState();
+      return;
+    }
+    treeContainer.innerHTML = '';
+    await loadTreeLevel(treeContainer, appStore.rootPath, 0);
+    await restoreExpandedFolders(expandedBefore);
+    clearDragVisualState();
+  });
+
+  async function loadTreeLevel(parentEl, dirPath, depth) {
+    const items = await api.readDirectory(dirPath);
+
+    for (const item of items) {
+      const row = document.createElement('div');
+      row.classList.add('tree-item');
+      row.dataset.path = item.path;
+      row.dataset.isDirectory = item.isDirectory;
+      row.setAttribute('draggable', 'true');
+
+      const indent = document.createElement('span');
+      indent.classList.add('indent');
+      indent.style.width = `${depth * 16 + 4}px`;
+      row.appendChild(indent);
+
+      const arrow = document.createElement('span');
+      arrow.classList.add('arrow');
+      if (item.isDirectory) {
+        arrow.innerHTML = svgChevron();
+      } else {
+        arrow.classList.add('hidden');
+      }
+      row.appendChild(arrow);
+
+      const icon = document.createElement('span');
+      icon.classList.add('icon');
+      icon.innerHTML = item.isDirectory ? svgFolder() : svgFile(item.name);
+      row.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.classList.add('label');
+      label.textContent = item.name;
+      row.appendChild(label);
+
+      row.addEventListener('dragstart', (e) => {
+        appStore.dragSourcePath = item.path;
+        appStore.dragSourceRow = row;
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.path);
+      });
+
+      row.addEventListener('dragend', () => {
+        clearDragVisualState();
+        appStore.dragSourcePath = null;
+        appStore.dragSourceRow = null;
+      });
+
+      if (item.isDirectory) {
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('dragenter', handleDragEnter);
+        row.addEventListener('dragleave', handleDragLeave);
+        row.addEventListener('drop', (e) => handleDrop(e, item.path, row, depth));
+      }
+
+      parentEl.appendChild(row);
+
+      if (item.isDirectory) {
+        const childContainer = document.createElement('div');
+        childContainer.classList.add('tree-children');
+        childContainer.dataset.path = item.path;
+        childContainer.dataset.loaded = 'false';
+        parentEl.appendChild(childContainer);
+
+        row.addEventListener('click', () => toggleFolder(row, childContainer, item.path, depth + 1));
+      } else {
+        row.addEventListener('click', () => selectFile(row, item));
+      }
+    }
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault();
+    const row = e.currentTarget;
+    if (row === appStore.dragSourceRow) return;
+    clearDropTarget();
+    row.classList.add('drop-target');
+    appStore.currentDropTarget = row;
+  }
+
+  function handleDragLeave(e) {
+    const row = e.currentTarget;
+    if (!row.contains(e.relatedTarget)) {
+      row.classList.remove('drop-target');
+      if (appStore.currentDropTarget === row) appStore.currentDropTarget = null;
+    }
+  }
+
+  function clearDropTarget() {
+    if (appStore.currentDropTarget) {
+      appStore.currentDropTarget.classList.remove('drop-target');
+      appStore.currentDropTarget = null;
+    }
+  }
+
+  function clearDragVisualState() {
+    treeContainer.classList.remove('drop-target-root');
+    for (const el of treeContainer.querySelectorAll('.tree-item.drop-target')) {
+      el.classList.remove('drop-target');
+    }
+    for (const el of treeContainer.querySelectorAll('.tree-item.dragging')) {
+      el.classList.remove('dragging');
+    }
+    appStore.currentDropTarget = null;
+  }
+
+  function collectExpandedFolderPaths() {
+    const paths = [];
+    for (const el of treeContainer.querySelectorAll('.tree-children.expanded')) {
+      const p = el.dataset.path;
+      if (p) paths.push(p);
+    }
+    return paths;
+  }
+
+  async function restoreExpandedFolders(paths) {
+    const unique = [...new Set(paths)].sort(
+      (a, b) => folderDepthSortKey(a) - folderDepthSortKey(b)
+    );
+    for (const p of unique) {
+      await expandFolderAtPath(p);
+    }
+  }
+
+  function loadDepthFromTreeRow(row) {
+    if (!row) return 1;
+    const w = parseInt(row.querySelector('.indent')?.style.width || '4', 10);
+    return Math.round(w / 16) + 1;
+  }
+
+  async function expandFolderAtPath(dirPath) {
+    const childContainer = treeContainer.querySelector(
+      `.tree-children[data-path="${CSS.escape(dirPath)}"]`
+    );
+    if (!childContainer) return;
+    const row = childContainer.previousElementSibling;
+    if (!row || row.dataset.isDirectory !== 'true') return;
+    const arrow = row.querySelector('.arrow');
+    const depth = loadDepthFromTreeRow(row);
+    childContainer.innerHTML = '';
+    await loadTreeLevel(childContainer, dirPath, depth);
+    childContainer.dataset.loaded = 'true';
+    childContainer.classList.add('expanded');
+    if (arrow) arrow.classList.add('expanded');
+  }
+
+  async function handleDrop(e, destDir, dropRow, depth) {
+    e.preventDefault();
+    e.stopPropagation();
+    clearDragVisualState();
+
+    const sourcePath = appStore.dragSourcePath || e.dataTransfer.getData('text/plain');
+    if (!sourcePath || sourcePath === destDir) return;
+
+    const expandedBefore = collectExpandedFolderPaths();
+    const result = await api.moveItem(sourcePath, destDir);
+    if (result.error) {
+      console.error('Move failed:', result.error);
+      clearDragVisualState();
+      return;
+    }
+
+    const sourceParent = parentDirFromItemPath(sourcePath);
+    await refreshParentOf(sourcePath);
+    if (sourceParent !== destDir) {
+      await refreshFolder(destDir);
+    }
+    await restoreExpandedFolders(expandedBefore);
+    clearDragVisualState();
+  }
+
+  async function refreshParentOf(itemPath) {
+    const parts = itemPath.split('/');
+    parts.pop();
+    const parentDir = parts.join('/') || '/';
+    await refreshFolder(parentDir);
+  }
+
+  async function refreshFolder(dirPath) {
+    if (dirPath === appStore.rootPath) {
+      const expandedBefore = collectExpandedFolderPaths();
+      treeContainer.innerHTML = '';
+      await loadTreeLevel(treeContainer, appStore.rootPath, 0);
+      await restoreExpandedFolders(expandedBefore);
+      return;
+    }
+    const childContainer = treeContainer.querySelector(
+      `.tree-children[data-path="${CSS.escape(dirPath)}"]`
+    );
+    if (childContainer && childContainer.dataset.loaded === 'true') {
+      const wasExpanded = childContainer.classList.contains('expanded');
+      childContainer.innerHTML = '';
+      const row = childContainer.previousElementSibling;
+      const depthVal = loadDepthFromTreeRow(row);
+      await loadTreeLevel(childContainer, dirPath, depthVal);
+      childContainer.dataset.loaded = 'true';
+      if (wasExpanded) {
+        childContainer.classList.add('expanded');
+        const arrow = row?.querySelector('.arrow');
+        if (arrow) arrow.classList.add('expanded');
+      }
+    }
+  }
+
+  async function toggleFolder(row, childContainer, dirPath, depth) {
+    const arrow = row.querySelector('.arrow');
+    const isExpanded = childContainer.classList.contains('expanded');
+
+    if (isExpanded) {
+      childContainer.classList.remove('expanded');
+      arrow.classList.remove('expanded');
+    } else {
+      if (childContainer.dataset.loaded === 'false') {
+        await loadTreeLevel(childContainer, dirPath, depth);
+        childContainer.dataset.loaded = 'true';
+      }
+      childContainer.classList.add('expanded');
+      arrow.classList.add('expanded');
+    }
+
+    setActiveItem(row);
+    appStore.selectedPath = dirPath;
+    appStore.selectedIsDirectory = true;
+  }
+
+  async function selectFile(row, item) {
+    setActiveItem(row);
+    appStore.selectedPath = item.path;
+    appStore.selectedIsDirectory = false;
+    await showFileContent(item);
+  }
+
+  function setActiveItem(row) {
+    if (appStore.activeTreeItem) {
+      appStore.activeTreeItem.classList.remove('active');
+    }
+    row.classList.add('active');
+    appStore.activeTreeItem = row;
+  }
+
+  function showWelcome() {
+    welcomeEl.classList.remove('hidden');
+    filePreview.classList.add('hidden');
+    fileInfo.classList.add('hidden');
+  }
+
+  async function showFileContent(item) {
+    welcomeEl.classList.add('hidden');
+
+    if (isTextFile(item.name)) {
+      const result = await api.readFile(item.path);
+
+      if (result.error) {
+        showFileInfo(item, result.error);
+        return;
+      }
+
+      filePreview.classList.remove('hidden');
+      fileInfo.classList.add('hidden');
+      previewFilename.textContent = item.name;
+      previewMeta.textContent = formatSize(result.size);
+      previewContent.textContent = result.content;
+    } else {
+      showFileInfo(item);
+    }
+  }
+
+  function showFileInfo(item, errorMsg) {
+    filePreview.classList.add('hidden');
+    fileInfo.classList.remove('hidden');
+    infoFilename.textContent = item.name;
+    infoSize.textContent = errorMsg || formatSize(item.size);
+    infoModified.textContent = new Date(item.modified).toLocaleString('de-DE');
+    infoType.textContent = getExtension(item.name) || 'Unbekannt';
+  }
+
+  function setHistoryDrawerCloseOnEscape(fn) {
+    historyDrawerCloseOnEscape = typeof fn === 'function' ? fn : null;
+  }
+
+  return {
+    openProject,
+    refreshFolderHistory,
+    refreshWelcomeRecent,
+    setHistoryDrawerCloseOnEscape,
+    closeFolderHistoryMenu,
+  };
 }

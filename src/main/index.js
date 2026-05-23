@@ -96,6 +96,10 @@ const fsService = createFsService({
 const whisperService = createWhisperService({
   fetchImpl: fetch,
   getOpenAIApiKey: () => storage.getOpenAIApiKey(),
+  getAppLocale: async () => {
+    const prefs = await storage.readUIPrefs();
+    return prefs.appLocale;
+  },
 });
 
 registerDialogHandlers({ ipcMain, dialog, getMainWindow, REQ });
@@ -105,7 +109,7 @@ registerFsHandlers({
   REQ,
   getActiveWorkspaceRoot: workspaceState.getActiveWorkspaceRoot,
 });
-registerWhisperHandlers({ ipcMain, whisperService, REQ });
+registerWhisperHandlers({ ipcMain, whisperService, storage, REQ });
 registerSettingsHandlers({
   ipcMain,
   safeStorage,
@@ -234,4 +238,9 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  const { destroyInsecureDispatcher } = require('./providers/ollama');
+  destroyInsecureDispatcher();
 });

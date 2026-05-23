@@ -1,10 +1,20 @@
-function createWhisperService({ fetchImpl, getOpenAIApiKey }) {
+function createWhisperService({ fetchImpl, getOpenAIApiKey, getAppLocale }) {
   const fetchFn = fetchImpl;
 
-  async function transcribeAudio(audioBuffer) {
+  async function resolveLanguage(options) {
+    if (options?.language === 'de' || options?.language === 'en') return options.language;
+    if (getAppLocale) {
+      const locale = await getAppLocale();
+      return locale === 'en' ? 'en' : 'de';
+    }
+    return 'de';
+  }
+
+  async function transcribeAudio(audioBuffer, options) {
     const apiKey = await getOpenAIApiKey();
     if (!apiKey) return { error: 'Kein OpenAI-Key hinterlegt (Whisper benötigt einen).' };
 
+    const language = await resolveLanguage(options);
     const boundary = `----ElectronWhisper${Date.now()}`;
     const fileName = 'voice.webm';
 
@@ -13,7 +23,7 @@ function createWhisperService({ fetchImpl, getOpenAIApiKey }) {
       `--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n`
     );
     fieldParts.push(
-      `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nde\r\n`
+      `--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${language}\r\n`
     );
     fieldParts.push(
       `--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\njson\r\n`

@@ -23,6 +23,26 @@ function createStorageService({
 
   const NO_WORKSPACE_KEY = '__none__';
 
+  let chatHistoryLock = Promise.resolve();
+
+  async function writeJsonAtomic(targetPath, data) {
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    const tmp = `${targetPath}.tmp-${process.pid}-${Date.now()}`;
+    await fs.writeFile(tmp, JSON.stringify(data), 'utf8');
+    try {
+      await fs.rename(tmp, targetPath);
+    } catch (err) {
+      await fs.unlink(tmp).catch(() => {});
+      throw err;
+    }
+  }
+
+  function withChatHistoryLock(fn) {
+    const task = chatHistoryLock.then(fn, fn);
+    chatHistoryLock = task.catch(() => {});
+    return task;
+  }
+
   function getLLMConfigPath() {
     return path.join(app.getPath('userData'), LLM_CONFIG_FILENAME);
   }
@@ -182,8 +202,7 @@ function createStorageService({
   }
 
   async function writeLLMConfig(config) {
-    await fs.mkdir(path.dirname(getLLMConfigPath()), { recursive: true });
-    await fs.writeFile(getLLMConfigPath(), JSON.stringify(config), 'utf8');
+    await writeJsonAtomic(getLLMConfigPath(), config);
   }
 
   function decryptIfPossible(b64) {
@@ -191,6 +210,15 @@ function createStorageService({
     if (!safeStorage.isEncryptionAvailable()) return null;
     try {
       return safeStorage.decryptString(Buffer.from(b64, 'base64'));
+    } catch {
+      return null;
+    }
+  }
+
+  function encryptIfPossible(plaintext) {
+    if (!plaintext || !safeStorage.isEncryptionAvailable()) return null;
+    try {
+      return safeStorage.encryptString(plaintext).toString('base64');
     } catch {
       return null;
     }
@@ -292,8 +320,7 @@ function createStorageService({
   }
 
   async function writeUIPrefs(data) {
-    await fs.mkdir(path.dirname(getUIPrefsPath()), { recursive: true });
-    await fs.writeFile(getUIPrefsPath(), JSON.stringify(data), 'utf8');
+    await writeJsonAtomic(getUIPrefsPath(), data);
   }
 
   function getChatHistoryPath() {
@@ -350,40 +377,71 @@ function createStorageService({
     };
   }
 
+  function parseChatHistoryStoreData(data) {
+    if (!data || typeof data !== 'object') return null;
+    const sessionsIn = Array.isArray(data.sessions) ? data.sessions : [];
+    const sessions = sessionsIn
+      .map((x) => normalizeSessionForStore(x))
+      .filter(Boolean);
+
+    const activeByWorkspace = {};
+    if (data.activeByWorkspace && typeof data.activeByWorkspace === 'object') {
+      for (const [k, v] of Object.entries(data.activeByWorkspace)) {
+        if (typeof k === 'string' && k && typeof v === 'string' && v) {
+          activeByWorkspace[k] = v;
+        }
+      }
+    } else if (typeof data.activeChatId === 'string' && data.activeChatId) {
+      activeByWorkspace[NO_WORKSPACE_KEY] = data.activeChatId;
+    }
+
+    return {
+      version: 2,
+      activeByWorkspace,
+      sessions,
+    };
+  }
+
   async function readChatHistoryStore() {
     try {
       const raw = await fs.readFile(getChatHistoryPath(), 'utf8');
-      const data = JSON.parse(raw);
+      let data = JSON.parse(raw);
       if (!data || typeof data !== 'object') return defaultChatHistoryStore();
-      const sessionsIn = Array.isArray(data.sessions) ? data.sessions : [];
-      const sessions = sessionsIn
-        .map((x) => normalizeSessionForStore(x))
-        .filter(Boolean);
 
-      const activeByWorkspace = {};
-      if (data.activeByWorkspace && typeof data.activeByWorkspace === 'object') {
-        for (const [k, v] of Object.entries(data.activeByWorkspace)) {
-          if (typeof k === 'string' && k && typeof v === 'string' && v) {
-            activeByWorkspace[k] = v;
-          }
+      let wasEncrypted = false;
+      if (data.encrypted === true && typeof data.payload === 'string') {
+        wasEncrypted = true;
+        const decrypted = decryptIfPossible(data.payload);
+        if (!decrypted) return defaultChatHistoryStore();
+        try {
+          data = JSON.parse(decrypted);
+        } catch {
+          return defaultChatHistoryStore();
         }
-      } else if (typeof data.activeChatId === 'string' && data.activeChatId) {
-        activeByWorkspace[NO_WORKSPACE_KEY] = data.activeChatId;
       }
 
-      return {
-        version: 2,
-        activeByWorkspace,
-        sessions,
-      };
+      const store = parseChatHistoryStoreData(data);
+      if (!store) return defaultChatHistoryStore();
+
+      if (safeStorage.isEncryptionAvailable() && !wasEncrypted) {
+        await writeChatHistoryStore(store);
+      }
+
+      return store;
     } catch {
       return defaultChatHistoryStore();
     }
   }
 
   async function writeChatHistoryStore(store) {
-    await fs.mkdir(path.dirname(getChatHistoryPath()), { recursive: true });
-    await fs.writeFile(getChatHistoryPath(), JSON.stringify(store), 'utf8');
+    if (safeStorage.isEncryptionAvailable()) {
+      const payload = encryptIfPossible(JSON.stringify(store));
+      if (payload) {
+        await writeJsonAtomic(getChatHistoryPath(), { encrypted: true, payload });
+        return;
+      }
+    }
+    await writeJsonAtomic(getChatHistoryPath(), store);
   }
 
   async function persistLastFolder(folderPath) {
@@ -396,8 +454,7 @@ function createStorageService({
     } catch {
       return;
     }
-    await fs.mkdir(path.dirname(getLastFolderConfigPath()), { recursive: true });
-    await fs.writeFile(getLastFolderConfigPath(), JSON.stringify({ path: resolved }), 'utf8');
+    await writeJsonAtomic(getLastFolderConfigPath(), { path: resolved });
     await addFolderToHistory(resolved);
   }
 
@@ -419,8 +476,7 @@ function createStorageService({
   }
 
   async function writeFolderHistory(paths) {
-    await fs.mkdir(path.dirname(getFolderHistoryPath()), { recursive: true });
-    await fs.writeFile(getFolderHistoryPath(), JSON.stringify({ paths }), 'utf8');
+    await writeJsonAtomic(getFolderHistoryPath(), { paths });
   }
 
   async function addFolderToHistory(resolvedPath) {
@@ -474,6 +530,7 @@ function createStorageService({
     normalizeSessionForStore,
     readChatHistoryStore,
     writeChatHistoryStore,
+    withChatHistoryLock,
     persistLastFolder,
     getValidatedFolderHistory,
     sessionMatchesWorkspace,

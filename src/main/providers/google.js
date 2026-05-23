@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage } = require('./stream-helpers');
+const { iterSseEvents, readErrorMessage, safeJsonParse } = require('./stream-helpers');
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -81,10 +81,6 @@ function buildToolCallNameMap(messages) {
   return map;
 }
 
-function safeJsonParse(s, fallback = {}) {
-  if (typeof s !== 'string' || !s.trim()) return fallback;
-  try { return JSON.parse(s); } catch { return fallback; }
-}
 
 function translateMessagesToGoogle(messages) {
   const toolNameById = buildToolCallNameMap(messages);
@@ -222,4 +218,6 @@ module.exports = {
   apiBase: API_BASE,
   listModels,
   streamChatRound,
+  translateMessagesToGoogle,
+  translateToolsToGoogle,
 };

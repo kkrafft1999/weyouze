@@ -106,9 +106,10 @@ function registerChatHandlers({
     }
     const providerConfig = await storage.getEffectiveProviderConfig(activeId);
     const model = chatTarget.model || providerConfig?.model || provider.defaultModel;
-    if (chatTarget.reasoningEffort && activeId === 'openai') {
-      providerConfig.reasoningEffort = chatTarget.reasoningEffort;
-    }
+    const effectiveConfig =
+      chatTarget.reasoningEffort && activeId === 'openai'
+        ? { ...providerConfig, reasoningEffort: chatTarget.reasoningEffort }
+        : providerConfig;
 
     if (provider.fields?.apiKey && !providerConfig?.apiKey) {
       return {
@@ -183,7 +184,7 @@ function registerChatHandlers({
         callbacks.reset();
 
         const streamed = await provider.streamChatRound({
-          config: providerConfig,
+          config: effectiveConfig,
           model,
           messages: apiMessages,
           tools,
@@ -269,4 +270,9 @@ function registerChatHandlers({
   });
 }
 
-module.exports = { registerChatHandlers };
+module.exports = {
+  registerChatHandlers,
+  resolveToolRoundLimit,
+  summarizeToolCall,
+  truncateToolLabel,
+};
