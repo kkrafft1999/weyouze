@@ -68,6 +68,7 @@ const providerStatus = document.getElementById('provider-status');
 const providerKeyRow = document.getElementById('provider-key-row');
 const providerBaseUrlRow = document.getElementById('provider-baseurl-row');
 const inputApiKey = document.getElementById('input-api-key');
+const btnRemoveApiKey = document.getElementById('btn-remove-api-key');
 const inputBaseUrl = document.getElementById('input-base-url');
 const providerInsecureRow = document.getElementById('provider-insecure-row');
 const inputInsecureTls = document.getElementById('input-insecure-tls');
@@ -95,7 +96,6 @@ const welcomeRecentList = document.getElementById('welcome-recent-list');
 const welcomeActionsList = document.getElementById('welcome-actions-list');
 
 initTheme({ themeToggle, iconSun, iconMoon });
-initSidebarResizer({ divider, sidebar, workspace, chatDivider, chatPanel });
 
 let syncInputHeightRaf = null;
 function syncChatInputHeight() {
@@ -225,6 +225,7 @@ const settingsModal = initSettingsModal({
   providerKeyRow,
   providerBaseUrlRow,
   inputApiKey,
+  btnRemoveApiKey,
   inputBaseUrl,
   providerInsecureRow,
   inputInsecureTls,
@@ -315,13 +316,24 @@ btnChatNew.addEventListener('click', () => chatHistory.startNewChatWithHistory()
 modelPicker.refreshLLMState();
 
 (async () => {
+  let uiPrefs = { contentPaneVisible: true, appLocale: 'de' };
   try {
-    const uiPrefs = await api.getUIPrefs();
+    uiPrefs = await api.getUIPrefs();
     setContentPaneVisible(uiPrefs.contentPaneVisible !== false);
     settingsModal.applyShellLocale(uiPrefs.appLocale === 'en' ? 'en' : 'de');
   } catch {
     setContentPaneVisible(true);
   }
+  initSidebarResizer({
+    divider,
+    sidebar,
+    workspace,
+    chatDivider,
+    chatPanel,
+    api,
+    initialSidebarWidth: uiPrefs.sidebarWidth,
+    initialChatPanelWidth: uiPrefs.chatPanelWidth,
+  });
   const { folderPath } = await api.getLastFolder();
   if (folderPath) {
     await fileTree.openProject(folderPath);

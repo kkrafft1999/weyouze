@@ -21,6 +21,7 @@ export function initSettingsModal(deps) {
     providerKeyRow,
     providerBaseUrlRow,
     inputApiKey,
+    btnRemoveApiKey,
     inputBaseUrl,
     providerInsecureRow,
     inputInsecureTls,
@@ -91,6 +92,7 @@ export function initSettingsModal(deps) {
     for (const p of appStore.llmState.providers || []) {
       settingsCredentialDraft[p.id] = {
         apiKey: '',
+        removeApiKey: false,
         baseUrl: (p.baseUrl || p.defaultBaseUrl || '').trim(),
         insecureTls: !!p.insecureTls,
       };
@@ -101,6 +103,9 @@ export function initSettingsModal(deps) {
     const id = selectProvider?.value;
     if (!id || !settingsCredentialDraft[id]) return;
     settingsCredentialDraft[id].apiKey = (inputApiKey.value || '').trim();
+    if (settingsCredentialDraft[id].apiKey) {
+      settingsCredentialDraft[id].removeApiKey = false;
+    }
     settingsCredentialDraft[id].baseUrl = (inputBaseUrl.value || '').trim();
     settingsCredentialDraft[id].insecureTls = !!inputInsecureTls.checked;
   }
@@ -161,6 +166,7 @@ export function initSettingsModal(deps) {
     if (!settingsCredentialDraft[providerId]) {
       settingsCredentialDraft[providerId] = {
         apiKey: '',
+        removeApiKey: false,
         baseUrl: (meta.baseUrl || meta.defaultBaseUrl || '').trim(),
         insecureTls: !!meta.insecureTls,
       };
@@ -170,7 +176,9 @@ export function initSettingsModal(deps) {
     if (meta.fields?.apiKey) {
       providerKeyRow.classList.remove('hidden');
       inputApiKey.value = draft.apiKey || '';
-      if (meta.hasKey) {
+      if (draft.removeApiKey && meta.hasKey) {
+        inputApiKey.placeholder = 'Key wird beim Speichern entfernt';
+      } else if (meta.hasKey) {
         inputApiKey.placeholder = 'Gespeicherter Key bleibt erhalten';
       } else if (meta.id === 'openai') {
         inputApiKey.placeholder = 'sk-…';
@@ -181,9 +189,13 @@ export function initSettingsModal(deps) {
       } else {
         inputApiKey.placeholder = '••••••';
       }
+      const showTrash =
+        meta.hasKey || !!(draft.apiKey || '').trim() || draft.removeApiKey;
+      btnRemoveApiKey?.classList.toggle('hidden', !showTrash);
     } else {
       providerKeyRow.classList.add('hidden');
       inputApiKey.value = '';
+      btnRemoveApiKey?.classList.add('hidden');
     }
 
     if (meta.fields?.baseUrl) {
@@ -218,8 +230,16 @@ export function initSettingsModal(deps) {
     const lines = [];
     if (meta.apiBase) lines.push(`API: ${meta.apiBase}`);
     if (meta.id === appStore.llmState.activeProvider) lines.push('Aktueller Chat-Anbieter');
-    if (meta.configured) {
-      lines.push(meta.fields?.apiKey ? 'Key gespeichert' : 'Konfiguriert');
+    if (meta.fields?.apiKey) {
+      if (draft.removeApiKey && meta.hasKey) {
+        lines.push('Key wird beim Speichern entfernt');
+      } else if (meta.hasKey && !draft.apiKey) {
+        lines.push('Key gespeichert');
+      } else if (draft.apiKey) {
+        lines.push('Neuer Key wird beim Speichern gesetzt');
+      }
+    } else if (meta.configured) {
+      lines.push('Konfiguriert');
     }
     setProviderStatus(lines.join(' · '), false);
     setModelStatus('');
@@ -462,7 +482,7 @@ export function initSettingsModal(deps) {
     const baseUrl = (d.baseUrl || '').trim();
     const insecureTls = meta.fields?.insecureTls ? !!d.insecureTls : undefined;
 
-    if (meta.fields?.apiKey && !apiKey && !meta.hasKey) {
+    if (meta.fields?.apiKey && !apiKey && (!meta.hasKey || d.removeApiKey)) {
       setModelStatus('Bitte zuerst einen API-Key eingeben.', true);
       return;
     }
@@ -560,6 +580,7 @@ export function initSettingsModal(deps) {
       const meta = findProviderMeta(pid);
       if (!meta || !d) continue;
       const patch = {};
+      if (d.removeApiKey) patch.removeApiKey = true;
       if (typeof d.apiKey === 'string' && d.apiKey.trim()) patch.apiKey = d.apiKey.trim();
       const bu = typeof d.baseUrl === 'string' ? d.baseUrl.trim() : '';
       if (bu && meta.fields?.baseUrl) patch.baseUrl = bu;
@@ -623,6 +644,25 @@ export function initSettingsModal(deps) {
 
   selectProvider.addEventListener('change', () => {
     syncPopupProviderUI(selectProvider.value);
+  });
+
+  inputApiKey.addEventListener('input', () => {
+    const id = selectProvider.value;
+    if (id && settingsCredentialDraft[id]) {
+      settingsCredentialDraft[id].apiKey = inputApiKey.value;
+      if (inputApiKey.value.trim()) {
+        settingsCredentialDraft[id].removeApiKey = false;
+      }
+      syncPopupProviderUI(id, true);
+    }
+  });
+
+  btnRemoveApiKey?.addEventListener('click', () => {
+    const id = selectProvider.value;
+    if (!id || !settingsCredentialDraft[id]) return;
+    settingsCredentialDraft[id].apiKey = '';
+    settingsCredentialDraft[id].removeApiKey = true;
+    syncPopupProviderUI(id, true);
   });
 
   inputBaseUrl.addEventListener('input', () => {

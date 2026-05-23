@@ -44,64 +44,44 @@ function registerSettingsHandlers({
   });
 
   function mergeProviderPatchIntoConfig(config, providerId, patch) {
-    const provider = providers.getProvider(providerId);
-    if (!provider) return { ok: false, error: 'Unbekannter Provider.' };
-    const prevEntry = (config.providers && config.providers[providerId]) || {};
-    const next = { ...prevEntry };
-
-    if (provider.fields?.apiKey) {
-      const incomingKey = typeof patch?.apiKey === 'string' ? patch.apiKey.trim() : '';
-      if (incomingKey) {
-        if (!safeStorage.isEncryptionAvailable()) {
-          return { ok: false, error: 'Verschlüsselter Speicher ist nicht verfügbar.' };
-        }
-        next.apiKeyEnc = safeStorage.encryptString(incomingKey).toString('base64');
-      }
-    }
-
-    if (provider.fields?.baseUrl && typeof patch?.baseUrl === 'string' && patch.baseUrl.trim()) {
-      next.baseUrl = patch.baseUrl.trim();
-    }
-
-    if (provider.fields?.insecureTls && typeof patch?.insecureTls === 'boolean') {
-      next.insecureTls = patch.insecureTls;
-    }
-
-    config.providers = config.providers || {};
-    config.providers[providerId] = next;
-    return { ok: true };
+    return mergeProviderPatchIntoConfigImpl({ safeStorage, providers }, config, providerId, patch);
   }
 
   ipcMain.handle(REQ.SETTINGS_SET_ACTIVE_PRESET, async (_event, presetId) => {
     if (typeof presetId !== 'string' || !presetId.trim()) {
       return { ok: false, error: 'Kein Eintrag gewählt.' };
     }
-    const config = await storage.readLLMConfig();
-    const preset = Array.isArray(config.presets)
-      ? config.presets.find((p) => p && p.id === presetId.trim())
-      : null;
-    if (!preset || !providers.getProvider(preset.providerId)) {
-      return { ok: false, error: 'Eintrag nicht gefunden.' };
-    }
-    const meta = providers.getProvider(preset.providerId);
-    const entry = (config.providers && config.providers[preset.providerId]) || {};
-    const configured = meta.fields?.apiKey
-      ? !!entry.apiKeyEnc
-      : meta.fields?.baseUrl
-        ? !!(entry.baseUrl || meta.defaultBaseUrl)
-        : true;
-    if (!configured) {
-      return { ok: false, error: 'Anbieter ist noch nicht konfiguriert.' };
-    }
-    config.activePresetId = presetId.trim();
-    config.activeProvider = preset.providerId;
-    config.providers = config.providers || {};
-    const pe = { ...(config.providers[preset.providerId] || {}) };
-    pe.model = typeof preset.model === 'string' && preset.model.trim()
-      ? preset.model.trim()
-      : meta.defaultModel;
-    config.providers[preset.providerId] = pe;
-    await storage.writeLLMConfig(config);
+    let validationError = null;
+    await storage.updateLLMConfig(async (config) => {
+      const preset = Array.isArray(config.presets)
+        ? config.presets.find((p) => p && p.id === presetId.trim())
+        : null;
+      if (!preset || !providers.getProvider(preset.providerId)) {
+        validationError = { ok: false, error: 'Eintrag nicht gefunden.' };
+        return config;
+      }
+      const meta = providers.getProvider(preset.providerId);
+      const entry = (config.providers && config.providers[preset.providerId]) || {};
+      const configured = meta.fields?.apiKey
+        ? !!entry.apiKeyEnc
+        : meta.fields?.baseUrl
+          ? !!(entry.baseUrl || meta.defaultBaseUrl)
+          : true;
+      if (!configured) {
+        validationError = { ok: false, error: 'Anbieter ist noch nicht konfiguriert.' };
+        return config;
+      }
+      config.activePresetId = presetId.trim();
+      config.activeProvider = preset.providerId;
+      config.providers = config.providers || {};
+      const pe = { ...(config.providers[preset.providerId] || {}) };
+      pe.model = typeof preset.model === 'string' && preset.model.trim()
+        ? preset.model.trim()
+        : meta.defaultModel;
+      config.providers[preset.providerId] = pe;
+      return config;
+    });
+    if (validationError) return validationError;
     return { ok: true };
   });
 
@@ -125,57 +105,76 @@ function registerSettingsHandlers({
       activePresetId = presets[0].id;
     }
 
-    const config = await storage.readLLMConfig();
     const patches =
       payload?.providerPatches && typeof payload.providerPatches === 'object'
         ? payload.providerPatches
         : {};
 
-    for (const providerId of Object.keys(patches)) {
-      const res = mergeProviderPatchIntoConfig(config, providerId, patches[providerId]);
-      if (!res.ok) return res;
-    }
-
     for (const pr of presets) {
       const meta = providers.getProvider(pr.providerId);
-      const entry = (config.providers && config.providers[pr.providerId]) || {};
-      const baseUrlEff = meta.fields?.baseUrl
-        ? (entry.baseUrl || meta.defaultBaseUrl || '')
-        : '';
-      const configured = meta.fields?.apiKey
-        ? !!entry.apiKeyEnc
-        : meta.fields?.baseUrl
-          ? !!String(baseUrlEff).trim()
-          : true;
-      if (!configured) {
-        return {
-          ok: false,
-          error: `Zugang für „${meta.name}“ ist unvollständig (z. B. API-Schlüssel oder Server-URL).`,
-        };
+      if (!meta) continue;
+      const patch = patches[pr.providerId];
+      const incomingKey = typeof patch?.apiKey === 'string' ? patch.apiKey.trim() : '';
+      if (meta.fields?.apiKey && incomingKey) {
+        if (!safeStorage.isEncryptionAvailable()) {
+          return { ok: false, error: 'Verschlüsselter Speicher ist nicht verfügbar.' };
+        }
       }
     }
 
-    const providerIdsInUse = new Set(presets.map((pr) => pr.providerId));
-    config.providers = config.providers || {};
-    for (const pid of Object.keys(config.providers)) {
-      if (!providerIdsInUse.has(pid)) {
-        delete config.providers[pid];
+    let validationError = null;
+    await storage.updateLLMConfig(async (config) => {
+      for (const providerId of Object.keys(patches)) {
+        const res = mergeProviderPatchIntoConfig(config, providerId, patches[providerId]);
+        if (!res.ok) {
+          validationError = res;
+          return config;
+        }
       }
-    }
 
-    config.version = 3;
-    config.presets = presets;
-    config.activePresetId = activePresetId;
-    const target = storage.resolveChatModelTarget(config);
-    config.activeProvider = target.providerId;
-    const activeEntryPid = target.providerId;
-    if (activeEntryPid && providers.getProvider(activeEntryPid)) {
-      const pe = { ...(config.providers[activeEntryPid] || {}) };
-      pe.model = target.model;
-      config.providers[activeEntryPid] = pe;
-    }
+      for (const pr of presets) {
+        const meta = providers.getProvider(pr.providerId);
+        const entry = (config.providers && config.providers[pr.providerId]) || {};
+        const baseUrlEff = meta.fields?.baseUrl
+          ? (entry.baseUrl || meta.defaultBaseUrl || '')
+          : '';
+        const configured = meta.fields?.apiKey
+          ? !!entry.apiKeyEnc
+          : meta.fields?.baseUrl
+            ? !!String(baseUrlEff).trim()
+            : true;
+        if (!configured) {
+          validationError = {
+            ok: false,
+            error: `Zugang für „${meta.name}“ ist unvollständig (z. B. API-Schlüssel oder Server-URL).`,
+          };
+          return config;
+        }
+      }
 
-    await storage.writeLLMConfig(config);
+      const providerIdsInUse = new Set(presets.map((pr) => pr.providerId));
+      config.providers = config.providers || {};
+      for (const pid of Object.keys(config.providers)) {
+        if (!providerIdsInUse.has(pid)) {
+          delete config.providers[pid];
+        }
+      }
+
+      config.version = 3;
+      config.presets = presets;
+      config.activePresetId = activePresetId;
+      const target = storage.resolveChatModelTarget(config);
+      config.activeProvider = target.providerId;
+      const activeEntryPid = target.providerId;
+      if (activeEntryPid && providers.getProvider(activeEntryPid)) {
+        const pe = { ...(config.providers[activeEntryPid] || {}) };
+        pe.model = target.model;
+        config.providers[activeEntryPid] = pe;
+      }
+
+      return config;
+    });
+    if (validationError) return validationError;
 
     const uiPatch =
       payload?.uiPrefs && typeof payload.uiPrefs === 'object' ? payload.uiPrefs : {};
@@ -184,19 +183,30 @@ function registerSettingsHandlers({
       || uiPatch.appLocale === 'en'
       || uiPatch.appLocale === 'de'
       || typeof uiPatch.maxToolRounds === 'number'
+      || typeof uiPatch.sidebarWidth === 'number'
+      || typeof uiPatch.chatPanelWidth === 'number'
     ) {
-      const out = { ...(await storage.readUIPrefs()) };
-      if (typeof uiPatch.baseSystemPrompt === 'string') {
-        out.baseSystemPrompt = uiPatch.baseSystemPrompt;
-      }
-      if (uiPatch.appLocale === 'en' || uiPatch.appLocale === 'de') {
-        out.appLocale = uiPatch.appLocale;
-      }
-      if (typeof uiPatch.maxToolRounds === 'number' && Number.isFinite(uiPatch.maxToolRounds)) {
-        const clamped = Math.min(500, Math.max(1, Math.round(uiPatch.maxToolRounds)));
-        out.maxToolRounds = clamped;
-      }
-      await storage.writeUIPrefs(out);
+      await storage.updateUIPrefs(async (out) => {
+        if (typeof uiPatch.baseSystemPrompt === 'string') {
+          out.baseSystemPrompt = uiPatch.baseSystemPrompt;
+        }
+        if (uiPatch.appLocale === 'en' || uiPatch.appLocale === 'de') {
+          out.appLocale = uiPatch.appLocale;
+        }
+        if (typeof uiPatch.maxToolRounds === 'number' && Number.isFinite(uiPatch.maxToolRounds)) {
+          const clamped = Math.min(500, Math.max(1, Math.round(uiPatch.maxToolRounds)));
+          out.maxToolRounds = clamped;
+        }
+        const sidebarWidth = storage.clampSidebarWidth(uiPatch.sidebarWidth);
+        if (typeof sidebarWidth === 'number') {
+          out.sidebarWidth = sidebarWidth;
+        }
+        const chatPanelWidth = storage.clampChatPanelWidth(uiPatch.chatPanelWidth);
+        if (typeof chatPanelWidth === 'number') {
+          out.chatPanelWidth = chatPanelWidth;
+        }
+        return out;
+      });
     }
 
     return { ok: true };
@@ -256,23 +266,64 @@ function registerSettingsHandlers({
 
   ipcMain.handle(REQ.SETTINGS_SET_UI_PREFS, async (_event, partial) => {
     const patch = partial && typeof partial === 'object' ? partial : {};
-    const out = { ...(await storage.readUIPrefs()) };
-    if (typeof patch.contentPaneVisible === 'boolean') {
-      out.contentPaneVisible = patch.contentPaneVisible;
-    }
-    if (typeof patch.baseSystemPrompt === 'string') {
-      out.baseSystemPrompt = patch.baseSystemPrompt;
-    }
-    if (patch.appLocale === 'en' || patch.appLocale === 'de') {
-      out.appLocale = patch.appLocale;
-    }
-    if (typeof patch.maxToolRounds === 'number' && Number.isFinite(patch.maxToolRounds)) {
-      const clamped = Math.min(500, Math.max(1, Math.round(patch.maxToolRounds)));
-      out.maxToolRounds = clamped;
-    }
-    await storage.writeUIPrefs(out);
-    return out;
+    return storage.updateUIPrefs(async (out) => {
+      if (typeof patch.contentPaneVisible === 'boolean') {
+        out.contentPaneVisible = patch.contentPaneVisible;
+      }
+      if (typeof patch.baseSystemPrompt === 'string') {
+        out.baseSystemPrompt = patch.baseSystemPrompt;
+      }
+      if (patch.appLocale === 'en' || patch.appLocale === 'de') {
+        out.appLocale = patch.appLocale;
+      }
+      if (typeof patch.maxToolRounds === 'number' && Number.isFinite(patch.maxToolRounds)) {
+        const clamped = Math.min(500, Math.max(1, Math.round(patch.maxToolRounds)));
+        out.maxToolRounds = clamped;
+      }
+      const sidebarWidth = storage.clampSidebarWidth(patch.sidebarWidth);
+      if (typeof sidebarWidth === 'number') {
+        out.sidebarWidth = sidebarWidth;
+      }
+      const chatPanelWidth = storage.clampChatPanelWidth(patch.chatPanelWidth);
+      if (typeof chatPanelWidth === 'number') {
+        out.chatPanelWidth = chatPanelWidth;
+      }
+      return out;
+    });
   });
 }
 
-module.exports = { registerSettingsHandlers };
+function mergeProviderPatchIntoConfigImpl(deps, config, providerId, patch) {
+  const { safeStorage, providers } = deps;
+  const provider = providers.getProvider(providerId);
+  if (!provider) return { ok: false, error: 'Unbekannter Provider.' };
+  const prevEntry = (config.providers && config.providers[providerId]) || {};
+  const next = { ...prevEntry };
+
+  if (provider.fields?.apiKey) {
+    if (patch?.removeApiKey === true) {
+      delete next.apiKeyEnc;
+    }
+    const incomingKey = typeof patch?.apiKey === 'string' ? patch.apiKey.trim() : '';
+    if (incomingKey) {
+      if (!safeStorage.isEncryptionAvailable()) {
+        return { ok: false, error: 'Verschlüsselter Speicher ist nicht verfügbar.' };
+      }
+      next.apiKeyEnc = safeStorage.encryptString(incomingKey).toString('base64');
+    }
+  }
+
+  if (provider.fields?.baseUrl && typeof patch?.baseUrl === 'string' && patch.baseUrl.trim()) {
+    next.baseUrl = patch.baseUrl.trim();
+  }
+
+  if (provider.fields?.insecureTls && typeof patch?.insecureTls === 'boolean') {
+    next.insecureTls = patch.insecureTls;
+  }
+
+  config.providers = config.providers || {};
+  config.providers[providerId] = next;
+  return { ok: true };
+}
+
+module.exports = { registerSettingsHandlers, mergeProviderPatchIntoConfigImpl };

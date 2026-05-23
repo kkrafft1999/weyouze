@@ -146,7 +146,7 @@ test('withChatHistoryLock serializes concurrent upserts', async () => {
 
   await Promise.all([
     storage.withChatHistoryLock(async () => {
-      const store = await storage.readChatHistoryStore();
+      const store = await storage.readChatHistoryStore({ skipMigration: true });
       store.sessions.push({
         id: 'a',
         workspaceRoot: null,
@@ -157,7 +157,7 @@ test('withChatHistoryLock serializes concurrent upserts', async () => {
       await storage.writeChatHistoryStore(store);
     }),
     storage.withChatHistoryLock(async () => {
-      const store = await storage.readChatHistoryStore();
+      const store = await storage.readChatHistoryStore({ skipMigration: true });
       store.sessions.push({
         id: 'b',
         workspaceRoot: null,
@@ -232,6 +232,95 @@ test('readChatHistoryStore migrates plaintext to encrypted on read', async () =>
   const raw = await fs.readFile(path.join(tmpDir, 'chat-history.json'), 'utf8');
   const onDisk = JSON.parse(raw);
   assert.equal(onDisk.encrypted, true);
+
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test('parallel readChatHistoryStore migrates plaintext once under encryption', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-storage-'));
+  const plaintext = {
+    version: 2,
+    activeByWorkspace: { __none__: 's1' },
+    sessions: [{
+      id: 's1',
+      workspaceRoot: null,
+      title: 'Session',
+      updatedAt: 1,
+      messages: [{ role: 'user', content: 'hello' }],
+    }],
+  };
+  await fs.writeFile(
+    path.join(tmpDir, 'chat-history.json'),
+    JSON.stringify(plaintext),
+    'utf8',
+  );
+
+  const storage = makeStorageWithEncryption(tmpDir);
+  let writeCount = 0;
+  const realWriteFile = fs.writeFile.bind(fs);
+  fs.writeFile = async (filePath, data, encoding) => {
+    if (String(filePath).includes('chat-history.json.tmp-')) {
+      writeCount += 1;
+    }
+    return realWriteFile(filePath, data, encoding);
+  };
+
+  const results = await Promise.all([
+    storage.readChatHistoryStore(),
+    storage.readChatHistoryStore(),
+    storage.readChatHistoryStore(),
+  ]);
+
+  fs.writeFile = realWriteFile;
+
+  assert.equal(writeCount, 1);
+  for (const store of results) {
+    assert.equal(store.sessions.length, 1);
+    assert.equal(store.sessions[0].id, 's1');
+    assert.equal(store.sessions[0].messages[0].content, 'hello');
+    assert.equal(store.activeByWorkspace.__none__, 's1');
+  }
+
+  const raw = await fs.readFile(path.join(tmpDir, 'chat-history.json'), 'utf8');
+  const onDisk = JSON.parse(raw);
+  assert.equal(onDisk.encrypted, true);
+
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test('readUIPrefs validates and clamps sidebarWidth and chatPanelWidth', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-storage-'));
+  const storage = makeStorage(tmpDir);
+
+  await storage.writeUIPrefs({
+    contentPaneVisible: true,
+    appLocale: 'de',
+    sidebarWidth: 50,
+    chatPanelWidth: 100,
+  });
+  let prefs = await storage.readUIPrefs();
+  assert.equal(prefs.sidebarWidth, 150);
+  assert.equal(prefs.chatPanelWidth, 260);
+
+  await storage.writeUIPrefs({
+    contentPaneVisible: true,
+    appLocale: 'de',
+    sidebarWidth: 999,
+    chatPanelWidth: 5000,
+  });
+  prefs = await storage.readUIPrefs();
+  assert.equal(prefs.sidebarWidth, 600);
+  assert.equal(prefs.chatPanelWidth, 2000);
+
+  await storage.writeUIPrefs({
+    contentPaneVisible: true,
+    appLocale: 'de',
+    sidebarWidth: 'wide',
+    chatPanelWidth: null,
+  });
+  prefs = await storage.readUIPrefs();
+  assert.equal(prefs.sidebarWidth, undefined);
+  assert.equal(prefs.chatPanelWidth, undefined);
 
   await fs.rm(tmpDir, { recursive: true, force: true });
 });

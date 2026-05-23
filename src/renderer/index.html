@@ -392,8 +392,13 @@
 
             <div id="provider-key-row">
               <div class="popup-flow-subhead">API-Schlüssel</div>
-              <label class="visually-hidden" for="input-api-key">API-Key</label>
-              <input type="password" id="input-api-key" class="modal-input" placeholder="sk-…" autocomplete="off" />
+              <div class="modal-row">
+                <label class="visually-hidden" for="input-api-key">API-Key</label>
+                <input type="password" id="input-api-key" class="modal-input modal-input--grow" placeholder="sk-…" autocomplete="off" />
+                <button type="button" id="btn-remove-api-key" class="settings-icon-trash hidden" aria-label="API-Schlüssel entfernen">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
             </div>
 
             <div id="provider-insecure-row" class="hidden modal-checkbox-row">

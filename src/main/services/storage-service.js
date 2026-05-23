@@ -23,11 +23,11 @@ function createStorageService({
 
   const NO_WORKSPACE_KEY = '__none__';
 
-  let chatHistoryLock = Promise.resolve();
+  const fileLocks = new Map();
 
   async function writeJsonAtomic(targetPath, data) {
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    const tmp = `${targetPath}.tmp-${process.pid}-${Date.now()}`;
+    const tmp = `${targetPath}.tmp-${randomUUID()}`;
     await fs.writeFile(tmp, JSON.stringify(data), 'utf8');
     try {
       await fs.rename(tmp, targetPath);
@@ -37,10 +37,15 @@ function createStorageService({
     }
   }
 
-  function withChatHistoryLock(fn) {
-    const task = chatHistoryLock.then(fn, fn);
-    chatHistoryLock = task.catch(() => {});
+  function withFileLock(targetPath, fn) {
+    const prev = fileLocks.get(targetPath) || Promise.resolve();
+    const task = prev.then(fn, fn);
+    fileLocks.set(targetPath, task.catch(() => {}));
     return task;
+  }
+
+  function withChatHistoryLock(fn) {
+    return withFileLock(getChatHistoryPath(), fn);
   }
 
   function getLLMConfigPath() {
@@ -111,7 +116,7 @@ function createStorageService({
     };
   }
 
-  async function migrateLLMConfigToV3(existing) {
+  async function migrateLLMConfigToV3(existing, { persist = true } = {}) {
     const out = { ...existing };
     out.version = 3;
     if (!Array.isArray(out.presets)) out.presets = [];
@@ -146,7 +151,9 @@ function createStorageService({
       const cur = resolveChatModelTarget(out);
       out.activeProvider = cur.providerId;
     }
-    await writeLLMConfig(out);
+    if (persist) {
+      await writeLLMConfig(out);
+    }
     return out;
   }
 
@@ -170,7 +177,7 @@ function createStorageService({
     }
   }
 
-  async function readLLMConfig() {
+  async function readLLMConfig({ persistMigration = true } = {}) {
     const existing = await readLLMConfigRaw();
     if (existing && existing.version === 3 && existing.providers) {
       if (!existing.providers || typeof existing.providers !== 'object') {
@@ -185,7 +192,7 @@ function createStorageService({
         existing.providers = {};
       }
       if (!existing.activeProvider) existing.activeProvider = DEFAULT_PROVIDER;
-      return migrateLLMConfigToV3(existing);
+      return migrateLLMConfigToV3(existing, { persist: persistMigration });
     }
     // Migrate from legacy openai-config.json (if present)
     const legacy = await readLegacyOpenAIConfig();
@@ -197,12 +204,21 @@ function createStorageService({
       };
       migrated.activeProvider = 'openai';
     }
-    const withV3 = await migrateLLMConfigToV3(migrated);
+    const withV3 = await migrateLLMConfigToV3(migrated, { persist: persistMigration });
     return withV3;
   }
 
   async function writeLLMConfig(config) {
-    await writeJsonAtomic(getLLMConfigPath(), config);
+    await withFileLock(getLLMConfigPath(), () => writeJsonAtomic(getLLMConfigPath(), config));
+  }
+
+  async function updateLLMConfig(updater) {
+    return withFileLock(getLLMConfigPath(), async () => {
+      const config = await readLLMConfig({ persistMigration: false });
+      const updated = await updater(config);
+      await writeJsonAtomic(getLLMConfigPath(), updated);
+      return updated;
+    });
   }
 
   function decryptIfPossible(b64) {
@@ -291,6 +307,21 @@ function createStorageService({
     }
   }
 
+  const SIDEBAR_WIDTH_MIN = 150;
+  const SIDEBAR_WIDTH_MAX = 600;
+  const CHAT_PANEL_WIDTH_MIN = 260;
+  const CHAT_PANEL_WIDTH_MAX = 2000;
+
+  function clampSidebarWidth(raw) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
+    return Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(raw)));
+  }
+
+  function clampChatPanelWidth(raw) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
+    return Math.min(CHAT_PANEL_WIDTH_MAX, Math.max(CHAT_PANEL_WIDTH_MIN, Math.round(raw)));
+  }
+
   function getUIPrefsPath() {
     return path.join(app.getPath('userData'), UI_PREFS_FILENAME);
   }
@@ -308,11 +339,15 @@ function createStorageService({
       if (typeof data.maxToolRounds === 'number' && Number.isFinite(data.maxToolRounds)) {
         maxToolRounds = Math.round(data.maxToolRounds);
       }
+      const sidebarWidth = clampSidebarWidth(data.sidebarWidth);
+      const chatPanelWidth = clampChatPanelWidth(data.chatPanelWidth);
       return {
         contentPaneVisible: data.contentPaneVisible !== false,
         baseSystemPrompt,
         appLocale,
         ...(typeof maxToolRounds === 'number' ? { maxToolRounds } : {}),
+        ...(typeof sidebarWidth === 'number' ? { sidebarWidth } : {}),
+        ...(typeof chatPanelWidth === 'number' ? { chatPanelWidth } : {}),
       };
     } catch {
       return { contentPaneVisible: true, baseSystemPrompt: '', appLocale: 'de' };
@@ -320,7 +355,16 @@ function createStorageService({
   }
 
   async function writeUIPrefs(data) {
-    await writeJsonAtomic(getUIPrefsPath(), data);
+    await withFileLock(getUIPrefsPath(), () => writeJsonAtomic(getUIPrefsPath(), data));
+  }
+
+  async function updateUIPrefs(updater) {
+    return withFileLock(getUIPrefsPath(), async () => {
+      const current = await readUIPrefs();
+      const updated = await updater({ ...current });
+      await writeJsonAtomic(getUIPrefsPath(), updated);
+      return updated;
+    });
   }
 
   function getChatHistoryPath() {
@@ -402,35 +446,51 @@ function createStorageService({
     };
   }
 
-  async function readChatHistoryStore() {
+  async function loadChatHistoryStoreFromDisk() {
     try {
       const raw = await fs.readFile(getChatHistoryPath(), 'utf8');
       let data = JSON.parse(raw);
-      if (!data || typeof data !== 'object') return defaultChatHistoryStore();
+      if (!data || typeof data !== 'object') {
+        return { store: defaultChatHistoryStore(), wasEncrypted: false };
+      }
 
       let wasEncrypted = false;
       if (data.encrypted === true && typeof data.payload === 'string') {
         wasEncrypted = true;
         const decrypted = decryptIfPossible(data.payload);
-        if (!decrypted) return defaultChatHistoryStore();
+        if (!decrypted) return { store: defaultChatHistoryStore(), wasEncrypted: true };
         try {
           data = JSON.parse(decrypted);
         } catch {
-          return defaultChatHistoryStore();
+          return { store: defaultChatHistoryStore(), wasEncrypted: true };
         }
       }
 
       const store = parseChatHistoryStoreData(data);
-      if (!store) return defaultChatHistoryStore();
-
-      if (safeStorage.isEncryptionAvailable() && !wasEncrypted) {
-        await writeChatHistoryStore(store);
-      }
-
-      return store;
+      if (!store) return { store: defaultChatHistoryStore(), wasEncrypted };
+      return { store, wasEncrypted };
     } catch {
-      return defaultChatHistoryStore();
+      return { store: defaultChatHistoryStore(), wasEncrypted: false };
     }
+  }
+
+  async function migrateChatHistoryToEncryptedIfNeeded(store, wasEncrypted) {
+    if (safeStorage.isEncryptionAvailable() && !wasEncrypted) {
+      await writeChatHistoryStore(store);
+    }
+  }
+
+  async function readChatHistoryStore({ skipMigration = false } = {}) {
+    const { store, wasEncrypted } = await loadChatHistoryStoreFromDisk();
+    if (skipMigration) return store;
+    if (safeStorage.isEncryptionAvailable() && !wasEncrypted) {
+      return withChatHistoryLock(async () => {
+        const fresh = await loadChatHistoryStoreFromDisk();
+        await migrateChatHistoryToEncryptedIfNeeded(fresh.store, fresh.wasEncrypted);
+        return fresh.store;
+      });
+    }
+    return store;
   }
 
   async function writeChatHistoryStore(store) {
@@ -517,14 +577,18 @@ function createStorageService({
     getUIPrefsPath,
     readLLMConfig,
     writeLLMConfig,
+    updateLLMConfig,
     resolveChatModelTarget,
     normalizePresetEntry,
     migrateLLMConfigToV3,
     getEffectiveProviderConfig,
     getOpenAIApiKey,
     getValidatedLastFolder,
+    clampSidebarWidth,
+    clampChatPanelWidth,
     readUIPrefs,
     writeUIPrefs,
+    updateUIPrefs,
     normalizeWorkspaceRoot,
     workspaceBucketKey,
     normalizeSessionForStore,
