@@ -5,6 +5,90 @@ import {
   normalizeLoadedMessages,
 } from '../chat/messageUtils.js';
 
+function toolLineText(entry) {
+  if (typeof entry === 'string') return entry;
+  return entry?.line ?? entry?.summary ?? entry?.text ?? '';
+}
+
+function createToolCheckIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'chat-tool-line-check');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Abgeschlossen');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M3 8l3 3 7-7');
+  svg.appendChild(path);
+  return svg;
+}
+
+function buildToolLine(text, state /* 'running' | 'done' */) {
+  const row = document.createElement('div');
+  row.className = 'chat-tool-line';
+  row.classList.add(state === 'running' ? 'chat-tool-line--running' : 'chat-tool-line--done');
+  row.setAttribute('role', 'status');
+
+  const textEl = document.createElement('span');
+  textEl.className = 'chat-tool-line-text';
+  textEl.textContent = text;
+  row.appendChild(textEl);
+
+  if (state === 'running') {
+    row.setAttribute('aria-busy', 'true');
+    row.setAttribute('aria-label', `Läuft: ${text}`);
+  } else {
+    row.setAttribute('aria-label', `Abgeschlossen: ${text}`);
+    const status = document.createElement('span');
+    status.className = 'chat-tool-line-status';
+    const srDone = document.createElement('span');
+    srDone.className = 'sr-only';
+    srDone.textContent = 'Abgeschlossen';
+    status.appendChild(srDone);
+    status.appendChild(createToolCheckIcon());
+    row.appendChild(status);
+  }
+
+  return row;
+}
+
+function setToolLineDone(row, doneText) {
+  if (!row || row.classList.contains('chat-tool-line--done')) return;
+  row.classList.remove('chat-tool-line--running');
+  row.classList.add('chat-tool-line--done');
+  row.removeAttribute('aria-busy');
+
+  const textEl = row.querySelector('.chat-tool-line-text');
+  if (doneText && textEl) textEl.textContent = doneText;
+  const finalText = textEl?.textContent || doneText || '';
+  if (finalText) row.setAttribute('aria-label', `Abgeschlossen: ${finalText}`);
+
+  let status = row.querySelector('.chat-tool-line-status');
+  if (!status) {
+    status = document.createElement('span');
+    status.className = 'chat-tool-line-status';
+    row.appendChild(status);
+  }
+  if (!status.querySelector('.sr-only')) {
+    const srDone = document.createElement('span');
+    srDone.className = 'sr-only';
+    srDone.textContent = 'Abgeschlossen';
+    status.insertBefore(srDone, status.firstChild);
+  }
+  if (!status.querySelector('.chat-tool-line-check')) {
+    status.appendChild(createToolCheckIcon());
+  }
+}
+
+function syncToolLogLayout(wrap) {
+  if (!wrap) return;
+  const count = wrap.querySelectorAll('.chat-tool-line').length;
+  wrap.classList.toggle('chat-tool-log--multi', count >= 2);
+}
+
+function finalizeAllToolLines(wrap) {
+  wrap?.querySelectorAll('.chat-tool-line--running').forEach(setToolLineDone);
+}
+
 export function initChatStream({
   api,
   appStore,
@@ -16,80 +100,75 @@ export function initChatStream({
   activeProviderConfigured,
   syncLiveDot,
 }) {
-  function buildToolStatusBadge(state /* 'running' | 'done' */) {
-    const wrap = document.createElement('span');
-    wrap.className = 'chat-tool-status';
-    if (state === 'running') {
-      const dot = document.createElement('span');
-      dot.className = 'chat-tool-status-dot';
-      dot.setAttribute('role', 'img');
-      dot.setAttribute('aria-label', 'Aktiv');
-      wrap.appendChild(dot);
-      const pill = document.createElement('span');
-      pill.className = 'chat-pill chat-pill--running';
-      pill.setAttribute('lang', 'en');
-      const sr = document.createElement('span');
-      sr.className = 'sr-only';
-      sr.textContent = 'Status: ';
-      pill.appendChild(sr);
-      pill.appendChild(document.createTextNode('RUNNING'));
-      wrap.appendChild(pill);
-    } else {
-      const ns = 'http://www.w3.org/2000/svg';
-      const svg = document.createElementNS(ns, 'svg');
-      svg.setAttribute('class', 'chat-tool-status-check');
-      svg.setAttribute('viewBox', '0 0 16 16');
-      svg.setAttribute('role', 'img');
-      svg.setAttribute('aria-label', 'Abgeschlossen');
-      const path = document.createElementNS(ns, 'path');
-      path.setAttribute('d', 'M3 8l3 3 7-7');
-      svg.appendChild(path);
-      wrap.appendChild(svg);
-      const pill = document.createElement('span');
-      pill.className = 'chat-pill chat-pill--done';
-      pill.setAttribute('lang', 'en');
-      const sr = document.createElement('span');
-      sr.className = 'sr-only';
-      sr.textContent = 'Status: ';
-      pill.appendChild(sr);
-      pill.appendChild(document.createTextNode('DONE'));
-      wrap.appendChild(pill);
-    }
-    return wrap;
-  }
-
   function buildToolLog(trace, state /* 'running' | 'done' */) {
-    const log = document.createElement('details');
+    const log = document.createElement('div');
     log.className = 'chat-tool-log';
     log.classList.add(state === 'running' ? 'chat-tool-log--running' : 'chat-tool-log--done');
-    if (state === 'running') log.open = true;
-
-    const summary = document.createElement('summary');
-    summary.className = 'chat-tool-summary';
-
-    const summaryText = document.createElement('span');
-    summaryText.className = 'chat-tool-summary-text';
-    summary.appendChild(summaryText);
-
-    summary.appendChild(buildToolStatusBadge(state));
-    log.appendChild(summary);
+    log.setAttribute('role', 'log');
+    log.setAttribute('aria-live', 'polite');
+    if (state === 'running') log.setAttribute('aria-busy', 'true');
 
     const lines = document.createElement('div');
     lines.className = 'chat-tool-lines';
     log.appendChild(lines);
 
     if (Array.isArray(trace) && trace.length > 0) {
-      for (const line of trace) {
-        const row = document.createElement('div');
-        row.className = 'chat-tool-line';
-        row.textContent = typeof line === 'string' ? line : line.summary || '';
-        lines.appendChild(row);
+      for (let i = 0; i < trace.length; i += 1) {
+        const text = toolLineText(trace[i]);
+        const lineState =
+          state === 'running' && i === trace.length - 1 ? 'running' : 'done';
+        lines.appendChild(buildToolLine(text, lineState));
       }
-      const lastLine = trace[trace.length - 1];
-      summaryText.textContent =
-        typeof lastLine === 'string' ? lastLine : lastLine.summary || '';
+      syncToolLogLayout(log);
     }
     return log;
+  }
+
+  function appendReasoningDetails(bubble, reasoningText) {
+    if (!reasoningText?.trim()) return;
+    if (bubble.querySelector('.chat-reasoning-details')) return;
+    const det = document.createElement('details');
+    det.className = 'chat-reasoning-details';
+    const sum = document.createElement('summary');
+    sum.textContent = 'Zwischenschritte (Modell)';
+    const body = document.createElement('pre');
+    body.className = 'chat-reasoning-body';
+    body.textContent = reasoningText;
+    det.appendChild(sum);
+    det.appendChild(body);
+    const anchor = bubble.querySelector('.chat-md-streaming, .chat-md');
+    if (anchor) bubble.insertBefore(det, anchor);
+    else bubble.appendChild(det);
+  }
+
+  function finalizeStreamingToolLog(wrap) {
+    finalizeAllToolLines(wrap);
+    wrap.classList.remove('chat-tool-log--running');
+    wrap.classList.add('chat-tool-log--done');
+    wrap.removeAttribute('aria-busy');
+  }
+
+  function finalizeStreamingAssistantBubble(bubble, message) {
+    bubble.querySelector('.chat-phase')?.remove();
+    bubble.querySelector('.chat-reasoning-stream')?.remove();
+
+    const toolLog = bubble.querySelector('.chat-tool-log');
+    if (toolLog) {
+      finalizeStreamingToolLog(toolLog);
+    } else if (Array.isArray(message.toolTrace) && message.toolTrace.length > 0) {
+      const anchor = bubble.querySelector('.chat-md-streaming');
+      const log = buildToolLog(message.toolTrace, 'done');
+      if (anchor) bubble.insertBefore(log, anchor);
+      else bubble.appendChild(log);
+    }
+
+    appendReasoningDetails(bubble, message.reasoningText);
+
+    const streamEl = bubble.querySelector('.chat-md-streaming');
+    if (streamEl) {
+      streamEl.classList.remove('chat-md-streaming');
+      streamEl.innerHTML = markdownToSafeHtml(message.content || '');
+    }
   }
 
   function syncChatBusyState() {
@@ -296,25 +375,58 @@ export function initChatStream({
 
     const offTool =
       typeof api.onChatToolLine === 'function'
-        ? api.onChatToolLine(({ line }) => {
+        ? api.onChatToolLine((payload) => {
             const last = appStore.chatMessages[appStore.chatMessages.length - 1];
             if (!last || last.role !== 'assistant' || !last.streaming) return;
-            if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
-            last.toolTrace.push(line);
+
+            const line =
+              typeof payload === 'string'
+                ? payload
+                : typeof payload?.line === 'string'
+                  ? payload.line
+                  : '';
+            if (!line) return;
+
+            const phase =
+              typeof payload === 'object' && payload !== null && payload.phase
+                ? payload.phase
+                : 'start';
+
             const wrap = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type .chat-tool-log');
-            if (wrap) {
-              const linesEl = wrap.querySelector('.chat-tool-lines');
-              const sumTextEl = wrap.querySelector('.chat-tool-summary-text');
-              const row = document.createElement('div');
-              row.className = 'chat-tool-line';
-              row.textContent = line;
-              if (linesEl) linesEl.appendChild(row);
-              else wrap.appendChild(row);
-              if (sumTextEl) sumTextEl.textContent = line;
-              chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
-            } else {
+            if (!wrap) {
+              if (phase === 'start') {
+                if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
+                last.toolTrace.push(line);
+              }
               renderChatMessages();
+              return;
             }
+
+            let linesEl = wrap.querySelector('.chat-tool-lines');
+            if (!linesEl) {
+              linesEl = document.createElement('div');
+              linesEl.className = 'chat-tool-lines';
+              wrap.appendChild(linesEl);
+            }
+
+            if (phase === 'done') {
+              const runningRows = [...linesEl.querySelectorAll('.chat-tool-line--running')];
+              const target = runningRows[runningRows.length - 1];
+              setToolLineDone(target, line);
+              if (target && Array.isArray(last.toolTrace) && last.toolTrace.length > 0) {
+                last.toolTrace[last.toolTrace.length - 1] = line;
+              }
+            } else {
+              if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
+              last.toolTrace.push(line);
+              linesEl.querySelectorAll('.chat-tool-line--running').forEach((row) => {
+                setToolLineDone(row);
+              });
+              linesEl.appendChild(buildToolLine(line, 'running'));
+            }
+
+            syncToolLogLayout(wrap);
+            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
           })
         : () => {};
 
@@ -351,6 +463,7 @@ export function initChatStream({
     if (sessionAtSend !== appStore.chatSessionId) return;
 
     const last = appStore.chatMessages[appStore.chatMessages.length - 1];
+    let skipRender = false;
     if (result.error) {
       if (last && last.streaming) {
         appStore.chatMessages.pop();
@@ -360,8 +473,15 @@ export function initChatStream({
       last.streaming = false;
       last.content = result.content ?? '';
       last.toolTrace = Array.isArray(result.toolTrace) ? result.toolTrace : last.toolTrace || [];
+      const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
+      if (bubble) {
+        finalizeStreamingAssistantBubble(bubble, last);
+        syncChatBusyState();
+        chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+        skipRender = true;
+      }
     }
-    renderChatMessages();
+    if (!skipRender) renderChatMessages();
     await persistCurrentChat();
   }
 

@@ -58,3 +58,14 @@ test('runWorkspaceTool read_file_text respects workspace bounds', async () => {
 
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
+
+test('runWorkspaceTool debug_wait waits for the requested duration', async () => {
+  const svc = makeFsService();
+  const started = Date.now();
+  const out = JSON.parse(await svc.runWorkspaceTool('debug_wait', { duration_seconds: 0.6 }, '/tmp/project'));
+  const elapsed = Date.now() - started;
+  assert.equal(out.ok, true);
+  assert.equal(out.waited_ms, 600);
+  assert.equal(out.waited_seconds, 0.6);
+  assert.ok(elapsed >= 550);
+});

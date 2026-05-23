@@ -1,8 +1,10 @@
+const { formatPauseDurationLabel, resolveDebugWaitMs } = require('../debug-wait');
+
 function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirectory, pathMod) {
   const name = pathMod.basename(workspaceRoot);
   let prompt =
     `Du hilfst beim Durchsuchen des in der App geöffneten Ordners („${name}“). ` +
-    `Du hast die Tools list_directory und read_file_text. Nutze nur relative Pfade zum Ordnerroot ` +
+    `Du hast die Tools list_directory, read_file_text und debug_wait (nur UI-Test). Nutze nur relative Pfade zum Ordnerroot ` +
     `(z. B. "" oder "." für die Wurzel, "src/index.js" für eine Datei). ` +
     `Antworte auf Deutsch, sachlich und knapp.`;
   if (selectedRelPath) {
@@ -20,19 +22,33 @@ function truncateToolLabel(s, max = 48) {
   return `${t.slice(0, max - 1)}…`;
 }
 
-function summarizeToolCall(toolName, args) {
+function formatRelativePathForLabel(relativePath) {
+  const raw = typeof relativePath === 'string' ? relativePath.trim() : '';
+  if (!raw || raw === '.') return null;
+  return truncateToolLabel(raw);
+}
+
+function summarizeToolCall(toolName, args, phase = 'start') {
+  const isDone = phase === 'done';
   if (toolName === 'list_directory') {
-    const p =
-      typeof args.relative_path === 'string' && args.relative_path.trim()
-        ? args.relative_path.trim()
-        : '.';
-    return `list_directory(${truncateToolLabel(p)})`;
+    const pathLabel = formatRelativePathForLabel(args?.relative_path);
+    if (pathLabel) {
+      return isDone ? `Ordner ${pathLabel} durchsucht` : `Ordner ${pathLabel} wird durchsucht …`;
+    }
+    return isDone ? 'Projektordner durchsucht' : 'Projektordner wird durchsucht …';
   }
   if (toolName === 'read_file_text') {
-    const p = typeof args.relative_path === 'string' ? args.relative_path.trim() : '?';
-    return `read_file_text(${truncateToolLabel(p)})`;
+    const pathLabel = formatRelativePathForLabel(args?.relative_path);
+    if (pathLabel) {
+      return isDone ? `Datei ${pathLabel} gelesen` : `Datei ${pathLabel} wird gelesen …`;
+    }
+    return isDone ? 'Datei gelesen' : 'Datei wird gelesen …';
   }
-  return truncateToolLabel(toolName || 'tool');
+  if (toolName === 'debug_wait') {
+    return formatPauseDurationLabel(resolveDebugWaitMs(args), phase);
+  }
+  const name = truncateToolLabel(toolName || 'Tool');
+  return isDone ? `${name} ausgeführt` : `${name} wird ausgeführt …`;
 }
 
 function resolveToolRoundLimit(uiPrefs, mainDefault) {
@@ -172,9 +188,9 @@ function registerChatHandlers({
     const callbacks = makeStreamCallbacks(wc, PUSH);
     const toolRoundLimit = resolveToolRoundLimit(uiPrefsAll, maxToolRounds);
 
-    const emitToolLine = (line) => {
+    const emitToolLine = (phase, line) => {
       if (wc && !wc.isDestroyed()) {
-        wc.send(PUSH.CHAT_TOOL_LINE, { line });
+        wc.send(PUSH.CHAT_TOOL_LINE, { phase, line });
       }
     };
 
@@ -215,9 +231,11 @@ function registerChatHandlers({
               } catch {
                 args = {};
               }
-              const line = `${summarizeToolCall(toolName, args)} · kein Ordner geöffnet`;
-              toolTrace.push(line);
-              emitToolLine(line);
+              const startLine = `${summarizeToolCall(toolName, args, 'start')} · kein Ordner geöffnet`;
+              const doneLine = `${summarizeToolCall(toolName, args, 'done')} · kein Ordner geöffnet`;
+              toolTrace.push(doneLine);
+              emitToolLine('start', startLine);
+              emitToolLine('done', doneLine);
               apiMessages.push({
                 role: 'tool',
                 tool_call_id: tc.id,
@@ -237,10 +255,12 @@ function registerChatHandlers({
             } catch {
               args = {};
             }
-            const line = summarizeToolCall(toolName, args);
-            toolTrace.push(line);
-            emitToolLine(line);
+            const startLine = summarizeToolCall(toolName, args, 'start');
+            const doneLine = summarizeToolCall(toolName, args, 'done');
+            toolTrace.push(doneLine);
+            emitToolLine('start', startLine);
             const out = await fsService.runWorkspaceTool(toolName, args, workspaceRoot);
+            emitToolLine('done', doneLine);
             apiMessages.push({
               role: 'tool',
               tool_call_id: tc.id,

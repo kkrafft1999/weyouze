@@ -931,16 +931,16 @@ summary:focus-visible,
   user-select: text;
 }
 
-/* User-Nachricht: Karte ohne Schatten, linker Blue-Akzent (Mono-Blue). */
+/* User-Nachricht: leichter Blau-Wash, linker Blue-Akzent (Mono-Blue). */
 .chat-msg.user {
   align-self: flex-end;
-  background: var(--bg-primary);
+  background: var(--ds-chat-user-bg);
   color: var(--text-primary);
   border: 1px solid var(--ds-grey-divider);
   border-left: 2px solid var(--ds-blue);
   margin-left: 32px;
   padding: 9px 13px;
-  border-radius: 6px;
+  border-radius: 12px;
   white-space: pre-wrap;
 }
 
@@ -954,130 +954,127 @@ summary:focus-visible,
   margin-right: 0;
 }
 
-.chat-msg.assistant .chat-md {
+.chat-msg.assistant .chat-md,
+.chat-msg.assistant .chat-md-streaming {
   font-size: var(--ds-font-size-lg);    /* 15px */
   line-height: var(--ds-line-height-prose);  /* 1.55 */
+  margin-top: 2px;
 }
 
-/* Done-Variante ohne Trace-Zeilen ausblenden — der RUNNING-Container bleibt
- * dagegen sichtbar (zeigt die Live-Status-Pille). */
-.chat-tool-log--done:not(:has(.chat-tool-line)) {
+/* Leerer Tool-Log ohne Zeilen ausblenden. */
+.chat-tool-log:not(:has(.chat-tool-line)) {
   display: none;
 }
 
-/* Phase 3: Tool-Log als Karten-Container (Hero/Compact-Pattern).
- * Compact (done): dezente Karte mit Border, Status rechts.
- * Hero (running): hellblauer Header, linker Rand in --ds-blue, body luftiger.
- */
+/* Tool-Schritte: eigene kompakte Zeilen — kein inset-Rand wie User-Bubbles. */
 .chat-tool-log {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   padding: 0;
-  border: var(--ds-card-border);
-  border-radius: var(--ds-radius-md);
-  background: var(--bg-primary);
-  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  box-shadow: none;
 }
 
 .chat-tool-log--running {
-  border-color: var(--ds-blue);
-  border-left-width: 2px;
-  padding-left: 0;                    /* der ueberschriebene Phase-2-Wert */
-  /* Phase 5 B: Min-Display-Time. Wenn ein Tool unter 500 ms zurueckkommt,
-   * sieht der User die Hero-Karte sonst nur als kurzes Flackern. Mit einem
-   * sanften Fade-In stabilisiert sich das Auge und der Eindruck "es wurde
-   * gerade etwas getan" haelt mindestens 600 ms. Reduced-Motion ueberschreibt
-   * `--ds-motion-medium` auf 0,001s, daher kein extra Reduced-Motion-Block. */
   animation: toolHeroFadeIn var(--ds-motion-medium) ease-out both;
 }
 
 @keyframes toolHeroFadeIn {
-  0% { opacity: 0.4; transform: translateY(-2px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0% { opacity: 0.55; }
+  100% { opacity: 1; }
 }
 
 .chat-tool-log--done {
-  background: color-mix(in srgb, var(--bg-primary) 92%, var(--ds-grey-divider));
-  /* Dezenter linker Border in --ds-blue, damit die DONE-Karte im Chat-Strom
-   * schneller als "abgeschlossener Tool-Aufruf" erkennbar ist. RUNNING und
-   * DONE differenzieren sich jetzt nicht mehr ueber Farbe (beide Blue),
-   * sondern ueber Border-Saettigung: RUNNING voll, DONE nur 55%. */
-  border-left-width: 2px;
-  border-left-color: color-mix(in srgb, var(--ds-blue) 55%, transparent);
+  background: transparent;
 }
 
-.chat-tool-summary {
-  list-style: none;
-  cursor: pointer;
+.chat-tool-lines {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: transparent;
+}
+
+.chat-tool-line {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: var(--ds-font-size-md);
-  line-height: 1.4;
-  font-family: var(--ds-font-mono);
-  color: var(--text-muted-strong);    /* dunkler bei <14px (a11y) */
+  line-height: 1.5;
+  font-family: var(--ds-font-tool);
+  color: var(--text-muted-strong);
+  margin: 0;
+  padding: 4px 0 4px 12px;
   letter-spacing: -0.02em;
-  user-select: none;
-  background: var(--ds-grey-bg);
-  border-bottom: var(--ds-card-border);
+  border: none;
+  border-left: 4px solid var(--ds-black);
+  border-radius: 0;
+  background: transparent;
 }
 
-.chat-tool-log--running .chat-tool-summary {
-  background: var(--ds-blue-soft);
-  border-bottom-color: var(--ds-blue-border);
+.chat-tool-line--running {
+  border-left-color: var(--ds-black);
 }
 
-.chat-tool-summary::-webkit-details-marker {
-  display: none;
+.chat-tool-line--done {
+  border-left-color: var(--ds-grey-divider);
 }
 
-.chat-tool-summary::before {
-  content: '▸';
-  display: inline-block;
-  font-family: sans-serif;
-  font-size: 10px;
+.chat-tool-log--multi .chat-tool-line--done {
+  font-size: var(--ds-font-size-sm);
   color: var(--text-muted);
-  opacity: 0.7;
-  width: 10px;
-  text-align: center;
-  transition: transform 0.15s ease;
+  padding: 2px 0 2px 10px;
 }
 
-.chat-tool-log[open] > .chat-tool-summary::before {
-  transform: rotate(90deg);
-}
-
-.chat-tool-summary-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
+.chat-tool-line-text {
+  flex: 0 1 auto;
   min-width: 0;
 }
 
-/* ── Phase 2 (a11y): Tool-Call-Status (Badge in der Summary-Zeile) ──────────
- * Pflicht aus docs/ui-design/doubleslash-a11y-regeln.md ("Status nie nur
- * ueber Farbe"): jeder Tool-Aufruf zeigt zusaetzlich Form (Dot oder Check)
- * + Text-Pill (RUNNING / DONE).
- */
-.chat-tool-status {
+.chat-tool-line--running .chat-tool-line-text {
+  --chat-tool-shimmer-base: var(--text-muted-strong);
+  --chat-tool-shimmer-highlight: color-mix(in srgb, var(--ds-white) 72%, var(--ds-blue) 28%);
+  display: inline-block;
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--chat-tool-shimmer-base) 0%,
+    var(--chat-tool-shimmer-base) 40%,
+    var(--chat-tool-shimmer-highlight) 50%,
+    var(--chat-tool-shimmer-base) 60%,
+    var(--chat-tool-shimmer-base) 100%
+  );
+  background-size: 220% 100%;
+  background-position: 120% 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: chatToolLineShimmer 1.85s ease-in-out infinite;
+}
+
+@keyframes chatToolLineShimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+.chat-tool-line-status {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  margin-left: auto;
+  line-height: 1;
 }
 
-.chat-tool-status-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ds-blue);
-  animation: chatPulse var(--ds-motion-pulse) ease-in-out infinite;
-}
-
-.chat-tool-status-check {
+.chat-tool-line-check {
   width: 14px;
   height: 14px;
   stroke: var(--ds-blue);
@@ -1085,39 +1082,9 @@ summary:focus-visible,
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  flex-shrink: 0;
 }
 
-.chat-pill {
-  display: inline-flex;
-  align-items: center;
-  font-size: 11px;                  /* Mindestgroesse aus den a11y-Regeln */
-  font-weight: var(--ds-font-weight-bold);
-  letter-spacing: 0.6px;
-  padding: 3px 9px;                 /* Mindest-Padding aus den a11y-Regeln */
-  border-radius: var(--ds-radius-pill);
-  font-family: var(--ds-font-mono);
-  text-transform: uppercase;
-}
-
-.chat-pill--running,
-.chat-pill--done {
-  background: var(--ds-blue);
-  color: var(--ds-white);
-}
-
-@keyframes chatPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-/* Streaming-Variante des Tool-Logs visuell hervorheben (zarte Blue-Border). */
-.chat-tool-log--running {
-  border-left: 2px solid var(--ds-blue);
-  padding-left: 8px;
-}
-
-/* Hilfsklasse fuer Screenreader-only-Text (Status-Praefixe in Pills). */
+/* Hilfsklasse fuer Screenreader-only-Text. */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1140,21 +1107,6 @@ summary:focus-visible,
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-.chat-tool-lines {
-  margin: 0;
-  padding: 10px 12px;
-  background: var(--bg-primary);
-}
-
-.chat-tool-line {
-  font-size: var(--ds-font-size-md);
-  line-height: 1.5;
-  font-family: var(--ds-font-mono);
-  color: var(--text-muted-strong);
-  margin: 2px 0;
-  letter-spacing: -0.02em;
 }
 
 .chat-phase {
@@ -2730,12 +2682,17 @@ select.modal-input {
   #btn-chat-mic.recording {
     animation: none;
   }
-  .chat-tool-status-dot,
   .chat-live-dot,
   .chat-live-dot[data-state='streaming'] {
     animation: none;
   }
   .chat-tool-log--running {
     animation: none;
+  }
+  .chat-tool-line--running .chat-tool-line-text {
+    animation: none;
+    color: var(--text-muted-strong);
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
   }
 }

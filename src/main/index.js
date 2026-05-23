@@ -74,6 +74,24 @@ const WORKSPACE_TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'debug_wait',
+      description:
+        'Nur zum UI-Test: wartet eine konfigurierbare Zeit und liefert danach OK zurück. Kein Dateizugriff.',
+      parameters: {
+        type: 'object',
+        properties: {
+          duration_seconds: {
+            type: 'number',
+            description:
+              'Wartezeit in Sekunden (Standard 5, Minimum 0,5, Maximum 20).',
+          },
+        },
+      },
+    },
+  },
 ];
 
 const storage = createStorageService({

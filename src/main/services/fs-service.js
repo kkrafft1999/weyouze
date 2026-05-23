@@ -1,3 +1,11 @@
+const { resolveDebugWaitMs } = require('../debug-wait');
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 function createFsService({ fs, path, maxReadFileBytes }) {
   const MAX_READ_FILE_BYTES = maxReadFileBytes;
 
@@ -25,6 +33,12 @@ function createFsService({ fs, path, maxReadFileBytes }) {
   }
 
   async function runWorkspaceTool(toolName, args, workspaceRoot) {
+    if (toolName === 'debug_wait') {
+      const ms = resolveDebugWaitMs(args);
+      await sleep(ms);
+      return JSON.stringify({ ok: true, waited_ms: ms, waited_seconds: ms / 1000 });
+    }
+
     if (toolName === 'list_directory') {
       const relArg = args.relative_path;
       const rel = typeof relArg === 'string' ? relArg : '';
