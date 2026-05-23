@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
+const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 
@@ -133,6 +133,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   const toolCalls = [];
   let finishReason = null;
   let streamError = null;
+  let usage = null;
 
   try {
     for await (const evt of iterSseEvents(reader, abortSignal)) {
@@ -185,6 +186,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
 
       if (ev === 'response.completed') {
         finishReason = toolCalls.length ? 'tool_calls' : 'stop';
+        usage = normalizeUsage(json.response?.usage);
         continue;
       }
 
@@ -221,7 +223,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     content: fullContent.length > 0 ? fullContent : toolCalls.length ? null : '',
     ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
   };
-  return { message, finishReason };
+  return { message, finishReason, usage };
 }
 
 module.exports = {

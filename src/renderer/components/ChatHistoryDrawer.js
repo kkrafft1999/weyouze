@@ -12,6 +12,7 @@ export function initChatHistoryDrawer({
   renderChatMessages,
   updateChatChrome,
   onInputChanged,
+  resetChatTokenUsage,
   onNewChatStarted,
 }) {
   function setHistoryDrawerOpen(open) {
@@ -92,6 +93,7 @@ export function initChatHistoryDrawer({
     appStore.currentChatId = id;
     appStore.currentChatWorkspace = s.workspaceRoot || null;
     appStore.chatMessages = normalizeLoadedMessages(s.messages);
+    resetChatTokenUsage?.();
     onInputChanged();
     await api.setActiveChatId(appStore.currentChatWorkspace, id);
     renderChatMessages();
@@ -108,6 +110,7 @@ export function initChatHistoryDrawer({
       appStore.currentChatId = crypto.randomUUID();
       appStore.currentChatWorkspace = appStore.rootPath || null;
       appStore.chatMessages = [];
+      resetChatTokenUsage?.();
       onInputChanged();
       await api.setActiveChatId(appStore.currentChatWorkspace, null);
       renderChatMessages();

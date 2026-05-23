@@ -25,6 +25,7 @@ export const appStore = {
   chatInFlight: false,
   chatSendSeq: 0,
   chatAbortedSendSeq: 0,
+  chatTokenUsage: { prompt: 0, completion: 0, total: 0 },
   currentChatId: '',
   currentChatWorkspace: null,
   streamRenderRaf: 0,

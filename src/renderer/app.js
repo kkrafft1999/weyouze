@@ -46,6 +46,7 @@ const btnChatHistory = document.getElementById('btn-chat-history');
 const btnChatNew = document.getElementById('btn-chat-new');
 const btnChatSettings = document.getElementById('btn-chat-settings');
 const chatInputRow = document.getElementById('chat-input-row');
+const chatTokenUsageEl = document.getElementById('chat-token-usage');
 const chatHistoryDrawer = document.getElementById('chat-history-drawer');
 const chatHistoryList = document.getElementById('chat-history-list');
 const chatHistoryEmpty = document.getElementById('chat-history-empty');
@@ -185,6 +186,7 @@ const chatStream = initChatStream({
   chatMessagesEl,
   chatInput,
   btnChatSend,
+  chatTokenUsageEl,
   onInputChanged: syncChatInputHeight,
   stopChatVoiceListening: voice.stopChatVoiceListening,
   activeProviderConfigured: () => modelPicker.activeProviderConfigured(),
@@ -203,6 +205,7 @@ const chatHistory = initChatHistoryDrawer({
   renderChatMessages: chatStream.renderChatMessages,
   updateChatChrome: () => modelPicker.updateChatChrome(),
   onInputChanged: syncChatInputHeight,
+  resetChatTokenUsage: () => chatStream.resetChatTokenUsage(),
   onNewChatStarted: async () => {
     await chatStream.startNewChat();
     modelPicker.updateChatChrome();

@@ -106,6 +106,53 @@ function cancelledChatRound(message) {
   return { cancelled: true, message };
 }
 
+function createEmptyUsage() {
+  return { prompt: 0, completion: 0, total: 0 };
+}
+
+function toUsageNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n);
+}
+
+/** Normalizes provider-specific usage payloads to { prompt, completion, total }. */
+function normalizeUsage(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const prompt = toUsageNumber(
+    raw.prompt
+    ?? raw.input
+    ?? raw.input_tokens
+    ?? raw.prompt_tokens
+    ?? raw.promptTokenCount
+    ?? raw.prompt_eval_count
+  );
+  const completion = toUsageNumber(
+    raw.completion
+    ?? raw.output
+    ?? raw.output_tokens
+    ?? raw.completion_tokens
+    ?? raw.candidatesTokenCount
+    ?? raw.eval_count
+  );
+  let total = toUsageNumber(raw.total ?? raw.total_tokens ?? raw.totalTokenCount);
+  if (total === 0 && (prompt > 0 || completion > 0)) {
+    total = prompt + completion;
+  }
+  if (prompt === 0 && completion === 0 && total === 0) return null;
+  return { prompt, completion, total };
+}
+
+function mergeUsage(base, addition) {
+  const next = normalizeUsage(addition);
+  if (!next) return base ? { ...base } : null;
+  if (!base) return next;
+  const prompt = base.prompt + next.prompt;
+  const completion = base.completion + next.completion;
+  const total = base.total + (next.total > 0 ? next.total : next.prompt + next.completion);
+  return { prompt, completion, total };
+}
+
 async function sleepAbortable(ms, abortSignal) {
   abortIfRequested(abortSignal);
   await new Promise((resolve, reject) => {
@@ -142,5 +189,8 @@ module.exports = {
   bindAbortSignalToReader,
   abortIfRequested,
   cancelledChatRound,
+  createEmptyUsage,
+  normalizeUsage,
+  mergeUsage,
   sleepAbortable,
 };

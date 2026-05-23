@@ -1,5 +1,5 @@
 const { formatPauseDurationLabel, resolveDebugWaitMs } = require('../debug-wait');
-const { isAbortError, createChatAbortError } = require('../providers/stream-helpers');
+const { isAbortError, createChatAbortError, mergeUsage } = require('../providers/stream-helpers');
 
 /** @type {Map<number, AbortController>} */
 const activeChatAborts = new Map();
@@ -25,9 +25,9 @@ function abortActiveChat(webContentsId) {
   }
 }
 
-function returnCancelledChat(wc, PUSH, toolTrace, content = '') {
+function returnCancelledChat(wc, PUSH, toolTrace, content = '', usage = null) {
   emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-  return { cancelled: true, content, toolTrace };
+  return { cancelled: true, content, toolTrace, usage };
 }
 
 function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirectory, pathMod) {
@@ -147,6 +147,7 @@ function registerChatHandlers({
     const abortSignal = abortController.signal;
     setActiveChatAbort(wc.id, abortController);
     const toolTrace = [];
+    let requestUsage = null;
 
     try {
       const messages = payload?.messages;
@@ -235,7 +236,7 @@ function registerChatHandlers({
 
       for (let round = 0; round < toolRoundLimit; round += 1) {
         if (abortSignal.aborted) {
-          return returnCancelledChat(wc, PUSH, toolTrace);
+          return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
         }
 
         emitChatProgress(wc, PUSH, { type: 'phase', phase: 'waiting' });
@@ -250,14 +251,16 @@ function registerChatHandlers({
           abortSignal,
         });
 
+        requestUsage = mergeUsage(requestUsage, streamed.usage);
+
         if (streamed.cancelled) {
           const partial = streamed.message?.content ?? '';
-          return returnCancelledChat(wc, PUSH, toolTrace, partial);
+          return returnCancelledChat(wc, PUSH, toolTrace, partial, requestUsage);
         }
 
         if (streamed.error) {
           emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-          return { error: streamed.error, code: streamed.code || 'API' };
+          return { error: streamed.error, code: streamed.code || 'API', usage: requestUsage };
         }
 
         const assistantMsg = streamed.message;
@@ -272,7 +275,7 @@ function registerChatHandlers({
           if (!workspaceRoot) {
             for (const tc of toolCalls) {
               if (abortSignal.aborted) {
-                return returnCancelledChat(wc, PUSH, toolTrace);
+                return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
               }
               const fn = tc.function;
               const toolName = fn?.name || 'tool';
@@ -299,7 +302,7 @@ function registerChatHandlers({
           }
           for (const tc of toolCalls) {
             if (abortSignal.aborted) {
-              return returnCancelledChat(wc, PUSH, toolTrace);
+              return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
             }
             const fn = tc.function;
             const toolName = fn?.name;
@@ -318,7 +321,7 @@ function registerChatHandlers({
               out = await fsService.runWorkspaceTool(toolName, args, workspaceRoot, { abortSignal });
             } catch (err) {
               if (isAbortError(err)) {
-                return returnCancelledChat(wc, PUSH, toolTrace);
+                return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
               }
               throw err;
             }
@@ -336,6 +339,7 @@ function registerChatHandlers({
         return {
           content: assistantMsg.content ?? '',
           toolTrace,
+          usage: requestUsage,
         };
       }
       emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
@@ -344,10 +348,11 @@ function registerChatHandlers({
           `Zu viele Tool-Runden (aktuell ${toolRoundLimit}). ` +
           'Erhöhe das Limit unter Einstellungen › Allgemein oder formuliere die Frage enger.',
         code: 'TOOL_LIMIT',
+        usage: requestUsage,
       };
     } catch (err) {
       if (isAbortError(err)) {
-        return returnCancelledChat(wc, PUSH, toolTrace);
+        return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
       }
       emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
       return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };

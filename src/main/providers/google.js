@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
+const { iterSseEvents, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -162,6 +162,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   let textOut = '';
   const collectedToolCalls = [];
   let finishReason = null;
+  let usage = null;
 
   try {
     for await (const evt of iterSseEvents(reader, abortSignal)) {
@@ -169,6 +170,8 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
       if (!evt.data) continue;
       let payload;
       try { payload = JSON.parse(evt.data); } catch { continue; }
+      const nextUsage = normalizeUsage(payload.usageMetadata);
+      if (nextUsage) usage = nextUsage;
       const cand = payload.candidates?.[0];
       if (!cand) continue;
       const parts = cand.content?.parts || [];
@@ -221,7 +224,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     content: textOut.length > 0 ? textOut : collectedToolCalls.length ? null : '',
     ...(collectedToolCalls.length ? { tool_calls: collectedToolCalls } : {}),
   };
-  return { message, finishReason };
+  return { message, finishReason, usage };
 }
 
 module.exports = {

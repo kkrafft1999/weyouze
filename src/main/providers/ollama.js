@@ -1,5 +1,5 @@
 const { Agent } = require('undici');
-const { iterStreamLines, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
+const { iterStreamLines, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'http://localhost:11434';
 
@@ -153,6 +153,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   let textOut = '';
   const collectedToolCalls = [];
   let finishReason = null;
+  let usage = null;
 
   try {
     for await (const line of iterStreamLines(reader, abortSignal)) {
@@ -189,6 +190,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
       }
       if (payload.done === true) {
         finishReason = collectedToolCalls.length ? 'tool_calls' : (payload.done_reason || 'stop');
+        usage = normalizeUsage(payload);
         break;
       }
     }
@@ -211,7 +213,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     content: textOut.length > 0 ? textOut : collectedToolCalls.length ? null : '',
     ...(collectedToolCalls.length ? { tool_calls: collectedToolCalls } : {}),
   };
-  return { message, finishReason };
+  return { message, finishReason, usage };
 }
 
 module.exports = {

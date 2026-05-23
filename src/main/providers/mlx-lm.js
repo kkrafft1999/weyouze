@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
+const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'http://127.0.0.1:8080/v1';
 
@@ -98,6 +98,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     model,
     messages: translateMessagesToChatCompletions(messages),
     stream: true,
+    stream_options: { include_usage: true },
   };
   const chatTools = translateToolsToChatCompletions(tools);
   if (chatTools) {
@@ -127,6 +128,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   const toolCalls = [];
   let finishReason = null;
   let streamError = null;
+  let usage = null;
 
   try {
     for await (const evt of iterSseEvents(reader, abortSignal)) {
@@ -140,6 +142,9 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
         streamError = json.error?.message || json.error?.code || String(json.error);
         continue;
       }
+
+      const nextUsage = normalizeUsage(json.usage);
+      if (nextUsage) usage = nextUsage;
 
       const choice = Array.isArray(json.choices) ? json.choices[0] : null;
       if (!choice) continue;
@@ -187,6 +192,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   return {
     message,
     finishReason: completeToolCalls.length ? 'tool_calls' : (finishReason || 'stop'),
+    usage,
   };
 }
 

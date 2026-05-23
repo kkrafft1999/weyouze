@@ -91,6 +91,39 @@ const CHAT_SEND_ICON_HTML =
 const CHAT_STOP_ICON_HTML =
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>';
 
+const tokenCountFormatter = new Intl.NumberFormat('de-DE');
+
+function mergeChatTokenUsage(target, usage) {
+  if (!usage || typeof usage !== 'object') return;
+  const prompt = Number(usage.prompt) || 0;
+  const completion = Number(usage.completion) || 0;
+  const total = Number(usage.total) || prompt + completion;
+  if (prompt === 0 && completion === 0 && total === 0) return;
+  target.prompt += prompt;
+  target.completion += completion;
+  target.total += total;
+}
+
+function formatChatTokenUsage(total) {
+  const n = Math.max(0, Math.round(Number(total) || 0));
+  if (n < 1000) {
+    return `${tokenCountFormatter.format(n)} Tokens`;
+  }
+  const inK = n / 1000;
+  if (inK < 10) {
+    const oneDecimal = new Intl.NumberFormat('de-DE', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+    return `${oneDecimal.format(inK)} K Tokens`;
+  }
+  const wholeK = new Intl.NumberFormat('de-DE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+  return `${wholeK.format(inK)} K Tokens`;
+}
+
 function finalizeAllToolLines(wrap) {
   wrap?.querySelectorAll('.chat-tool-line--running').forEach(setToolLineDone);
 }
@@ -101,11 +134,28 @@ export function initChatStream({
   chatMessagesEl,
   chatInput,
   btnChatSend,
+  chatTokenUsageEl,
   onInputChanged,
   stopChatVoiceListening,
   activeProviderConfigured,
   syncLiveDot,
 }) {
+  function resetChatTokenUsage() {
+    appStore.chatTokenUsage = { prompt: 0, completion: 0, total: 0 };
+    syncChatTokenUsageDisplay();
+  }
+
+  function syncChatTokenUsageDisplay() {
+    if (!chatTokenUsageEl) return;
+    const total = appStore.chatTokenUsage?.total || 0;
+    chatTokenUsageEl.textContent = formatChatTokenUsage(total);
+  }
+
+  function applyUsageFromResult(result) {
+    if (!result?.usage) return;
+    mergeChatTokenUsage(appStore.chatTokenUsage, result.usage);
+    syncChatTokenUsageDisplay();
+  }
   function syncChatSendButton() {
     const inFlight = !!appStore.chatInFlight;
     btnChatSend.classList.toggle('chat-send--stop', inFlight);
@@ -321,6 +371,7 @@ export function initChatStream({
         appStore.currentChatId = s.id;
         appStore.currentChatWorkspace = workspaceRoot || null;
         appStore.chatMessages = normalizeLoadedMessages(s.messages);
+        resetChatTokenUsage();
         chatInput.value = '';
         onInputChanged();
         renderChatMessages();
@@ -331,6 +382,7 @@ export function initChatStream({
     appStore.currentChatId = crypto.randomUUID();
     appStore.currentChatWorkspace = workspaceRoot || null;
     appStore.chatMessages = [];
+    resetChatTokenUsage();
     chatInput.value = '';
     onInputChanged();
     renderChatMessages();
@@ -343,6 +395,7 @@ export function initChatStream({
     appStore.currentChatId = crypto.randomUUID();
     appStore.currentChatWorkspace = appStore.rootPath || null;
     appStore.chatMessages = [];
+    resetChatTokenUsage();
     chatInput.value = '';
     onInputChanged();
     await api.setActiveChatId(appStore.currentChatWorkspace, null);
@@ -549,6 +602,7 @@ export function initChatStream({
       }
     }
     if (!skipRender) renderChatMessages();
+    applyUsageFromResult(result);
     await persistCurrentChat();
   }
 
@@ -579,6 +633,8 @@ export function initChatStream({
     }
   });
 
+  syncChatTokenUsageDisplay();
+
   return {
     renderChatMessages,
     persistCurrentChat,
@@ -586,5 +642,6 @@ export function initChatStream({
     startNewChat,
     sendChatMessage,
     syncChatSendButton,
+    resetChatTokenUsage,
   };
 }

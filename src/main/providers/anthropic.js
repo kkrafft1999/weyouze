@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
+const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const API_BASE = 'https://api.anthropic.com/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -154,6 +154,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   const blocks = new Map(); // index -> { type, text?, toolCall: {id, name, args} }
   let textOut = '';
   let stopReason = null;
+  let usage = null;
 
   try {
     for await (const evt of iterSseEvents(reader, abortSignal)) {
@@ -163,7 +164,15 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
       try { payload = JSON.parse(evt.data); } catch { continue; }
       const type = payload.type || evt.event;
 
-      if (type === 'content_block_start') {
+      if (type === 'message_start') {
+        const startUsage = normalizeUsage(payload.message?.usage);
+        if (startUsage) {
+          usage = usage || { prompt: 0, completion: 0, total: 0 };
+          usage.prompt = startUsage.prompt;
+          usage.completion = startUsage.completion;
+          usage.total = usage.prompt + usage.completion;
+        }
+      } else if (type === 'content_block_start') {
         const idx = payload.index;
         const cb = payload.content_block || {};
         if (cb.type === 'text') {
@@ -197,6 +206,13 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
       } else if (type === 'content_block_stop') {
         // no-op; data already accumulated
       } else if (type === 'message_delta') {
+        const deltaUsage = normalizeUsage(payload.usage);
+        if (deltaUsage) {
+          usage = usage || { prompt: 0, completion: 0, total: 0 };
+          if (deltaUsage.completion > 0) usage.completion = deltaUsage.completion;
+          if (deltaUsage.prompt > 0) usage.prompt = deltaUsage.prompt;
+          usage.total = usage.prompt + usage.completion;
+        }
         const sr = payload.delta?.stop_reason;
         if (sr) stopReason = sr;
       } else if (type === 'message_stop') {
@@ -265,7 +281,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   else if (stopReason === 'end_turn') finishReason = 'stop';
   else if (stopReason) finishReason = stopReason;
 
-  return { message, finishReason };
+  return { message, finishReason, usage };
 }
 
 module.exports = {
