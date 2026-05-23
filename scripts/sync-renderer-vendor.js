@@ -8,6 +8,12 @@ const fontsDir = path.join(vendor, 'fonts');
 fs.mkdirSync(vendor, { recursive: true });
 fs.mkdirSync(fontsDir, { recursive: true });
 
+// Preload runs sandboxed and cannot require modules outside its directory.
+fs.copyFileSync(
+  path.join(root, 'src', 'shared', 'ipc-channels.js'),
+  path.join(root, 'src', 'preload', 'ipc-channels.js')
+);
+
 // ── JS-Vendor-Bibliotheken ──────────────────────────────────────────────────
 fs.copyFileSync(
   path.join(root, 'node_modules', 'marked', 'lib', 'marked.umd.js'),
