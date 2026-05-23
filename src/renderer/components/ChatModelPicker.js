@@ -182,15 +182,15 @@ export function initChatModelPicker({
         chatHint.textContent = 'Konfiguriere ein Sprachmodell über das Zahnrad, um zu chatten.';
       }
       chatHint.classList.remove('hidden');
-      btnChatSend.disabled = true;
+      if (!appStore.chatInFlight) btnChatSend.disabled = true;
     } else if (!appStore.rootPath) {
       chatHint.textContent =
         `${modelHint ? `Aktiv: ${modelHint}` : 'Aktives Modell'} – Tipp: Öffne einen Ordner, damit der Assistent Dateien per Tool einlesen kann.`;
       chatHint.classList.remove('hidden');
-      btnChatSend.disabled = false;
+      if (!appStore.chatInFlight) btnChatSend.disabled = false;
     } else {
       chatHint.classList.add('hidden');
-      btnChatSend.disabled = false;
+      if (!appStore.chatInFlight) btnChatSend.disabled = false;
     }
 
     syncLiveDot();

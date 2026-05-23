@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage } = require('./stream-helpers');
+const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 
@@ -88,7 +88,7 @@ function translateMessagesToResponsesInput(messages) {
   return out;
 }
 
-async function streamChatRound({ config, model, messages, tools, callbacks }) {
+async function streamChatRound({ config, model, messages, tools, callbacks, abortSignal }) {
   const apiKey = config?.apiKey;
   if (!apiKey) return { error: 'Kein API-Key hinterlegt.', code: 'NO_API_KEY' };
 
@@ -115,8 +115,10 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: abortSignal,
     });
   } catch (err) {
+    if (isAbortError(err)) return cancelledChatRound({ role: 'assistant', content: '' });
     return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
   }
 
@@ -126,13 +128,15 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
   if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };
 
   const reader = res.body.getReader();
+  const unbindAbort = bindAbortSignalToReader(reader, abortSignal);
   const fullContentRef = { v: '' };
   const toolCalls = [];
   let finishReason = null;
   let streamError = null;
 
   try {
-    for await (const evt of iterSseEvents(reader)) {
+    for await (const evt of iterSseEvents(reader, abortSignal)) {
+      abortIfRequested(abortSignal);
       const ev = evt.event || '';
       const data = evt.data;
       if (!data || data === '[DONE]') continue;
@@ -193,7 +197,17 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
         continue;
       }
     }
+  } catch (err) {
+    if (isAbortError(err)) {
+      return cancelledChatRound({
+        role: 'assistant',
+        content: fullContentRef.v.length > 0 ? fullContentRef.v : toolCalls.length ? null : '',
+        ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+      });
+    }
+    throw err;
   } finally {
+    unbindAbort();
     reader.releaseLock?.();
   }
 

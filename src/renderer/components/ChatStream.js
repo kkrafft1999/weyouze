@@ -85,6 +85,12 @@ function syncToolLogLayout(wrap) {
   wrap.classList.toggle('chat-tool-log--multi', count >= 2);
 }
 
+const CHAT_SEND_ICON_HTML =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>';
+
+const CHAT_STOP_ICON_HTML =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>';
+
 function finalizeAllToolLines(wrap) {
   wrap?.querySelectorAll('.chat-tool-line--running').forEach(setToolLineDone);
 }
@@ -100,6 +106,15 @@ export function initChatStream({
   activeProviderConfigured,
   syncLiveDot,
 }) {
+  function syncChatSendButton() {
+    const inFlight = !!appStore.chatInFlight;
+    btnChatSend.classList.toggle('chat-send--stop', inFlight);
+    btnChatSend.disabled = inFlight ? false : !activeProviderConfigured();
+    btnChatSend.title = inFlight ? 'Antwort abbrechen' : 'Senden';
+    btnChatSend.setAttribute('aria-label', inFlight ? 'Antwort abbrechen' : 'Senden');
+    btnChatSend.innerHTML = inFlight ? CHAT_STOP_ICON_HTML : CHAT_SEND_ICON_HTML;
+  }
+
   function buildToolLog(trace, state /* 'running' | 'done' */) {
     const log = document.createElement('div');
     log.className = 'chat-tool-log';
@@ -334,7 +349,34 @@ export function initChatStream({
     renderChatMessages();
   }
 
+  function finalizeInFlightAssistantMessage() {
+    const last = appStore.chatMessages[appStore.chatMessages.length - 1];
+    if (!last || last.role !== 'assistant' || !last.streaming) return false;
+    last.streaming = false;
+    last.phase = 'idle';
+    const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
+    if (bubble) {
+      finalizeStreamingAssistantBubble(bubble, last);
+      syncChatBusyState();
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+      return true;
+    }
+    renderChatMessages();
+    return true;
+  }
+
+  function abortChatRequest() {
+    if (!appStore.chatInFlight) return;
+    appStore.chatAbortedSendSeq = appStore.chatSendSeq;
+    if (typeof api.abortChat === 'function') api.abortChat();
+    finalizeInFlightAssistantMessage();
+    appStore.chatInFlight = false;
+    syncChatSendButton();
+    void persistCurrentChat();
+  }
+
   async function sendChatMessage() {
+    if (appStore.chatInFlight) return;
     stopChatVoiceListening();
     const text = chatInput.value.trim();
     if (!text || !activeProviderConfigured()) return;
@@ -343,7 +385,10 @@ export function initChatStream({
     onInputChanged();
     appStore.chatMessages.push({ role: 'user', content: text });
     renderChatMessages();
-    btnChatSend.disabled = true;
+    appStore.chatSendSeq += 1;
+    const sendSeq = appStore.chatSendSeq;
+    appStore.chatInFlight = true;
+    syncChatSendButton();
 
     const payload = appStore.chatMessages.map(({ role, content }) => ({ role, content }));
     appStore.chatMessages.push({
@@ -457,14 +502,36 @@ export function initChatStream({
       offDelta();
       offTool();
       offProgress();
+      appStore.chatInFlight = false;
+      syncChatSendButton();
     }
 
-    btnChatSend.disabled = !activeProviderConfigured();
     if (sessionAtSend !== appStore.chatSessionId) return;
 
+    const abortedLocally = appStore.chatAbortedSendSeq === sendSeq;
     const last = appStore.chatMessages[appStore.chatMessages.length - 1];
     let skipRender = false;
-    if (result.error) {
+    if (abortedLocally || result?.cancelled) {
+      if (last && last.role === 'assistant') {
+        if (last.streaming) {
+          last.streaming = false;
+          if (typeof result?.content === 'string' && result.content.length > 0) {
+            last.content = result.content;
+          }
+          last.toolTrace = Array.isArray(result?.toolTrace) ? result.toolTrace : last.toolTrace || [];
+          const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
+          if (bubble) {
+            finalizeStreamingAssistantBubble(bubble, last);
+            syncChatBusyState();
+            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+            skipRender = true;
+          }
+        }
+      }
+      if (appStore.chatAbortedSendSeq === sendSeq) {
+        appStore.chatAbortedSendSeq = 0;
+      }
+    } else if (result.error) {
       if (last && last.streaming) {
         appStore.chatMessages.pop();
       }
@@ -495,7 +562,15 @@ export function initChatStream({
     }
   });
 
-  btnChatSend.addEventListener('click', sendChatMessage);
+  function onSendOrStopClick() {
+    if (appStore.chatInFlight) {
+      abortChatRequest();
+      return;
+    }
+    sendChatMessage();
+  }
+
+  btnChatSend.addEventListener('click', onSendOrStopClick);
 
   chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -510,5 +585,6 @@ export function initChatStream({
     loadChatForWorkspace,
     startNewChat,
     sendChatMessage,
+    syncChatSendButton,
   };
 }

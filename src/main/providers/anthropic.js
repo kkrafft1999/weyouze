@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage } = require('./stream-helpers');
+const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
 
 const API_BASE = 'https://api.anthropic.com/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -117,7 +117,7 @@ function translateMessagesToAnthropic(messages) {
   return { system: system || undefined, messages: out };
 }
 
-async function streamChatRound({ config, model, messages, tools, callbacks }) {
+async function streamChatRound({ config, model, messages, tools, callbacks, abortSignal }) {
   const apiKey = config?.apiKey;
   if (!apiKey) return { error: 'Kein API-Key hinterlegt.', code: 'NO_API_KEY' };
 
@@ -138,14 +138,17 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
       method: 'POST',
       headers: authHeaders(apiKey),
       body: JSON.stringify(body),
+      signal: abortSignal,
     });
   } catch (err) {
+    if (isAbortError(err)) return cancelledChatRound({ role: 'assistant', content: '' });
     return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
   }
   if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };
   if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };
 
   const reader = res.body.getReader();
+  const unbindAbort = bindAbortSignalToReader(reader, abortSignal);
 
   // Accumulators per content block index
   const blocks = new Map(); // index -> { type, text?, toolCall: {id, name, args} }
@@ -153,7 +156,8 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
   let stopReason = null;
 
   try {
-    for await (const evt of iterSseEvents(reader)) {
+    for await (const evt of iterSseEvents(reader, abortSignal)) {
+      abortIfRequested(abortSignal);
       if (!evt.data) continue;
       let payload;
       try { payload = JSON.parse(evt.data); } catch { continue; }
@@ -202,7 +206,33 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
         return { error: msg, code: 'API' };
       }
     }
+  } catch (err) {
+    if (isAbortError(err)) {
+      const orderedIndexes = [...blocks.keys()].sort((a, b) => a - b);
+      const tool_calls = [];
+      for (const idx of orderedIndexes) {
+        const b = blocks.get(idx);
+        if (b?.type === 'tool_use' && b.toolCall) {
+          const args = b.toolCall.args || '';
+          tool_calls.push({
+            id: b.toolCall.id,
+            type: 'function',
+            function: {
+              name: b.toolCall.name,
+              arguments: isLikelyJsonString(args) ? args : '{}',
+            },
+          });
+        }
+      }
+      return cancelledChatRound({
+        role: 'assistant',
+        content: textOut.length > 0 ? textOut : tool_calls.length ? null : '',
+        ...(tool_calls.length ? { tool_calls } : {}),
+      });
+    }
+    throw err;
   } finally {
+    unbindAbort();
     reader.releaseLock?.();
   }
 

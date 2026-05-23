@@ -1455,6 +1455,25 @@ summary:focus-visible,
   cursor: not-allowed;
 }
 
+#btn-chat-send.chat-send--stop {
+  background: var(--ds-black);
+  color: var(--ds-white);
+}
+
+#btn-chat-send.chat-send--stop svg {
+  width: 18px;
+  height: 18px;
+}
+
+#btn-chat-send.chat-send--stop:hover:not(:disabled) {
+  background: var(--ds-grey-muted);
+}
+
+#btn-chat-send.chat-send--stop:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: var(--ds-icon-btn-active-shadow);
+}
+
 .chat-voice-status {
   width: 100%;
   font-size: var(--ds-font-size-md);          /* Phase 2: 13px statt 12px */

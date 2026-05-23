@@ -18,8 +18,6 @@ const REQUEST_CHANNELS = Object.freeze({
   FS_MOVE_ITEM: 'fs:moveItem',
 
   SETTINGS_GET_LLM_STATE: 'settings:getLLMState',
-  SETTINGS_SET_PROVIDER: 'settings:setProvider',
-  SETTINGS_SET_ACTIVE_PROVIDER: 'settings:setActiveProvider',
   SETTINGS_SET_ACTIVE_PRESET: 'settings:setActivePreset',
   SETTINGS_COMMIT_SETTINGS: 'settings:commitSettings',
   SETTINGS_LIST_MODELS: 'settings:listModels',
@@ -36,6 +34,8 @@ const REQUEST_CHANNELS = Object.freeze({
   CHAT_HISTORY_SET_ACTIVE: 'chatHistory:setActive',
 
   CHAT_SEND: 'openai:chat',
+  /** Renderer → Main (ipcRenderer.send), bricht laufenden CHAT_SEND ab. */
+  CHAT_ABORT: 'chat:abort',
 
   WHISPER_TRANSCRIBE: 'whisper:transcribe',
 });

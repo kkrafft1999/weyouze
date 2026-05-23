@@ -9,8 +9,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // LLM provider settings (multi-provider)
   getLLMState: () => ipcRenderer.invoke(REQ.SETTINGS_GET_LLM_STATE),
-  setProvider: (payload) => ipcRenderer.invoke(REQ.SETTINGS_SET_PROVIDER, payload),
-  setActiveProvider: (providerId) => ipcRenderer.invoke(REQ.SETTINGS_SET_ACTIVE_PROVIDER, providerId),
   setActivePreset: (presetId) => ipcRenderer.invoke(REQ.SETTINGS_SET_ACTIVE_PRESET, presetId),
   commitSettings: (payload) => ipcRenderer.invoke(REQ.SETTINGS_COMMIT_SETTINGS, payload),
   listModels: (payload) => ipcRenderer.invoke(REQ.SETTINGS_LIST_MODELS, payload),
@@ -31,6 +29,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       selectedPath: options?.selectedPath ?? null,
       selectedIsDirectory: options?.selectedIsDirectory ?? false,
     }),
+  abortChat: () => ipcRenderer.send(REQ.CHAT_ABORT),
   onChatDelta: (callback) => {
     const channel = PUSH.CHAT_DELTA;
     const listener = (_event, payload) => callback(payload);

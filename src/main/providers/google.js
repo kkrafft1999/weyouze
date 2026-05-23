@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage, safeJsonParse } = require('./stream-helpers');
+const { iterSseEvents, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -130,7 +130,7 @@ function translateMessagesToGoogle(messages) {
   return { systemText: systemText || null, contents };
 }
 
-async function streamChatRound({ config, model, messages, tools, callbacks }) {
+async function streamChatRound({ config, model, messages, tools, callbacks, abortSignal }) {
   const apiKey = config?.apiKey;
   if (!apiKey) return { error: 'Kein API-Key hinterlegt.', code: 'NO_API_KEY' };
 
@@ -148,20 +148,24 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: abortSignal,
     });
   } catch (err) {
+    if (isAbortError(err)) return cancelledChatRound({ role: 'assistant', content: '' });
     return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
   }
   if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };
   if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };
 
   const reader = res.body.getReader();
+  const unbindAbort = bindAbortSignalToReader(reader, abortSignal);
   let textOut = '';
   const collectedToolCalls = [];
   let finishReason = null;
 
   try {
-    for await (const evt of iterSseEvents(reader)) {
+    for await (const evt of iterSseEvents(reader, abortSignal)) {
+      abortIfRequested(abortSignal);
       if (!evt.data) continue;
       let payload;
       try { payload = JSON.parse(evt.data); } catch { continue; }
@@ -194,7 +198,17 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
         else finishReason = cand.finishReason;
       }
     }
+  } catch (err) {
+    if (isAbortError(err)) {
+      return cancelledChatRound({
+        role: 'assistant',
+        content: textOut.length > 0 ? textOut : collectedToolCalls.length ? null : '',
+        ...(collectedToolCalls.length ? { tool_calls: collectedToolCalls } : {}),
+      });
+    }
+    throw err;
   } finally {
+    unbindAbort();
     reader.releaseLock?.();
   }
 

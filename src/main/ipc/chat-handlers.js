@@ -1,4 +1,34 @@
 const { formatPauseDurationLabel, resolveDebugWaitMs } = require('../debug-wait');
+const { isAbortError, createChatAbortError } = require('../providers/stream-helpers');
+
+/** @type {Map<number, AbortController>} */
+const activeChatAborts = new Map();
+
+function setActiveChatAbort(webContentsId, controller) {
+  const prev = activeChatAborts.get(webContentsId);
+  if (prev && prev !== controller && !prev.signal.aborted) {
+    prev.abort(createChatAbortError());
+  }
+  activeChatAborts.set(webContentsId, controller);
+}
+
+function clearActiveChatAbort(webContentsId, controller) {
+  if (activeChatAborts.get(webContentsId) === controller) {
+    activeChatAborts.delete(webContentsId);
+  }
+}
+
+function abortActiveChat(webContentsId) {
+  const controller = activeChatAborts.get(webContentsId);
+  if (controller && !controller.signal.aborted) {
+    controller.abort(createChatAbortError());
+  }
+}
+
+function returnCancelledChat(wc, PUSH, toolTrace, content = '') {
+  emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
+  return { cancelled: true, content, toolTrace };
+}
 
 function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirectory, pathMod) {
   const name = pathMod.basename(workspaceRoot);
@@ -107,11 +137,22 @@ function registerChatHandlers({
   REQ,
   PUSH,
 }) {
+  ipcMain.on(REQ.CHAT_ABORT, (event) => {
+    abortActiveChat(event.sender.id);
+  });
+
   ipcMain.handle(REQ.CHAT_SEND, async (event, payload) => {
-    const messages = payload?.messages;
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return { error: 'Keine Nachrichten übergeben.', code: 'INVALID' };
-    }
+    const wc = event.sender;
+    const abortController = new AbortController();
+    const abortSignal = abortController.signal;
+    setActiveChatAbort(wc.id, abortController);
+    const toolTrace = [];
+
+    try {
+      const messages = payload?.messages;
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return { error: 'Keine Nachrichten übergeben.', code: 'INVALID' };
+      }
 
     const config = await storage.readLLMConfig();
     const chatTarget = storage.resolveChatModelTarget(config);
@@ -182,20 +223,21 @@ function registerChatHandlers({
       }
     }
 
-    const tools = workspaceRoot ? workspaceTools : undefined;
-    const toolTrace = [];
-    const wc = event.sender;
-    const callbacks = makeStreamCallbacks(wc, PUSH);
-    const toolRoundLimit = resolveToolRoundLimit(uiPrefsAll, maxToolRounds);
+      const tools = workspaceRoot ? workspaceTools : undefined;
+      const callbacks = makeStreamCallbacks(wc, PUSH);
+      const toolRoundLimit = resolveToolRoundLimit(uiPrefsAll, maxToolRounds);
 
-    const emitToolLine = (phase, line) => {
-      if (wc && !wc.isDestroyed()) {
-        wc.send(PUSH.CHAT_TOOL_LINE, { phase, line });
-      }
-    };
+      const emitToolLine = (phase, line) => {
+        if (wc && !wc.isDestroyed()) {
+          wc.send(PUSH.CHAT_TOOL_LINE, { phase, line });
+        }
+      };
 
-    try {
       for (let round = 0; round < toolRoundLimit; round += 1) {
+        if (abortSignal.aborted) {
+          return returnCancelledChat(wc, PUSH, toolTrace);
+        }
+
         emitChatProgress(wc, PUSH, { type: 'phase', phase: 'waiting' });
         callbacks.reset();
 
@@ -205,7 +247,13 @@ function registerChatHandlers({
           messages: apiMessages,
           tools,
           callbacks,
+          abortSignal,
         });
+
+        if (streamed.cancelled) {
+          const partial = streamed.message?.content ?? '';
+          return returnCancelledChat(wc, PUSH, toolTrace, partial);
+        }
 
         if (streamed.error) {
           emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
@@ -223,6 +271,9 @@ function registerChatHandlers({
         if (Array.isArray(toolCalls) && toolCalls.length > 0) {
           if (!workspaceRoot) {
             for (const tc of toolCalls) {
+              if (abortSignal.aborted) {
+                return returnCancelledChat(wc, PUSH, toolTrace);
+              }
               const fn = tc.function;
               const toolName = fn?.name || 'tool';
               let args = {};
@@ -247,6 +298,9 @@ function registerChatHandlers({
             continue;
           }
           for (const tc of toolCalls) {
+            if (abortSignal.aborted) {
+              return returnCancelledChat(wc, PUSH, toolTrace);
+            }
             const fn = tc.function;
             const toolName = fn?.name;
             let args = {};
@@ -259,7 +313,15 @@ function registerChatHandlers({
             const doneLine = summarizeToolCall(toolName, args, 'done');
             toolTrace.push(doneLine);
             emitToolLine('start', startLine);
-            const out = await fsService.runWorkspaceTool(toolName, args, workspaceRoot);
+            let out;
+            try {
+              out = await fsService.runWorkspaceTool(toolName, args, workspaceRoot, { abortSignal });
+            } catch (err) {
+              if (isAbortError(err)) {
+                return returnCancelledChat(wc, PUSH, toolTrace);
+              }
+              throw err;
+            }
             emitToolLine('done', doneLine);
             apiMessages.push({
               role: 'tool',
@@ -284,8 +346,13 @@ function registerChatHandlers({
         code: 'TOOL_LIMIT',
       };
     } catch (err) {
+      if (isAbortError(err)) {
+        return returnCancelledChat(wc, PUSH, toolTrace);
+      }
       emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
       return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
+    } finally {
+      clearActiveChatAbort(wc.id, abortController);
     }
   });
 }

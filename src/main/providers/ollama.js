@@ -1,5 +1,5 @@
 const { Agent } = require('undici');
-const { iterStreamLines, readErrorMessage, safeJsonParse } = require('./stream-helpers');
+const { iterStreamLines, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'http://localhost:11434';
 
@@ -119,7 +119,7 @@ function translateToolsToOllama(tools) {
   }));
 }
 
-async function streamChatRound({ config, model, messages, tools, callbacks }) {
+async function streamChatRound({ config, model, messages, tools, callbacks, abortSignal }) {
   const base = baseUrlOf(config);
   const url = `${base}/api/chat`;
   const body = {
@@ -137,20 +137,26 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       dispatcher: dispatcherFor(url, config),
+      signal: abortSignal,
     });
   } catch (err) {
+    if (isAbortError(err)) {
+      return cancelledChatRound({ role: 'assistant', content: '' });
+    }
     return { error: describeFetchError(err, base), code: 'NETWORK' };
   }
   if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };
   if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };
 
   const reader = res.body.getReader();
+  const unbindAbort = bindAbortSignalToReader(reader, abortSignal);
   let textOut = '';
   const collectedToolCalls = [];
   let finishReason = null;
 
   try {
-    for await (const line of iterStreamLines(reader)) {
+    for await (const line of iterStreamLines(reader, abortSignal)) {
+      abortIfRequested(abortSignal);
       const trimmed = line.trim();
       if (!trimmed) continue;
       let payload;
@@ -186,7 +192,17 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
         break;
       }
     }
+  } catch (err) {
+    if (isAbortError(err)) {
+      return cancelledChatRound({
+        role: 'assistant',
+        content: textOut.length > 0 ? textOut : collectedToolCalls.length ? null : '',
+        ...(collectedToolCalls.length ? { tool_calls: collectedToolCalls } : {}),
+      });
+    }
+    throw err;
   } finally {
+    unbindAbort();
     reader.releaseLock?.();
   }
 

@@ -1,10 +1,5 @@
 const { resolveDebugWaitMs } = require('../debug-wait');
-
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
+const { sleepAbortable } = require('../providers/stream-helpers');
 
 function createFsService({ fs, path, maxReadFileBytes }) {
   const MAX_READ_FILE_BYTES = maxReadFileBytes;
@@ -32,10 +27,11 @@ function createFsService({ fs, path, maxReadFileBytes }) {
     return resolveWorkspacePath(workspaceRoot, rel);
   }
 
-  async function runWorkspaceTool(toolName, args, workspaceRoot) {
+  async function runWorkspaceTool(toolName, args, workspaceRoot, options = {}) {
+    const { abortSignal } = options;
     if (toolName === 'debug_wait') {
       const ms = resolveDebugWaitMs(args);
-      await sleep(ms);
+      await sleepAbortable(ms, abortSignal);
       return JSON.stringify({ ok: true, waited_ms: ms, waited_seconds: ms / 1000 });
     }
 

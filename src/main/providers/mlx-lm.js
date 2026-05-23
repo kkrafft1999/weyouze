@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage } = require('./stream-helpers');
+const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'http://127.0.0.1:8080/v1';
 
@@ -93,7 +93,7 @@ function applyToolCallDelta(toolCalls, deltaToolCall) {
   }
 }
 
-async function streamChatRound({ config, model, messages, tools, callbacks }) {
+async function streamChatRound({ config, model, messages, tools, callbacks, abortSignal }) {
   const body = {
     model,
     messages: translateMessagesToChatCompletions(messages),
@@ -111,8 +111,10 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: abortSignal,
     });
   } catch (err) {
+    if (isAbortError(err)) return cancelledChatRound({ role: 'assistant', content: '' });
     return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
   }
 
@@ -120,13 +122,15 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
   if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };
 
   const reader = res.body.getReader();
+  const unbindAbort = bindAbortSignalToReader(reader, abortSignal);
   let content = '';
   const toolCalls = [];
   let finishReason = null;
   let streamError = null;
 
   try {
-    for await (const evt of iterSseEvents(reader)) {
+    for await (const evt of iterSseEvents(reader, abortSignal)) {
+      abortIfRequested(abortSignal);
       const data = evt.data;
       if (!data || data === '[DONE]') continue;
       let json;
@@ -155,7 +159,18 @@ async function streamChatRound({ config, model, messages, tools, callbacks }) {
         finishReason = choice.finish_reason;
       }
     }
+  } catch (err) {
+    if (isAbortError(err)) {
+      const completeToolCalls = toolCalls.filter((tc) => tc?.function?.name);
+      return cancelledChatRound({
+        role: 'assistant',
+        content: content.length > 0 ? content : completeToolCalls.length ? null : '',
+        ...(completeToolCalls.length ? { tool_calls: completeToolCalls } : {}),
+      });
+    }
+    throw err;
   } finally {
+    unbindAbort();
     reader.releaseLock?.();
   }
 
