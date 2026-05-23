@@ -12,6 +12,18 @@ function createFsService({ fs, path, maxReadFileBytes }) {
     return { absPath: joined };
   }
 
+  function assertAbsolutePathInWorkspace(workspaceRoot, absPath) {
+    if (!workspaceRoot) {
+      return { error: 'Kein Arbeitsordner geöffnet.' };
+    }
+    const raw = typeof absPath === 'string' ? absPath.trim() : '';
+    if (!raw) {
+      return { error: 'Pfad ist erforderlich.' };
+    }
+    const rel = path.relative(path.resolve(workspaceRoot), path.resolve(raw));
+    return resolveWorkspacePath(workspaceRoot, rel);
+  }
+
   async function runWorkspaceTool(toolName, args, workspaceRoot) {
     if (toolName === 'list_directory') {
       const relArg = args.relative_path;
@@ -158,6 +170,7 @@ function createFsService({ fs, path, maxReadFileBytes }) {
 
   return {
     resolveWorkspacePath,
+    assertAbsolutePathInWorkspace,
     runWorkspaceTool,
     readDirectory,
     moveItem,

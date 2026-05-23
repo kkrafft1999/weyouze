@@ -262,12 +262,12 @@ async function openProject(folderPath) {
   treeContainer.innerHTML = '';
   showWelcome();
 
+  await api.setLastFolder(folderPath);
   await loadTreeLevel(treeContainer, folderPath, 0);
   if (workspaceChanged) {
     await loadChatForWorkspace(folderPath);
   }
   updateChatChrome();
-  await api.setLastFolder(folderPath);
   refreshFolderHistory();
   refreshWelcomeRecent();
 }

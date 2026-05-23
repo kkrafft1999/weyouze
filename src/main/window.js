@@ -1,4 +1,4 @@
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, shell } = require('electron');
 const path = require('path');
 
 const projectRoot = path.resolve(__dirname, '..', '..');
@@ -15,7 +15,7 @@ function createWindow() {
       preload: path.join(projectRoot, 'src', 'preload', 'index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#ffffff',
@@ -25,6 +25,24 @@ function createWindow() {
   window.on('closed', () => {
     if (mainWindow === window) {
       mainWindow = null;
+    }
+  });
+
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const u = new URL(url);
+      if (u.protocol === 'http:' || u.protocol === 'https:') {
+        shell.openExternal(url);
+      }
+    } catch {
+      /* ignore invalid URL */
+    }
+    return { action: 'deny' };
+  });
+
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) {
+      event.preventDefault();
     }
   });
 

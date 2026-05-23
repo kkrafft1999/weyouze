@@ -32,11 +32,34 @@ export function formatSize(bytes) {
   return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+const ALLOWED_LINK_PROTOS = /^(https?|mailto):/i;
+let domPurifyConfigured = false;
+
+function configureDomPurify() {
+  if (domPurifyConfigured || typeof DOMPurify === 'undefined') return;
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A') {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+      const href = node.getAttribute('href') || '';
+      if (!ALLOWED_LINK_PROTOS.test(href)) {
+        node.removeAttribute('href');
+      }
+    }
+  });
+  domPurifyConfigured = true;
+}
+
 export function markdownToSafeHtml(raw) {
   const text = String(raw ?? '');
   if (typeof marked !== 'undefined' && typeof marked.parse === 'function' && typeof DOMPurify !== 'undefined') {
+    configureDomPurify();
     const html = marked.parse(text, { breaks: true, gfm: true });
-    return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+    return DOMPurify.sanitize(html, {
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ['style', 'iframe', 'form'],
+      FORBID_ATTR: ['style', 'srcset'],
+    });
   }
   const esc = document.createElement('div');
   esc.textContent = text;

@@ -5,6 +5,7 @@ function registerSettingsHandlers({
   providers,
   defaultProviderId,
   REQ,
+  setActiveWorkspaceRoot,
 }) {
   ipcMain.handle(REQ.SETTINGS_GET_LLM_STATE, async () => {
     const encryptionAvailable = safeStorage.isEncryptionAvailable();
@@ -305,6 +306,9 @@ function registerSettingsHandlers({
 
   ipcMain.handle(REQ.SETTINGS_SET_LAST_FOLDER, async (_event, folderPath) => {
     await storage.persistLastFolder(folderPath);
+    if (setActiveWorkspaceRoot) {
+      setActiveWorkspaceRoot(folderPath);
+    }
     return { ok: true };
   });
 

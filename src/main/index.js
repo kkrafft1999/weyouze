@@ -24,6 +24,7 @@ const { registerWhisperHandlers } = require('./ipc/whisper-handlers');
 const { registerSettingsHandlers } = require('./ipc/settings-handlers');
 const { registerChatHistoryHandlers } = require('./ipc/chat-history-handlers');
 const { registerChatHandlers } = require('./ipc/chat-handlers');
+const workspaceState = require('./workspace-state');
 
 const MAX_CHAT_SESSIONS = 200;
 const MAX_FOLDER_HISTORY = 10;
@@ -98,7 +99,12 @@ const whisperService = createWhisperService({
 });
 
 registerDialogHandlers({ ipcMain, dialog, getMainWindow, REQ });
-registerFsHandlers({ ipcMain, fsService, REQ });
+registerFsHandlers({
+  ipcMain,
+  fsService,
+  REQ,
+  getActiveWorkspaceRoot: workspaceState.getActiveWorkspaceRoot,
+});
 registerWhisperHandlers({ ipcMain, whisperService, REQ });
 registerSettingsHandlers({
   ipcMain,
@@ -107,6 +113,7 @@ registerSettingsHandlers({
   providers,
   defaultProviderId: DEFAULT_PROVIDER,
   REQ,
+  setActiveWorkspaceRoot: workspaceState.setActiveWorkspaceRoot,
 });
 registerChatHistoryHandlers({ ipcMain, storage, REQ });
 registerChatHandlers({
@@ -204,10 +211,15 @@ function buildApplicationMenu() {
   return Menu.buildFromTemplate(template);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   registerMediaCapturePermissions();
 
   Menu.setApplicationMenu(buildApplicationMenu());
+
+  const lastFolder = await storage.getValidatedLastFolder();
+  if (lastFolder) {
+    workspaceState.setActiveWorkspaceRoot(lastFolder);
+  }
 
   createWindow();
 
