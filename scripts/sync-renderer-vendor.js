@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const esbuild = require('esbuild');
 
 const root = path.join(__dirname, '..');
 const vendor = path.join(root, 'src', 'renderer', 'vendor');
@@ -8,11 +9,14 @@ const fontsDir = path.join(vendor, 'fonts');
 fs.mkdirSync(vendor, { recursive: true });
 fs.mkdirSync(fontsDir, { recursive: true });
 
-// Preload runs sandboxed and cannot require modules outside its directory.
-fs.copyFileSync(
-  path.join(root, 'src', 'shared', 'ipc-channels.js'),
-  path.join(root, 'src', 'preload', 'ipc-channels.js')
-);
+// Sandboxed preload cannot load sibling modules from disk — bundle into one file.
+esbuild.buildSync({
+  entryPoints: [path.join(root, 'src', 'preload', 'index.js')],
+  bundle: true,
+  platform: 'node',
+  external: ['electron'],
+  outfile: path.join(root, 'src', 'preload', 'bundle.js'),
+});
 
 // ── JS-Vendor-Bibliotheken ──────────────────────────────────────────────────
 fs.copyFileSync(

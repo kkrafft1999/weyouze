@@ -12,7 +12,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 420,
     webPreferences: {
-      preload: path.join(projectRoot, 'src', 'preload', 'index.js'),
+      preload: path.join(projectRoot, 'src', 'preload', 'bundle.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -26,6 +26,10 @@ function createWindow() {
     if (mainWindow === window) {
       mainWindow = null;
     }
+  });
+
+  window.webContents.on('preload-error', (_event, preloadPath, error) => {
+    console.error('Preload failed:', preloadPath, error);
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {

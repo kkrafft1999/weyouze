@@ -14,7 +14,7 @@ build/
 
 # Auto-generated vendor bundle
 src/renderer/vendor/*.js
-src/preload/ipc-channels.js
+src/preload/bundle.js
 
 # Logs
 *.log
