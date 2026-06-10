@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
+const { iterSseEvents, describeFetchError, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -15,7 +15,7 @@ async function listModels(config) {
   try {
     res = await fetch(`${API_BASE}/models?key=${encodeURIComponent(apiKey)}&pageSize=200`);
   } catch (err) {
-    return { error: err.message || 'Netzwerkfehler' };
+    return { error: describeFetchError(err, API_BASE) };
   }
   if (!res.ok) return { error: await readErrorMessage(res) };
   const json = await res.json().catch(() => null);
@@ -152,7 +152,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     });
   } catch (err) {
     if (isAbortError(err)) return cancelledChatRound({ role: 'assistant', content: '' });
-    return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
+    return { error: describeFetchError(err, API_BASE), code: 'NETWORK' };
   }
   if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };
   if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };

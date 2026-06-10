@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
+const { iterSseEvents, describeFetchError, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'http://127.0.0.1:8080/v1';
 
@@ -8,12 +8,12 @@ function baseUrlOf(config) {
 }
 
 async function listModels(config) {
-  const url = `${baseUrlOf(config)}/models`;
+  const base = baseUrlOf(config);
   let res;
   try {
-    res = await fetch(url);
+    res = await fetch(`${base}/models`);
   } catch (err) {
-    return { error: err.message || 'Netzwerkfehler' };
+    return { error: describeFetchError(err, base) };
   }
   if (!res.ok) return { error: await readErrorMessage(res) };
   const json = await res.json().catch(() => null);
@@ -106,9 +106,10 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     body.tool_choice = 'auto';
   }
 
+  const base = baseUrlOf(config);
   let res;
   try {
-    res = await fetch(`${baseUrlOf(config)}/chat/completions`, {
+    res = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -116,7 +117,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     });
   } catch (err) {
     if (isAbortError(err)) return cancelledChatRound({ role: 'assistant', content: '' });
-    return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
+    return { error: describeFetchError(err, base), code: 'NETWORK' };
   }
 
   if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };

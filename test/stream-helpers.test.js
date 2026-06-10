@@ -5,6 +5,7 @@ const {
   sleepAbortable,
   normalizeUsage,
   mergeUsage,
+  describeFetchError,
 } = require('../src/main/providers/stream-helpers');
 
 test('isAbortError recognizes AbortError', () => {
@@ -39,6 +40,23 @@ test('normalizeUsage maps provider-specific usage fields', () => {
     total: 11,
   });
   assert.equal(normalizeUsage({}), null);
+});
+
+test('describeFetchError includes undici cause details', () => {
+  const err = new Error('fetch failed');
+  err.cause = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8080'), { code: 'ECONNREFUSED' });
+  assert.equal(
+    describeFetchError(err, 'http://127.0.0.1:8080'),
+    'fetch failed (ECONNREFUSED: connect ECONNREFUSED 127.0.0.1:8080)'
+  );
+});
+
+test('describeFetchError falls back to base URL when message is missing', () => {
+  assert.equal(
+    describeFetchError({}, 'http://localhost:11434'),
+    'Verbindung zu http://localhost:11434 fehlgeschlagen.'
+  );
+  assert.equal(describeFetchError(new Error('timeout'), 'x'), 'timeout');
 });
 
 test('mergeUsage sums usage across rounds', () => {

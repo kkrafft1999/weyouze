@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
+const { iterSseEvents, describeFetchError, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const API_BASE = 'https://api.anthropic.com/v1';
 const ANTHROPIC_VERSION = '2023-06-01';
@@ -19,7 +19,7 @@ async function listModels(config) {
   try {
     res = await fetch(`${API_BASE}/models?limit=100`, { headers: authHeaders(apiKey) });
   } catch (err) {
-    return { error: err.message || 'Netzwerkfehler' };
+    return { error: describeFetchError(err, API_BASE) };
   }
   if (!res.ok) return { error: await readErrorMessage(res) };
   const json = await res.json().catch(() => null);
@@ -142,7 +142,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     });
   } catch (err) {
     if (isAbortError(err)) return cancelledChatRound({ role: 'assistant', content: '' });
-    return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
+    return { error: describeFetchError(err, API_BASE), code: 'NETWORK' };
   }
   if (!res.ok) return { error: await readErrorMessage(res), code: String(res.status) };
   if (!res.body) return { error: 'Keine Stream-Antwort.', code: 'STREAM' };

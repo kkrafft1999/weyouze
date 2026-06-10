@@ -1,5 +1,5 @@
 const { formatPauseDurationLabel, resolveDebugWaitMs } = require('../debug-wait');
-const { isAbortError, createChatAbortError, mergeUsage } = require('../providers/stream-helpers');
+const { isAbortError, createChatAbortError, mergeUsage, describeFetchError } = require('../providers/stream-helpers');
 
 /** @type {Map<number, AbortController>} */
 const activeChatAborts = new Map();
@@ -355,7 +355,7 @@ function registerChatHandlers({
         return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
       }
       emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-      return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
+      return { error: describeFetchError(err, 'dem Provider'), code: 'NETWORK' };
     } finally {
       clearActiveChatAbort(wc.id, abortController);
     }

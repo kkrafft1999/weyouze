@@ -1,5 +1,5 @@
 const { Agent } = require('undici');
-const { iterStreamLines, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
+const { iterStreamLines, describeFetchError, readErrorMessage, safeJsonParse, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'http://localhost:11434';
 
@@ -34,17 +34,6 @@ function dispatcherFor(url, config) {
     console.warn(`[ollama] TLS-Zertifikatsprüfung deaktiviert für ${url}`);
   }
   return getInsecureDispatcher();
-}
-
-function describeFetchError(err, baseUrl) {
-  const cause = err?.cause;
-  const causeCode = cause?.code || cause?.errno;
-  const causeMsg = cause?.message;
-  const main = err?.message || `Verbindung zu ${baseUrl} fehlgeschlagen.`;
-  if (causeCode || causeMsg) {
-    return `${main} (${[causeCode, causeMsg].filter(Boolean).join(': ')})`;
-  }
-  return main;
 }
 
 function baseUrlOf(config) {

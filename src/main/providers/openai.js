@@ -1,4 +1,4 @@
-const { iterSseEvents, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
+const { iterSseEvents, describeFetchError, readErrorMessage, abortIfRequested, cancelledChatRound, isAbortError, bindAbortSignalToReader, normalizeUsage } = require('./stream-helpers');
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 
@@ -10,14 +10,14 @@ function baseUrlOf(config) {
 async function listModels(config) {
   const apiKey = config?.apiKey;
   if (!apiKey) return { error: 'API-Key fehlt.' };
-  const url = `${baseUrlOf(config)}/models`;
+  const base = baseUrlOf(config);
   let res;
   try {
-    res = await fetch(url, {
+    res = await fetch(`${base}/models`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
   } catch (err) {
-    return { error: err.message || 'Netzwerkfehler' };
+    return { error: describeFetchError(err, base) };
   }
   if (!res.ok) return { error: await readErrorMessage(res) };
   const json = await res.json().catch(() => null);
@@ -106,9 +106,10 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     body.reasoning = { effort: config.reasoningEffort.trim() };
   }
 
+  const base = baseUrlOf(config);
   let res;
   try {
-    res = await fetch(`${baseUrlOf(config)}/responses`, {
+    res = await fetch(`${base}/responses`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -119,7 +120,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
     });
   } catch (err) {
     if (isAbortError(err)) return cancelledChatRound({ role: 'assistant', content: '' });
-    return { error: err.message || 'Netzwerkfehler', code: 'NETWORK' };
+    return { error: describeFetchError(err, base), code: 'NETWORK' };
   }
 
   if (!res.ok) {
