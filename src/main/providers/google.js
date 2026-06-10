@@ -163,6 +163,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   const collectedToolCalls = [];
   let finishReason = null;
   let usage = null;
+  let malformedFunctionCall = false;
 
   try {
     for await (const evt of iterSseEvents(reader, abortSignal)) {
@@ -197,7 +198,8 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
       if (cand.finishReason) {
         const fr = String(cand.finishReason).toUpperCase();
         if (fr === 'STOP') finishReason = 'stop';
-        else if (fr === 'TOOL_CALLS' || fr === 'MALFORMED_FUNCTION_CALL') finishReason = 'tool_calls';
+        else if (fr === 'TOOL_CALLS') finishReason = 'tool_calls';
+        else if (fr === 'MALFORMED_FUNCTION_CALL') malformedFunctionCall = true;
         else finishReason = cand.finishReason;
       }
     }
@@ -213,6 +215,14 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   } finally {
     unbindAbort();
     reader.releaseLock?.();
+  }
+
+  if (malformedFunctionCall) {
+    return {
+      error: 'Das Modell hat einen ungültigen Function-Call erzeugt (MALFORMED_FUNCTION_CALL). Bitte erneut senden oder die Anfrage umformulieren.',
+      code: 'API',
+      usage,
+    };
   }
 
   if (collectedToolCalls.length > 0 && !finishReason) {
