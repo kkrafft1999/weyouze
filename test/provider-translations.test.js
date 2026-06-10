@@ -33,6 +33,40 @@ test('translateMessagesToAnthropic merges system and batches tool results', () =
   assert.equal(messages[3].content, 'Thanks');
 });
 
+test('translateMessagesToAnthropic repairs tool results without tool_call_id', () => {
+  const { messages } = anthropic.translateMessagesToAnthropic([
+    { role: 'user', content: 'Go' },
+    {
+      role: 'assistant',
+      content: '',
+      tool_calls: [
+        { function: { name: 'list_directory', arguments: '{}' } },
+        { function: { name: 'read_file_text', arguments: '{}' } },
+      ],
+    },
+    { role: 'tool', content: '{"items":[]}' },
+    { role: 'tool', content: '{"content":"hi"}' },
+  ]);
+
+  const toolUseIds = messages[1].content.map((b) => b.id);
+  const results = messages[2].content;
+  assert.equal(results.length, 2);
+  assert.equal(results[0].tool_use_id, toolUseIds[0]);
+  assert.equal(results[1].tool_use_id, toolUseIds[1]);
+  assert.ok(results.every((b) => b.tool_use_id));
+});
+
+test('translateMessagesToAnthropic drops tool results it cannot match', () => {
+  const { messages } = anthropic.translateMessagesToAnthropic([
+    { role: 'user', content: 'Go' },
+    { role: 'tool', content: 'orphan without any preceding tool call' },
+    { role: 'user', content: 'Thanks' },
+  ]);
+
+  assert.equal(messages.length, 2);
+  assert.ok(messages.every((m) => typeof m.content === 'string'));
+});
+
 test('translateToolsToAnthropic skips invalid entries', () => {
   const tools = anthropic.translateToolsToAnthropic([
     { function: { name: 'list_directory', description: 'List', parameters: { type: 'object' } } },

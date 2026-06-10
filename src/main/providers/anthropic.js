@@ -58,6 +58,10 @@ function translateMessagesToAnthropic(messages) {
   let system = '';
   const out = [];
   let pendingToolResults = null; // array of tool_result blocks to flush on next non-tool message
+  // tool_use-IDs der letzten Assistant-Nachricht, die noch kein tool_result
+  // referenziert hat — Fallback fuer tool-Messages ohne tool_call_id, denn
+  // Anthropic lehnt tool_use_id: '' mit 400 ab.
+  let unmatchedToolUseIds = [];
 
   const flushPendingToolResults = () => {
     if (pendingToolResults && pendingToolResults.length) {
@@ -72,9 +76,17 @@ function translateMessagesToAnthropic(messages) {
       continue;
     }
     if (m.role === 'tool') {
+      let toolUseId = m.tool_call_id || '';
+      if (toolUseId) {
+        const idx = unmatchedToolUseIds.indexOf(toolUseId);
+        if (idx !== -1) unmatchedToolUseIds.splice(idx, 1);
+      } else {
+        toolUseId = unmatchedToolUseIds.shift() || '';
+      }
+      if (!toolUseId) continue; // nicht zuordenbar — Block wuerde remote mit 400 scheitern
       const block = {
         type: 'tool_result',
-        tool_use_id: m.tool_call_id || '',
+        tool_use_id: toolUseId,
         content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? ''),
       };
       if (!pendingToolResults) pendingToolResults = [];
@@ -89,6 +101,7 @@ function translateMessagesToAnthropic(messages) {
     }
     if (m.role === 'assistant') {
       const blocks = [];
+      unmatchedToolUseIds = [];
       if (typeof m.content === 'string' && m.content.length > 0) {
         blocks.push({ type: 'text', text: m.content });
       }
@@ -100,9 +113,11 @@ function translateMessagesToAnthropic(messages) {
           if (typeof argStr === 'string' && argStr.trim()) {
             try { input = JSON.parse(argStr); } catch { input = {}; }
           }
+          const toolUseId = tc.id || `tu_${Math.random().toString(36).slice(2)}`;
+          unmatchedToolUseIds.push(toolUseId);
           blocks.push({
             type: 'tool_use',
-            id: tc.id || `tu_${Math.random().toString(36).slice(2)}`,
+            id: toolUseId,
             name: tc.function.name,
             input,
           });
