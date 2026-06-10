@@ -81,10 +81,15 @@ Die fertigen Artefakte landen im Ordner `out/` (per `.gitignore` ausgeschlossen)
 
 ```
 .
-├── main.js              Electron Main-Prozess (IPC, Tool-Use, Provider-Routing)
-├── preload.js           sichere Bridge zwischen Main und Renderer
-├── providers/           Adapter für OpenAI, Anthropic, Google, Ollama
-├── renderer/            UI (HTML, CSS, JS) – läuft im Browser-Kontext
+├── src/
+│   ├── main/            Electron Main-Prozess (Fenster, Permissions, Workspace-State)
+│   │   ├── ipc/         IPC-Handler (Chat, Settings, Dateisystem, Chat-History)
+│   │   ├── providers/   Adapter für OpenAI, Anthropic, Google, Ollama, MLX-LM
+│   │   └── services/    Storage (Keys, Prefs, History) & Dateisystem-Zugriff
+│   ├── preload/         sichere Bridge zwischen Main und Renderer (gebundelt)
+│   ├── renderer/        UI (HTML, CSS, JS) – läuft im Browser-Kontext
+│   └── shared/          gemeinsame Definitionen (z. B. IPC-Kanäle)
+├── test/                Tests (node:test)
 ├── scripts/             Build-Helfer (z. B. Vendor-Sync für den Renderer)
 ├── docs/                interne Notizen & UI-Designs
 ├── icon.icns / icon.ico App-Icons für macOS / Windows
