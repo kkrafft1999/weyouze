@@ -33,7 +33,7 @@ const REQUEST_CHANNELS = Object.freeze({
   CHAT_HISTORY_DELETE: 'chatHistory:delete',
   CHAT_HISTORY_SET_ACTIVE: 'chatHistory:setActive',
 
-  CHAT_SEND: 'openai:chat',
+  CHAT_SEND: 'chat:send',
   /** Renderer → Main (ipcRenderer.send), bricht laufenden CHAT_SEND ab. */
   CHAT_ABORT: 'chat:abort',
 
@@ -43,9 +43,9 @@ const REQUEST_CHANNELS = Object.freeze({
 // Push-Kanaele (webContents.send -> ipcRenderer.on).
 // Werden vom Main aktiv an den Renderer gepusht und sind kein invoke().
 const PUSH_CHANNELS = Object.freeze({
-  CHAT_DELTA: 'openai:chat:delta',
-  CHAT_TOOL_LINE: 'openai:chat:tool-line',
-  CHAT_PROGRESS: 'openai:chat:progress',
+  CHAT_DELTA: 'chat:delta',
+  CHAT_TOOL_LINE: 'chat:tool-line',
+  CHAT_PROGRESS: 'chat:progress',
 });
 
 module.exports = {
