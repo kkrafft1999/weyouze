@@ -167,9 +167,9 @@ Beide sind in `preload/index.js` exponiert und in `settings-handlers.js` registr
 
 `chat-handlers.js` schickt **die komplette `apiMessages` jede Runde**. Bei langen Sessions mit großen `read_file_text`-Resultaten droht Provider-Token-Limit oder unnötiger Cost-Burst.
 
-- [ ] Token-Heuristik (Char-Count / Provider-spezifisch) hinzufügen
-- [ ] Konfigurierbares Trim-Window in `ui-preferences.json`
-- [ ] Optional: alte Tool-Outputs auf "..." kürzen, User-Nachrichten behalten
+- [x] Token-Heuristik (Char-Count / Provider-spezifisch) hinzufügen
+- [x] Konfigurierbares Trim-Window in `ui-preferences.json`
+- [x] Optional: alte Tool-Outputs auf "..." kürzen, User-Nachrichten behalten
 
 ### M5 — Dynamic `require` von `providers/ollama` im `will-quit`-Handler
 

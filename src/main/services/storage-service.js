@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto');
+const { clampHistoryCharLimit } = require('../chat-history-trim');
 
 function createStorageService({
   app,
@@ -341,6 +342,7 @@ function createStorageService({
       }
       const sidebarWidth = clampSidebarWidth(data.sidebarWidth);
       const chatPanelWidth = clampChatPanelWidth(data.chatPanelWidth);
+      const historyCharLimit = clampHistoryCharLimit(data.historyCharLimit);
       return {
         contentPaneVisible: data.contentPaneVisible !== false,
         baseSystemPrompt,
@@ -348,6 +350,7 @@ function createStorageService({
         ...(typeof maxToolRounds === 'number' ? { maxToolRounds } : {}),
         ...(typeof sidebarWidth === 'number' ? { sidebarWidth } : {}),
         ...(typeof chatPanelWidth === 'number' ? { chatPanelWidth } : {}),
+        ...(typeof historyCharLimit === 'number' ? { historyCharLimit } : {}),
       };
     } catch {
       return { contentPaneVisible: true, baseSystemPrompt: '', appLocale: 'de' };
@@ -600,6 +603,7 @@ function createStorageService({
     getValidatedLastFolder,
     clampSidebarWidth,
     clampChatPanelWidth,
+    clampHistoryCharLimit,
     readUIPrefs,
     writeUIPrefs,
     updateUIPrefs,

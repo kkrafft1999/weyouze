@@ -1,5 +1,10 @@
 const { formatPauseDurationLabel, resolveDebugWaitMs } = require('../debug-wait');
 const { isAbortError, createChatAbortError, mergeUsage, describeFetchError } = require('../providers/stream-helpers');
+const {
+  resolveHistoryCharLimit,
+  trimHistoryMessages,
+  truncateStaleToolOutputs,
+} = require('../chat-history-trim');
 
 /** @type {Map<number, AbortController>} */
 const activeChatAborts = new Map();
@@ -218,11 +223,12 @@ function registerChatHandlers({
         content: combinedSystem,
       });
     }
-    for (const m of messages) {
-      if (m.role === 'user' || m.role === 'assistant') {
-        apiMessages.push({ role: m.role, content: m.content ?? '' });
-      }
-    }
+    const historyCharLimit = resolveHistoryCharLimit(uiPrefsAll);
+    const historyRows = messages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role, content: m.content ?? '' }));
+    const { messages: windowedHistory } = trimHistoryMessages(historyRows, historyCharLimit);
+    apiMessages.push(...windowedHistory);
 
       const tools = workspaceRoot ? workspaceTools : undefined;
       const callbacks = makeStreamCallbacks(wc, PUSH);
@@ -241,6 +247,7 @@ function registerChatHandlers({
 
         emitChatProgress(wc, PUSH, { type: 'phase', phase: 'waiting' });
         callbacks.reset();
+        truncateStaleToolOutputs(apiMessages, historyCharLimit);
 
         const streamed = await provider.streamChatRound({
           config: effectiveConfig,

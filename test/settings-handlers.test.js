@@ -284,3 +284,18 @@ test('listModels prefers incoming credentials over stored config', async (t) => 
   await ipcMain.invoke(REQ.SETTINGS_LIST_MODELS, { providerId: 'openai' });
   assert.equal(seenConfig.apiKey, 'stored-key', 'stored key must be decrypted as fallback');
 });
+
+test('setUIPrefs persists a clamped historyCharLimit', async (t) => {
+  const { ipcMain, storage } = await setupHandlers(t);
+  await ipcMain.invoke(REQ.SETTINGS_SET_UI_PREFS, { historyCharLimit: 100 });
+  let prefs = await storage.readUIPrefs();
+  assert.equal(prefs.historyCharLimit, 4000, 'limit must be clamped to the minimum');
+
+  await ipcMain.invoke(REQ.SETTINGS_SET_UI_PREFS, { historyCharLimit: 50_000 });
+  prefs = await storage.readUIPrefs();
+  assert.equal(prefs.historyCharLimit, 50_000);
+
+  await ipcMain.invoke(REQ.SETTINGS_SET_UI_PREFS, { historyCharLimit: 'nope' });
+  prefs = await storage.readUIPrefs();
+  assert.equal(prefs.historyCharLimit, 50_000, 'invalid values must not overwrite the stored limit');
+});
