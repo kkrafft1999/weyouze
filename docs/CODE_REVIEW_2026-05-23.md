@@ -211,12 +211,12 @@ Wenn ein vorheriger Assistant-Block ohne `id` durchschlüpft, schickt der Adapte
 
 Es fehlen Tests für:
 
-- [ ] `chat-history-handlers.js` end-to-end (Lock-Verhalten unter Concurrency)
-- [ ] `settings-handlers.js` (`commitSettings`-Flow, `mergeProviderPatch`, `listModels`-Errorpaths)
-- [ ] `fs-handlers.js` (Boundary-Checks via IPC)
-- [ ] `providers/openai.js` `streamChatRound` mit gemockten SSE-Streams
-- [ ] `providers/mlx-lm.js` Translations + `applyToolCallDelta`
-- [ ] `iterSseEvents` als isolierter Test mit mehreren Edge-Cases
+- [x] `chat-history-handlers.js` end-to-end (Lock-Verhalten unter Concurrency)
+- [x] `settings-handlers.js` (`commitSettings`-Flow, `mergeProviderPatch`, `listModels`-Errorpaths)
+- [x] `fs-handlers.js` (Boundary-Checks via IPC)
+- [x] `providers/openai.js` `streamChatRound` mit gemockten SSE-Streams
+- [x] `providers/mlx-lm.js` Translations + `applyToolCallDelta`
+- [x] `iterSseEvents` als isolierter Test mit mehreren Edge-Cases
 
 ### M9 — `assertAbsolutePathInWorkspace` fährt Umweg
 
