@@ -77,6 +77,17 @@ npm run package:win     # Windows x64
 
 Die fertigen Artefakte landen im Ordner `out/` (per `.gitignore` ausgeschlossen).
 
+## Konfiguration
+
+Die meisten Einstellungen (Provider, Modelle, System-Prompt, Sprache) pflegst du direkt in der App unter **Einstellungen**. Darüber hinaus liegen im Benutzerprofil (`userData`-Ordner von Electron) ein paar JSON-Dateien, u. a. `ui-preferences.json` mit folgenden Optionen:
+
+| Schlüssel          | Bedeutung                                                                  | Default   | Bereich          |
+| ------------------ | -------------------------------------------------------------------------- | --------- | ---------------- |
+| `maxToolRounds`    | Maximale Tool-Runden pro Chat-Anfrage (auch in der App einstellbar)         | 14        | 1 – 500          |
+| `historyCharLimit` | Zeichen-Budget für den an den Provider gesendeten Chat-Verlauf (siehe unten)| 200 000   | 4 000 – 2 000 000 |
+
+**Verlaufs-Trimming (`historyCharLimit`):** Damit lange Sessions nicht ins Token-Limit des Providers laufen, wird der Verlauf pro Anfrage budgetiert (Heuristik: 1 Token ≈ 4 Zeichen). Ältere Nachrichten jenseits des Budgets werden weggelassen, und große Tool-Ausgaben früherer Tool-Runden (z. B. gelesene Dateien) werden auf einen Platzhalter gekürzt. Die aktuelle Frage, alle User-Nachrichten im Fenster und die Tool-Ausgaben der jüngsten Runde bleiben immer vollständig erhalten.
+
 ## Projektstruktur
 
 ```
