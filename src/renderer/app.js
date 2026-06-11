@@ -173,7 +173,6 @@ const modelPicker = initChatModelPicker({
 
 const voice = initWhisperRecorder({
   api,
-  appStore,
   btnChatMic,
   chatVoiceStatus,
   chatInput,

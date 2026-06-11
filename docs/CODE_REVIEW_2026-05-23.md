@@ -230,16 +230,16 @@ Es fehlen Tests für:
 
 Statt direkt zu prüfen, ob der absolute Pfad unter dem Root liegt, geht der Code über `relative` → `resolveWorkspacePath` (das wieder `path.relative` macht).
 
-- [ ] Zentrale `containsPath(root, candidate)`-Funktion einführen
-- [ ] `assertAbsolutePathInWorkspace` und `resolveWorkspacePath` darauf aufbauen lassen
+- [x] Zentrale `containsPath(root, candidate)`-Funktion einführen
+- [x] `assertAbsolutePathInWorkspace` und `resolveWorkspacePath` darauf aufbauen lassen
 
 ### M10 — Renderer-Kopplung an mutierten `appStore`-Singleton
 
 `appStore` wird quer durch Components gemeinsam mutiert (Drag, Voice, Chat-State, LLM-State). Subtile Bugs entstehen leicht — z. B. hängengebliebene `dragSourceRow`-Referenzen ohne zentralen Cleanup-Pfad.
 
-- [ ] Bereiche kapseln (`dragStore`, `voiceStore`, `chatStore`)
-- [ ] Oder Pub/Sub einführen, sodass Components nicht mehr direkt mutieren
-- [ ] DOM-Refs aus `app.js` in Component-spezifische Selektoren verschieben
+- [x] Bereiche kapseln — Drag- (FileTree), Voice- (WhisperRecorder) und RAF-State (ChatStream) sind jetzt modul-lokal; `appStore` enthält nur noch echt geteilten State
+- [ ] ~~Oder Pub/Sub einführen~~ — durch die Kapselung obsolet
+- [ ] DOM-Refs aus `app.js` in Component-spezifische Selektoren verschieben (offen, separater Schritt)
 
 ---
 
@@ -324,7 +324,7 @@ async function* iterStreamLines(reader) {
     appStore.streamRenderRaf = requestAnimationFrame(() => {
 ```
 
-- [ ] Lokale Variable im Component-Closure verwenden statt `appStore`
+- [x] Lokale Variable im Component-Closure verwenden statt `appStore`
 
 ### G10 — Keine JSDoc-Typedefs für die Provider-Adapter
 

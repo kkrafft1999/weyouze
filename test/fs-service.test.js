@@ -69,3 +69,15 @@ test('runWorkspaceTool debug_wait waits for the requested duration', async () =>
   assert.equal(out.waited_seconds, 0.6);
   assert.ok(elapsed >= 550);
 });
+
+test('containsPath accepts the root itself and children, rejects siblings and traversal', () => {
+  const path = require('path');
+  const fs = require('fs/promises');
+  const svc = createFsService({ fs, path, maxReadFileBytes: 1024 });
+  assert.equal(svc.containsPath('/ws', '/ws'), true);
+  assert.equal(svc.containsPath('/ws', '/ws/sub/file.txt'), true);
+  assert.equal(svc.containsPath('/ws', '/ws/sub/../file.txt'), true);
+  assert.equal(svc.containsPath('/ws', '/ws/../outside'), false);
+  assert.equal(svc.containsPath('/ws', '/ws-evil/file.txt'), false);
+  assert.equal(svc.containsPath('/ws', '/other'), false);
+});

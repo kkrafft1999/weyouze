@@ -1,17 +1,13 @@
-/** Zentrale mutable Renderer-State für Phase 4.5 — ein Objekt statt verteilter Top-Level-lets. */
+/**
+ * Geteilter Renderer-State — nur Felder, die mehrere Components lesen/schreiben.
+ * Component-privater State (Drag in FileTree, Aufnahme in WhisperRecorder,
+ * RAF-Id in ChatStream) lebt modul-lokal im jeweiligen Component.
+ */
 export const appStore = {
   rootPath: null,
   activeTreeItem: null,
   selectedPath: null,
   selectedIsDirectory: false,
-  dragSourcePath: null,
-  dragSourceRow: null,
-  currentDropTarget: null,
-  voiceRecording: false,
-  voiceMediaRecorder: null,
-  voiceChunks: [],
-  voiceStream: null,
-  voiceTranscribing: false,
   llmState: {
     encryptionAvailable: true,
     activeProvider: 'openai',
@@ -28,6 +24,5 @@ export const appStore = {
   chatTokenUsage: { prompt: 0, completion: 0, total: 0 },
   currentChatId: '',
   currentChatWorkspace: null,
-  streamRenderRaf: 0,
   lastFocusBeforeModal: null,
 };

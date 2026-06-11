@@ -4,12 +4,17 @@ const { sleepAbortable } = require('../providers/stream-helpers');
 function createFsService({ fs, path, maxReadFileBytes }) {
   const MAX_READ_FILE_BYTES = maxReadFileBytes;
 
+  /** true, wenn candidate (aufgelöst) innerhalb von root liegt — Root selbst zählt mit. */
+  function containsPath(root, candidate) {
+    const rel = path.relative(path.resolve(root), path.resolve(candidate));
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  }
+
   function resolveWorkspacePath(workspaceRoot, relativePath) {
     const root = path.resolve(workspaceRoot);
     const raw = typeof relativePath === 'string' ? relativePath.trim() : '';
     const joined = path.resolve(root, raw.length ? raw : '.');
-    const rel = path.relative(root, joined);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    if (!containsPath(root, joined)) {
       return { error: 'Pfad liegt außerhalb des Arbeitsordners.' };
     }
     return { absPath: joined };
@@ -23,8 +28,11 @@ function createFsService({ fs, path, maxReadFileBytes }) {
     if (!raw) {
       return { error: 'Pfad ist erforderlich.' };
     }
-    const rel = path.relative(path.resolve(workspaceRoot), path.resolve(raw));
-    return resolveWorkspacePath(workspaceRoot, rel);
+    const resolved = path.resolve(raw);
+    if (!containsPath(workspaceRoot, resolved)) {
+      return { error: 'Pfad liegt außerhalb des Arbeitsordners.' };
+    }
+    return { absPath: resolved };
   }
 
   async function runWorkspaceTool(toolName, args, workspaceRoot, options = {}) {
@@ -179,6 +187,7 @@ function createFsService({ fs, path, maxReadFileBytes }) {
   }
 
   return {
+    containsPath,
     resolveWorkspacePath,
     assertAbsolutePathInWorkspace,
     runWorkspaceTool,

@@ -61,6 +61,18 @@ export function initFileTree(deps) {
 
   let historyDrawerCloseOnEscape = null;
 
+  // Drag-&-Drop-State lebt komplett in diesem Component; resetDragState()
+  // ist der einzige Aufräumpfad, damit keine Row-Referenzen hängenbleiben.
+  let dragSourcePath = null;
+  let dragSourceRow = null;
+  let currentDropTarget = null;
+
+  function resetDragState() {
+    clearDragVisualState();
+    dragSourcePath = null;
+    dragSourceRow = null;
+  }
+
   function renderWelcomeRecent(paths) {
     if (!welcomeRecentSection || !welcomeRecentList) return;
     welcomeRecentList.innerHTML = '';
@@ -238,7 +250,7 @@ export function initFileTree(deps) {
   });
 
   treeContainer.addEventListener('dragover', (e) => {
-    if (!appStore.rootPath || !appStore.dragSourcePath) return;
+    if (!appStore.rootPath || !dragSourcePath) return;
     const overItem = e.target.closest('.tree-item');
     if (overItem && overItem.dataset.isDirectory === 'true') return;
     e.preventDefault();
@@ -254,11 +266,11 @@ export function initFileTree(deps) {
 
   treeContainer.addEventListener('drop', async (e) => {
     clearDragVisualState();
-    if (!appStore.rootPath || !appStore.dragSourcePath) return;
+    if (!appStore.rootPath || !dragSourcePath) return;
     const overItem = e.target.closest('.tree-item');
     if (overItem && overItem.dataset.isDirectory === 'true') return;
     e.preventDefault();
-    const sourcePath = appStore.dragSourcePath;
+    const sourcePath = dragSourcePath;
     if (!sourcePath) return;
     const expandedBefore = collectExpandedFolderPaths();
     const result = await api.moveItem(sourcePath, appStore.rootPath);
@@ -308,18 +320,14 @@ export function initFileTree(deps) {
       row.appendChild(label);
 
       row.addEventListener('dragstart', (e) => {
-        appStore.dragSourcePath = item.path;
-        appStore.dragSourceRow = row;
+        dragSourcePath = item.path;
+        dragSourceRow = row;
         row.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', item.path);
       });
 
-      row.addEventListener('dragend', () => {
-        clearDragVisualState();
-        appStore.dragSourcePath = null;
-        appStore.dragSourceRow = null;
-      });
+      row.addEventListener('dragend', resetDragState);
 
       if (item.isDirectory) {
         row.addEventListener('dragover', handleDragOver);
@@ -352,24 +360,24 @@ export function initFileTree(deps) {
   function handleDragEnter(e) {
     e.preventDefault();
     const row = e.currentTarget;
-    if (row === appStore.dragSourceRow) return;
+    if (row === dragSourceRow) return;
     clearDropTarget();
     row.classList.add('drop-target');
-    appStore.currentDropTarget = row;
+    currentDropTarget = row;
   }
 
   function handleDragLeave(e) {
     const row = e.currentTarget;
     if (!row.contains(e.relatedTarget)) {
       row.classList.remove('drop-target');
-      if (appStore.currentDropTarget === row) appStore.currentDropTarget = null;
+      if (currentDropTarget === row) currentDropTarget = null;
     }
   }
 
   function clearDropTarget() {
-    if (appStore.currentDropTarget) {
-      appStore.currentDropTarget.classList.remove('drop-target');
-      appStore.currentDropTarget = null;
+    if (currentDropTarget) {
+      currentDropTarget.classList.remove('drop-target');
+      currentDropTarget = null;
     }
   }
 
@@ -381,7 +389,7 @@ export function initFileTree(deps) {
     for (const el of treeContainer.querySelectorAll('.tree-item.dragging')) {
       el.classList.remove('dragging');
     }
-    appStore.currentDropTarget = null;
+    currentDropTarget = null;
   }
 
   function collectExpandedFolderPaths() {
@@ -429,7 +437,7 @@ export function initFileTree(deps) {
     e.stopPropagation();
     clearDragVisualState();
 
-    const sourcePath = appStore.dragSourcePath || e.dataTransfer.getData('text/plain');
+    const sourcePath = dragSourcePath || e.dataTransfer.getData('text/plain');
     if (!sourcePath || sourcePath === destDir) return;
 
     const expandedBefore = collectExpandedFolderPaths();

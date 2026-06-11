@@ -1,11 +1,18 @@
 export function initWhisperRecorder({
   api,
-  appStore,
   btnChatMic,
   chatVoiceStatus,
   chatInput,
   onInputChanged,
 }) {
+  // Aufnahme-State lebt komplett in diesem Component — kein anderer Code
+  // liest oder schreibt ihn.
+  let voiceRecording = false;
+  let voiceTranscribing = false;
+  let voiceMediaRecorder = null;
+  let voiceChunks = [];
+  let voiceStream = null;
+
   function setMicUi(recording) {
     btnChatMic.classList.toggle('recording', recording);
     btnChatMic.setAttribute('aria-pressed', recording ? 'true' : 'false');
@@ -24,53 +31,53 @@ export function initWhisperRecorder({
   }
 
   function releaseVoiceStream() {
-    if (appStore.voiceStream) {
-      for (const track of appStore.voiceStream.getTracks()) track.stop();
-      appStore.voiceStream = null;
+    if (voiceStream) {
+      for (const track of voiceStream.getTracks()) track.stop();
+      voiceStream = null;
     }
   }
 
   async function startVoiceRecording() {
-    if (appStore.voiceRecording || appStore.voiceTranscribing) return;
+    if (voiceRecording || voiceTranscribing) return;
     try {
-      appStore.voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
       setVoiceStatus(err.name === 'NotAllowedError' ? 'Mikrofonzugriff verweigert.' : `Mikrofon: ${err.message}`);
       return;
     }
 
-    appStore.voiceChunks = [];
+    voiceChunks = [];
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
       : 'audio/webm';
-    appStore.voiceMediaRecorder = new MediaRecorder(appStore.voiceStream, { mimeType });
-    appStore.voiceMediaRecorder.ondataavailable = (e) => {
-      if (e.data?.size > 0) appStore.voiceChunks.push(e.data);
+    voiceMediaRecorder = new MediaRecorder(voiceStream, { mimeType });
+    voiceMediaRecorder.ondataavailable = (e) => {
+      if (e.data?.size > 0) voiceChunks.push(e.data);
     };
-    appStore.voiceMediaRecorder.onstop = () => handleVoiceStopped();
-    appStore.voiceMediaRecorder.start(250);
+    voiceMediaRecorder.onstop = () => handleVoiceStopped();
+    voiceMediaRecorder.start(250);
 
-    appStore.voiceRecording = true;
+    voiceRecording = true;
     setMicUi(true);
     setVoiceStatus('Aufnahme laeuft …');
   }
 
   function stopVoiceRecording() {
-    if (!appStore.voiceRecording || !appStore.voiceMediaRecorder) return;
-    appStore.voiceRecording = false;
-    try { appStore.voiceMediaRecorder.stop(); } catch { /* already stopped */ }
+    if (!voiceRecording || !voiceMediaRecorder) return;
+    voiceRecording = false;
+    try { voiceMediaRecorder.stop(); } catch { /* already stopped */ }
     releaseVoiceStream();
   }
 
   async function handleVoiceStopped() {
     setMicUi(false);
 
-    if (appStore.voiceChunks.length === 0) { setVoiceStatus(''); return; }
-    const blob = new Blob(appStore.voiceChunks, { type: 'audio/webm' });
-    appStore.voiceChunks = [];
+    if (voiceChunks.length === 0) { setVoiceStatus(''); return; }
+    const blob = new Blob(voiceChunks, { type: 'audio/webm' });
+    voiceChunks = [];
     if (blob.size < 1000) { setVoiceStatus('Aufnahme zu kurz.'); return; }
 
-    appStore.voiceTranscribing = true;
+    voiceTranscribing = true;
     btnChatMic.disabled = true;
     setVoiceStatus('Transkribiere…');
 
@@ -92,21 +99,21 @@ export function initWhisperRecorder({
     } catch (err) {
       setVoiceStatus(`Fehler: ${err.message || 'Transkription fehlgeschlagen.'}`);
     } finally {
-      appStore.voiceTranscribing = false;
+      voiceTranscribing = false;
       btnChatMic.disabled = false;
     }
   }
 
   function stopChatVoiceListening() {
-    if (appStore.voiceRecording) stopVoiceRecording();
+    if (voiceRecording) stopVoiceRecording();
     releaseVoiceStream();
     setMicUi(false);
-    if (!appStore.voiceTranscribing) setVoiceStatus('');
+    if (!voiceTranscribing) setVoiceStatus('');
   }
 
   btnChatMic.addEventListener('click', () => {
     if (btnChatMic.disabled) return;
-    if (appStore.voiceRecording) {
+    if (voiceRecording) {
       stopVoiceRecording();
     } else {
       startVoiceRecording();

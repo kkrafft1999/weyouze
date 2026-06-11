@@ -260,11 +260,13 @@ export function initChatStream({
     syncLiveDot();
   }
 
+  let streamRenderRaf = 0;
+
   function scheduleStreamRender(streamEl, text) {
     if (!streamEl) return;
-    if (appStore.streamRenderRaf) cancelAnimationFrame(appStore.streamRenderRaf);
-    appStore.streamRenderRaf = requestAnimationFrame(() => {
-      appStore.streamRenderRaf = 0;
+    if (streamRenderRaf) cancelAnimationFrame(streamRenderRaf);
+    streamRenderRaf = requestAnimationFrame(() => {
+      streamRenderRaf = 0;
       streamEl.innerHTML = markdownToSafeHtml(text);
       chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
     });
