@@ -259,6 +259,5 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
-  const { destroyInsecureDispatcher } = require('./providers/ollama');
-  destroyInsecureDispatcher();
+  providers.disposeAll();
 });

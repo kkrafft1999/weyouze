@@ -26,9 +26,23 @@ function listProviderMeta() {
   });
 }
 
+/** Gibt Provider-Ressourcen (z. B. undici-Dispatcher) beim App-Ende frei. */
+function disposeAll() {
+  for (const id of PROVIDER_ORDER) {
+    const p = PROVIDERS[id];
+    if (typeof p?.dispose !== 'function') continue;
+    try {
+      p.dispose();
+    } catch (err) {
+      console.error(`Provider ${id} dispose failed:`, err);
+    }
+  }
+}
+
 module.exports = {
   PROVIDERS,
   PROVIDER_ORDER,
   getProvider,
   listProviderMeta,
+  disposeAll,
 };

@@ -180,9 +180,9 @@ app.on('will-quit', () => {
 });
 ```
 
-- [ ] `providers/index.js` um optionales `disposeAll()` erweitern
-- [ ] Jeder Provider exportiert optional `dispose()`
-- [ ] Im `will-quit` nur noch `providers.disposeAll()` aufrufen
+- [x] `providers/index.js` um optionales `disposeAll()` erweitern
+- [x] Jeder Provider exportiert optional `dispose()`
+- [x] Im `will-quit` nur noch `providers.disposeAll()` aufrufen
 
 ### M6 — Anthropic `tool_use_id` fällt still auf leeren String zurück
 

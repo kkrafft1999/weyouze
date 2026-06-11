@@ -218,4 +218,5 @@ module.exports = {
   translateMessagesToOllama,
   translateToolsToOllama,
   destroyInsecureDispatcher,
+  dispose: destroyInsecureDispatcher,
 };
