@@ -133,8 +133,8 @@ function registerMediaCapturePermissions(browserSession = session.defaultSession
 
 CSP + `will-navigate` blockieren externe Origins, aber als Defense-in-Depth sollte hier explizit auf den eigenen Renderer eingegrenzt werden.
 
-- [ ] `webContents.getURL()` prüfen und nur erlauben, wenn `file://`-Renderer mit erwartetem Pfad
-- [ ] Test/Manual-Check, dass externes iframe (falls jemals zugelassen) keine Mic-Permission bekommt
+- [x] `webContents.getURL()` prüfen und nur erlauben, wenn `file://`-Renderer mit erwartetem Pfad
+- [x] Test/Manual-Check, dass externes iframe (falls jemals zugelassen) keine Mic-Permission bekommt
 
 ---
 
