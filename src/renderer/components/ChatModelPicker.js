@@ -1,16 +1,19 @@
+import { dismissOnOutsideClick } from '../utils/helpers.js';
+
 export function initChatModelPicker({
   api,
   appStore,
-  chatTitleEl,
-  chatHint,
-  btnChatSend,
-  chatModelPickerWrap,
-  btnChatModelPicker,
-  chatModelPillLabel,
-  chatModelMenu,
-  chatLiveDot,
   onLlmStateChanged,
 }) {
+  const chatTitleEl = document.getElementById('chat-title');
+  const chatHint = document.getElementById('chat-hint');
+  const btnChatSend = document.getElementById('btn-chat-send');
+  const chatModelPickerWrap = document.getElementById('chat-model-picker-wrap');
+  const btnChatModelPicker = document.getElementById('btn-chat-model-picker');
+  const chatModelPillLabel = document.getElementById('chat-model-pill-label');
+  const chatModelMenu = document.getElementById('chat-model-menu');
+  const chatLiveDot = document.getElementById('chat-live-dot');
+
   let chatModelMenuOpen = false;
 
   function findProviderMeta(providerId) {
@@ -141,14 +144,10 @@ export function initChatModelPicker({
     const isConfigured = activeProviderConfigured();
 
     if (chatTitleEl) {
-      if (appStore.rootPath) {
-        const projectName = appStore.rootPath.split('/').pop() || appStore.rootPath;
-        chatTitleEl.textContent = projectName;
-        chatTitleEl.removeAttribute('lang');
-      } else {
-        chatTitleEl.textContent = 'Chat';
-        chatTitleEl.removeAttribute('lang');
-      }
+      chatTitleEl.textContent = appStore.rootPath
+        ? appStore.rootPath.split('/').pop() || appStore.rootPath
+        : 'Chat';
+      chatTitleEl.removeAttribute('lang');
     }
 
     if (chatModelPickerWrap && btnChatModelPicker && chatModelPillLabel) {
@@ -209,13 +208,10 @@ export function initChatModelPicker({
     btnChatModelPicker.setAttribute('aria-expanded', 'true');
   }
 
-  document.addEventListener('click', (e) => {
-    if (chatModelMenuOpen && chatModelMenu && btnChatModelPicker) {
-      const t = e.target;
-      if (!t?.closest?.('.chat-model-picker-wrap')) {
-        closeChatModelMenu();
-      }
-    }
+  dismissOnOutsideClick({
+    isOpen: () => chatModelMenuOpen && !!chatModelMenu && !!btnChatModelPicker,
+    ownsTarget: (t) => !!t?.closest?.('.chat-model-picker-wrap'),
+    onDismiss: closeChatModelMenu,
   });
 
   if (btnChatModelPicker) {

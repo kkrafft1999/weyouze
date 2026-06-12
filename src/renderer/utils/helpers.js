@@ -93,3 +93,15 @@ export function svgFile(filename) {
     <path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.5L9.5 0H4zM9 1v3.5a.5.5 0 0 0 .5.5H13L9 1zM4 1h4v4h5v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z"/>
   </svg>`;
 }
+
+// Gemeinsames Outside-Click-Muster für Menüs/Drawer (Review 2026-05-23, G1):
+// schließt das Element bei Klicks außerhalb, solange isOpen() true liefert.
+// ownsTarget entscheidet, welche Klicks als "innen" gelten (z. B. Menü +
+// zugehöriger Toggle-Button).
+export function dismissOnOutsideClick({ isOpen, ownsTarget, onDismiss }) {
+  document.addEventListener('click', (e) => {
+    if (!isOpen()) return;
+    if (ownsTarget?.(e.target)) return;
+    onDismiss();
+  });
+}

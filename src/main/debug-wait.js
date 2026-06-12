@@ -14,22 +14,8 @@ function resolveDebugWaitMs(args) {
   return Math.min(MAX_MS, Math.max(MIN_MS, ms));
 }
 
-function formatPauseSecondsParts(ms) {
-  const seconds = ms / 1000;
-  const label = Number.isInteger(seconds)
-    ? String(seconds)
-    : seconds.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  const unit = seconds === 1 ? 'Sekunde' : 'Sekunden';
-  return { label, unit };
-}
-
-function formatPauseDurationLabel(ms, phase = 'start') {
-  const { label, unit } = formatPauseSecondsParts(ms);
-  if (phase === 'done') return `${label} ${unit} gewartet`;
-  return `Warte ${label} ${unit} …`;
-}
-
+// Das deutsche Anzeige-Label zur Wartezeit baut der Renderer
+// (src/renderer/chat/toolCallSummary.js) — hier lebt nur die Clamp-Logik.
 module.exports = {
   resolveDebugWaitMs,
-  formatPauseDurationLabel,
 };

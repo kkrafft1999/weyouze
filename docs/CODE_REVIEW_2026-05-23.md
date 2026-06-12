@@ -56,9 +56,9 @@ Verglichen mit dem Review vom 2026-05-03 sind die größten Hochpunkte (Sandbox,
   }
 ```
 
-- [ ] Generischen `withFileLock(targetPath, fn)` einführen
-- [ ] `writeLLMConfig` und `writeUIPrefs` durch den Lock leiten
-- [ ] tmp-Name auf `randomUUID()` umstellen
+- [x] Generischen `withFileLock(targetPath, fn)` einführen
+- [x] `writeLLMConfig` und `writeUIPrefs` durch den Lock leiten
+- [x] tmp-Name auf `randomUUID()` umstellen
 
 ### W2 — Encryption-Migration ohne Lock
 
@@ -70,8 +70,8 @@ Beim ersten Lesen wird Plaintext-Verlauf nach Encrypted migriert. Das passiert *
       }
 ```
 
-- [ ] Migrationsschreib-Pfad in `withChatHistoryLock` wrappen oder über `firstReadDone`-Flag synchronisieren
-- [ ] Test ergänzen, der parallele Reads während Migration simuliert
+- [x] Migrationsschreib-Pfad in `withChatHistoryLock` wrappen oder über `firstReadDone`-Flag synchronisieren
+- [x] Test ergänzen, der parallele Reads während Migration simuliert
 
 ### W3 — API-Key kann nicht über die UI gelöscht werden
 
@@ -89,9 +89,9 @@ Beim ersten Lesen wird Plaintext-Verlauf nach Encrypted migriert. Das passiert *
     }
 ```
 
-- [ ] Explizites "Key entfernen"-Signal definieren (z. B. `apiKey === null` oder `removeApiKey: true`)
-- [ ] Im Handler `delete next.apiKeyEnc` ausführen
-- [ ] Trash-Button im Settings-Modal neben dem Key-Feld
+- [x] Explizites "Key entfernen"-Signal definieren (z. B. `apiKey === null` oder `removeApiKey: true`)
+- [x] Im Handler `delete next.apiKeyEnc` ausführen
+- [x] Trash-Button im Settings-Modal neben dem Key-Feld
 
 ### W4 — IPC-Channels tragen alten Provider-Namen
 
@@ -105,17 +105,17 @@ const PUSH_CHANNELS = Object.freeze({
 });
 ```
 
-- [ ] Auf `chat:send`, `chat:delta`, `chat:tool-line`, `chat:progress` umbenennen
-- [ ] `preload/index.js` + Vendor-Bundle regenerieren (`npm run sync-vendor`)
+- [x] Auf `chat:send`, `chat:delta`, `chat:tool-line`, `chat:progress` umbenennen
+- [x] `preload/index.js` + Vendor-Bundle regenerieren (`npm run sync-vendor`)
 
 ### W5 — Kein Cancel/Abort für laufende Chat-Requests
 
 Sobald `api.chat()` läuft, kann der User es bis Ende oder Fehler nicht abbrechen — kein UI-Stopp-Button, kein IPC-Abort. Bei einem hängenden lokalen Ollama oder einer langen Tool-Schleife frustrierend.
 
-- [ ] `AbortController` im Renderer einführen, Stopp-Button im Chat-Input
-- [ ] Neuen Push-Channel `chat:abort` (ipcRenderer.send → ipcMain.on)
-- [ ] In `chat-handlers.js` Round-Loop bricht bei Abort-Signal ab und cancelt den Reader im Provider
-- [ ] Provider-Adapter erhalten optionalen `abortSignal` und übergeben ihn an `fetch()`
+- [x] `AbortController` im Renderer einführen, Stopp-Button im Chat-Input
+- [x] Neuen Push-Channel `chat:abort` (ipcRenderer.send → ipcMain.on)
+- [x] In `chat-handlers.js` Round-Loop bricht bei Abort-Signal ab und cancelt den Reader im Provider
+- [x] Provider-Adapter erhalten optionalen `abortSignal` und übergeben ihn an `fetch()`
 
 ### W6 — `setPermissionRequestHandler` prüft Origin/Renderer-URL nicht
 
@@ -144,24 +144,24 @@ CSP + `will-navigate` blockieren externe Origins, aber als Defense-in-Depth soll
 
 Beide sind in `preload/index.js` exponiert und in `settings-handlers.js` registriert, werden aber nirgends im Renderer aufgerufen. Die UI fährt ausschließlich über `commitSettings` / `setActivePreset`.
 
-- [ ] Handler in `settings-handlers.js` entfernen (Zeilen ~46–109)
-- [ ] `preload/index.js` und `shared/ipc-channels.js` aufräumen
-- [ ] Vendor-Bundle regenerieren
+- [x] Handler in `settings-handlers.js` entfernen (Zeilen ~46–109)
+- [x] `preload/index.js` und `shared/ipc-channels.js` aufräumen
+- [x] Vendor-Bundle regenerieren
 
 ### M2 — Sidebar-/Chat-Panel-Breiten werden nicht persistiert
 
 `SidebarResizer.js` setzt `style.width` direkt, speichert aber nichts. Andere UI-Prefs (Content-Pane sichtbar, System-Prompt, Locale) sind persistent — Inkonsistenz.
 
-- [ ] `sidebarWidth` und `chatPanelWidth` zu `ui-preferences.json` hinzufügen
-- [ ] Bei `mouseup` im Resizer in `setUIPrefs` schreiben (debounced)
-- [ ] Beim App-Start die Werte wiederherstellen
+- [x] `sidebarWidth` und `chatPanelWidth` zu `ui-preferences.json` hinzufügen
+- [x] Bei `mouseup` im Resizer in `setUIPrefs` schreiben (debounced)
+- [x] Beim App-Start die Werte wiederherstellen
 
 ### M3 — Fehlerbehandlung in Providern uneinheitlich
 
 `ollama.js` nutzt `describeFetchError(err, baseUrl)` mit `cause.code/errno/message`. `openai.js`, `anthropic.js`, `google.js`, `mlx-lm.js` geben nur `err.message || 'Netzwerkfehler'` zurück. Lokale Verbindungsprobleme bei MLX-LM sehen damit identisch aus wie ein generischer OpenAI-Hänger.
 
-- [ ] `describeFetchError` nach `stream-helpers.js` ziehen
-- [ ] In allen Providern verwenden (sowohl `listModels` als auch `streamChatRound`)
+- [x] `describeFetchError` nach `stream-helpers.js` ziehen
+- [x] In allen Providern verwenden (sowohl `listModels` als auch `streamChatRound`)
 
 ### M4 — Keine Trim-/Truncation-Strategie für Chat-History
 
@@ -193,8 +193,8 @@ app.on('will-quit', () => {
 
 Wenn ein vorheriger Assistant-Block ohne `id` durchschlüpft, schickt der Adapter `tool_use_id: ''` und Anthropic antwortet 400.
 
-- [ ] Block überspringen oder explizit Fehler an Caller propagieren
-- [ ] Test mit fehlender `tool_call_id`
+- [x] Block überspringen oder explizit Fehler an Caller propagieren
+- [x] Test mit fehlender `tool_call_id`
 
 ### M7 — Google: `MALFORMED_FUNCTION_CALL` als `tool_calls` interpretiert
 
@@ -204,8 +204,8 @@ Wenn ein vorheriger Assistant-Block ohne `id` durchschlüpft, schickt der Adapte
 
 `MALFORMED_FUNCTION_CALL` ist ein Fehlerzustand des Modells, kein gültiger Tool-Call-Stop. Die Tool-Loop läuft danach in eine leere Runde.
 
-- [ ] `MALFORMED_FUNCTION_CALL` als Fehler behandeln und an User zurückgeben
-- [ ] Klartext-Hinweis "Modell hat einen ungültigen Function-Call erzeugt"
+- [x] `MALFORMED_FUNCTION_CALL` als Fehler behandeln und an User zurückgeben
+- [x] Klartext-Hinweis "Modell hat einen ungültigen Function-Call erzeugt"
 
 ### M8 — Tests fokussieren nur auf reine Hilfen / Translations
 
@@ -239,7 +239,7 @@ Statt direkt zu prüfen, ob der absolute Pfad unter dem Root liegt, geht der Cod
 
 - [x] Bereiche kapseln — Drag- (FileTree), Voice- (WhisperRecorder) und RAF-State (ChatStream) sind jetzt modul-lokal; `appStore` enthält nur noch echt geteilten State
 - [ ] ~~Oder Pub/Sub einführen~~ — durch die Kapselung obsolet
-- [ ] DOM-Refs aus `app.js` in Component-spezifische Selektoren verschieben (offen, separater Schritt)
+- [x] DOM-Refs aus `app.js` in Component-spezifische Selektoren verschieben — jede Component löst ihre Elemente selbst per `getElementById` auf; `app.js` behält nur Input-Höhe, Content-Pane-Toggle und Öffnen-Buttons
 
 ---
 
@@ -249,7 +249,7 @@ Statt direkt zu prüfen, ob der absolute Pfad unter dem Root liegt, geht der Cod
 
 `app.js:307` (chatHistoryDrawer), `FileTree.js:221` (folderHistoryMenu), `ChatModelPicker.js:212` (chatModelMenu).
 
-- [ ] Gemeinsamen `dismissOnOutsideClick(el, onDismiss)`-Helper bauen
+- [x] Gemeinsamen `dismissOnOutsideClick(el, onDismiss)`-Helper bauen
 
 ### G2 — Mischung deutscher/ASCII-Anführungszeichen
 
@@ -257,13 +257,13 @@ Statt direkt zu prüfen, ob der absolute Pfad unter dem Root liegt, geht der Cod
       `\n\nDer Nutzer hat gerade folgende ${kind} im Baum ausgewählt: „${selectedRelPath}". ` +
 ```
 
-- [ ] Auf konsistente deutsche Anführungszeichen umstellen (`„…"`)
+- [x] Auf konsistente deutsche Anführungszeichen umstellen (`„…"`)
 
 ### G3 — Magische Limits hartkodiert in `index.js`
 
 `MAX_FOLDER_HISTORY = 10`, `MAX_CHAT_SESSIONS = 200`, `MAX_READ_FILE_BYTES`. Andere Limits (`MAX_TOOL_ROUNDS`) sind via UI-Prefs überschreibbar.
 
-- [ ] Optional auf `ui-preferences.json` migrieren, sonst zumindest in `src/shared/limits.js` zentralisieren
+- [x] Optional auf `ui-preferences.json` migrieren, sonst zumindest in `src/shared/limits.js` zentralisieren
 
 ### G4 — `read_file_text`-Tool-Description erwähnt das 2-MB-Limit nicht
 
@@ -272,14 +272,14 @@ Statt direkt zu prüfen, ob der absolute Pfad unter dem Root liegt, geht der Cod
         'Liest den Textinhalt einer Datei als UTF-8 (nur innerhalb des Projektordners).',
 ```
 
-- [ ] Description um "Maximale Dateigröße: 2 MB" ergänzen, damit Modell den Fehlerfall versteht
+- [x] Description um "Maximale Dateigröße: 2 MB" ergänzen, damit Modell den Fehlerfall versteht
 
 ### G5 — `summarizeToolCall` lokalisiert im Main, nicht im Renderer
 
 UI-Strings würden besser in den Renderer passen, der `appLocale` kennt.
 
-- [ ] Tool-Phasen via Daten (`{ tool, args, phase }`) pushen
-- [ ] Renderer formatiert die Anzeige selbst
+- [x] Tool-Phasen via Daten (`{ tool, args, phase }`) pushen
+- [x] Renderer formatiert die Anzeige selbst
 
 ### G6 — Doppelter `removeAttribute`-Aufruf
 
@@ -292,7 +292,7 @@ UI-Strings würden besser in den Renderer passen, der `appLocale` kennt.
       }
 ```
 
-- [ ] `removeAttribute('lang')` aus der Verzweigung herausziehen
+- [x] `removeAttribute('lang')` aus der Verzweigung herausziehen
 
 ### G7 — `bareModelId` ohne Input-Validierung
 
@@ -304,7 +304,7 @@ function bareModelId(modelOrPath) {
 }
 ```
 
-- [ ] Whitelist-Regex (`/^[a-zA-Z0-9._-]+$/`) prüfen oder bei ungültigem Input Fehler werfen
+- [x] Whitelist-Regex (`/^[a-zA-Z0-9._-]+$/`) prüfen oder bei ungültigem Input Fehler werfen
 
 ### G8 — `iterStreamLines` flusht den `TextDecoder` am Ende nicht
 
@@ -315,7 +315,7 @@ async function* iterStreamLines(reader) {
 }
 ```
 
-- [ ] Nach der Loop `decoder.decode()` (ohne Argument) aufrufen, um multi-byte UTF-8-Reste zu yielden
+- [x] Nach der Loop `decoder.decode()` (ohne Argument) aufrufen, um multi-byte UTF-8-Reste zu yielden
 
 ### G9 — RAF-ID lebt im globalen `appStore`
 
@@ -328,8 +328,8 @@ async function* iterStreamLines(reader) {
 
 ### G10 — Keine JSDoc-Typedefs für die Provider-Adapter
 
-- [ ] `@typedef`-Block für `streamChatRound`-Parameter (config, model, messages, tools, callbacks) und Rückgabe (`{message, finishReason, error?, code?}`) anlegen
-- [ ] Gemeinsam in `src/main/providers/types.js` (oder `index.js`) ablegen
+- [x] `@typedef`-Block für `streamChatRound`-Parameter (config, model, messages, tools, callbacks) und Rückgabe (`{message, finishReason, error?, code?}`) anlegen
+- [x] Gemeinsam in `src/main/providers/types.js` (oder `index.js`) ablegen
 
 ### G11 — README-Projektstruktur ist veraltet
 
@@ -339,8 +339,8 @@ async function* iterStreamLines(reader) {
 ├── providers/           Adapter für OpenAI, Anthropic, Google, Ollama
 ```
 
-- [ ] Auf `src/main/`, `src/preload/`, `src/main/providers/`, `src/renderer/` aktualisieren
-- [ ] `test/` und `src/shared/` ergänzen
+- [x] Auf `src/main/`, `src/preload/`, `src/main/providers/`, `src/renderer/` aktualisieren
+- [x] `test/` und `src/shared/` ergänzen
 
 ### G12 — `safeJsonParse`-Fallback in `google.js` verpackt Tool-Output
 
@@ -348,7 +348,7 @@ async function* iterStreamLines(reader) {
       const response = safeJsonParse(m.content, { result: m.content });
 ```
 
-- [ ] Aktuell theoretisch, da Tools immer JSON liefern — aber dokumentieren oder konsistent strikt JSON erzwingen
+- [x] Aktuell theoretisch, da Tools immer JSON liefern — aber dokumentieren oder konsistent strikt JSON erzwingen
 
 ---
 

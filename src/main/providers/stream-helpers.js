@@ -19,6 +19,8 @@ async function* iterStreamLines(reader, abortSignal) {
       yield raw.replace(/\r$/, '');
     }
   }
+  // Flush: ein Multi-Byte-UTF-8-Zeichen kann genau an der Chunk-Grenze enden.
+  carry += decoder.decode();
   if (carry) yield carry.replace(/\r$/, '');
 }
 

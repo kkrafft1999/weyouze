@@ -4,6 +4,7 @@ import {
   serializeChatMessagesForStorage,
   normalizeLoadedMessages,
 } from '../chat/messageUtils.js';
+import { summarizeToolEvent } from '../chat/toolCallSummary.js';
 
 function toolLineText(entry) {
   if (typeof entry === 'string') return entry;
@@ -144,15 +145,16 @@ function finalizeAllToolLines(wrap) {
 export function initChatStream({
   api,
   appStore,
-  chatMessagesEl,
-  chatInput,
-  btnChatSend,
-  chatTokenUsageEl,
   onInputChanged,
   stopChatVoiceListening,
   activeProviderConfigured,
   syncLiveDot,
 }) {
+  const chatMessagesEl = document.getElementById('chat-messages');
+  const chatInput = document.getElementById('chat-input');
+  const btnChatSend = document.getElementById('btn-chat-send');
+  const chatTokenUsageEl = document.getElementById('chat-token-usage');
+
   function setChatTokenUsage(usage) {
     appStore.chatTokenUsage = normalizeChatTokenUsage(usage);
     syncChatTokenUsageDisplay();
@@ -497,18 +499,21 @@ export function initChatStream({
             const last = appStore.chatMessages[appStore.chatMessages.length - 1];
             if (!last || last.role !== 'assistant' || !last.streaming) return;
 
+            const phase =
+              typeof payload === 'object' && payload !== null && payload.phase
+                ? payload.phase
+                : 'start';
+            // Main pusht Rohdaten ({ tool, args, … }); die Anzeige-Zeile
+            // entsteht hier. Strings (alte Sessions) gehen unverändert durch.
             const line =
               typeof payload === 'string'
                 ? payload
                 : typeof payload?.line === 'string'
                   ? payload.line
-                  : '';
+                  : payload?.tool
+                    ? summarizeToolEvent(payload, phase)
+                    : '';
             if (!line) return;
-
-            const phase =
-              typeof payload === 'object' && payload !== null && payload.phase
-                ? payload.phase
-                : 'start';
 
             const wrap = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type .chat-tool-log');
             if (!wrap) {
@@ -591,7 +596,9 @@ export function initChatStream({
           if (typeof result?.content === 'string' && result.content.length > 0) {
             last.content = result.content;
           }
-          last.toolTrace = Array.isArray(result?.toolTrace) ? result.toolTrace : last.toolTrace || [];
+          last.toolTrace = Array.isArray(result?.toolTrace)
+            ? result.toolTrace.map((e) => summarizeToolEvent(e, 'done'))
+            : last.toolTrace || [];
           const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
           if (bubble) {
             finalizeStreamingAssistantBubble(bubble, last);
@@ -612,7 +619,9 @@ export function initChatStream({
     } else if (last && last.role === 'assistant' && last.streaming) {
       last.streaming = false;
       last.content = result.content ?? '';
-      last.toolTrace = Array.isArray(result.toolTrace) ? result.toolTrace : last.toolTrace || [];
+      last.toolTrace = Array.isArray(result.toolTrace)
+        ? result.toolTrace.map((e) => summarizeToolEvent(e, 'done'))
+        : last.toolTrace || [];
       const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
       if (bubble) {
         finalizeStreamingAssistantBubble(bubble, last);

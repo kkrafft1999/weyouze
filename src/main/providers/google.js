@@ -2,10 +2,17 @@ const { iterSseEvents, describeFetchError, readErrorMessage, safeJsonParse, abor
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
+// Model-IDs kommen teils aus User-Input (Settings) und landen im API-Pfad.
+const MODEL_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
+
 function bareModelId(modelOrPath) {
   const s = String(modelOrPath || '').trim();
   if (s.startsWith('models/')) return s.slice('models/'.length);
   return s;
+}
+
+function isValidModelId(id) {
+  return MODEL_ID_PATTERN.test(id);
 }
 
 async function listModels(config) {
@@ -118,6 +125,9 @@ function translateMessagesToGoogle(messages) {
     }
     if (m.role === 'tool') {
       const name = toolNameById.get(m.tool_call_id) || 'tool';
+      // functionResponse.response muss ein Objekt sein. Unsere Tools liefern
+      // immer JSON; der { result }-Fallback greift nur, falls je ein Tool
+      // Plaintext zurückgibt, und verpackt ihn dann API-konform.
       const response = safeJsonParse(m.content, { result: m.content });
       contents.push({
         role: 'user',
@@ -134,13 +144,18 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   const apiKey = config?.apiKey;
   if (!apiKey) return { error: 'Kein API-Key hinterlegt.', code: 'NO_API_KEY' };
 
+  const modelId = bareModelId(model);
+  if (!isValidModelId(modelId)) {
+    return { error: `Ungültige Modell-ID: „${String(model || '')}“.`, code: 'INVALID' };
+  }
+
   const { systemText, contents } = translateMessagesToGoogle(messages);
   const tooling = translateToolsToGoogle(tools);
   const body = { contents };
   if (systemText) body.systemInstruction = { parts: [{ text: systemText }] };
   if (tooling) body.tools = tooling;
 
-  const url = `${API_BASE}/models/${encodeURIComponent(bareModelId(model))}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
+  const url = `${API_BASE}/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
 
   let res;
   try {

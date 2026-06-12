@@ -1,4 +1,3 @@
-const { formatPauseDurationLabel, resolveDebugWaitMs } = require('../debug-wait');
 const { isAbortError, createChatAbortError, mergeUsage, describeFetchError } = require('../providers/stream-helpers');
 const {
   resolveHistoryCharLimit,
@@ -45,45 +44,10 @@ function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirecto
   if (selectedRelPath) {
     const kind = selectedIsDirectory ? 'Ordner' : 'Datei';
     prompt +=
-      `\n\nDer Nutzer hat gerade folgende ${kind} im Baum ausgewählt: „${selectedRelPath}". ` +
+      `\n\nDer Nutzer hat gerade folgende ${kind} im Baum ausgewählt: „${selectedRelPath}“. ` +
       `Beziehe dich bei Fragen ohne expliziten Pfad auf diese Auswahl.`;
   }
   return prompt;
-}
-
-function truncateToolLabel(s, max = 48) {
-  const t = String(s ?? '');
-  if (t.length <= max) return t;
-  return `${t.slice(0, max - 1)}…`;
-}
-
-function formatRelativePathForLabel(relativePath) {
-  const raw = typeof relativePath === 'string' ? relativePath.trim() : '';
-  if (!raw || raw === '.') return null;
-  return truncateToolLabel(raw);
-}
-
-function summarizeToolCall(toolName, args, phase = 'start') {
-  const isDone = phase === 'done';
-  if (toolName === 'list_directory') {
-    const pathLabel = formatRelativePathForLabel(args?.relative_path);
-    if (pathLabel) {
-      return isDone ? `Ordner ${pathLabel} durchsucht` : `Ordner ${pathLabel} wird durchsucht …`;
-    }
-    return isDone ? 'Projektordner durchsucht' : 'Projektordner wird durchsucht …';
-  }
-  if (toolName === 'read_file_text') {
-    const pathLabel = formatRelativePathForLabel(args?.relative_path);
-    if (pathLabel) {
-      return isDone ? `Datei ${pathLabel} gelesen` : `Datei ${pathLabel} wird gelesen …`;
-    }
-    return isDone ? 'Datei gelesen' : 'Datei wird gelesen …';
-  }
-  if (toolName === 'debug_wait') {
-    return formatPauseDurationLabel(resolveDebugWaitMs(args), phase);
-  }
-  const name = truncateToolLabel(toolName || 'Tool');
-  return isDone ? `${name} ausgeführt` : `${name} wird ausgeführt …`;
 }
 
 function resolveToolRoundLimit(uiPrefs, mainDefault) {
@@ -234,9 +198,11 @@ function registerChatHandlers({
       const callbacks = makeStreamCallbacks(wc, PUSH);
       const toolRoundLimit = resolveToolRoundLimit(uiPrefsAll, maxToolRounds);
 
-      const emitToolLine = (phase, line) => {
+      // Pusht das Tool-Ereignis als Rohdaten; die deutsche Anzeige-Zeile baut
+      // der Renderer (toolCallSummary.js), der die App-Locale kennt.
+      const emitToolLine = (phase, entry) => {
         if (wc && !wc.isDestroyed()) {
-          wc.send(PUSH.CHAT_TOOL_LINE, { phase, line });
+          wc.send(PUSH.CHAT_TOOL_LINE, { phase, ...entry });
         }
       };
 
@@ -292,11 +258,10 @@ function registerChatHandlers({
               } catch {
                 args = {};
               }
-              const startLine = `${summarizeToolCall(toolName, args, 'start')} · kein Ordner geöffnet`;
-              const doneLine = `${summarizeToolCall(toolName, args, 'done')} · kein Ordner geöffnet`;
-              toolTrace.push(doneLine);
-              emitToolLine('start', startLine);
-              emitToolLine('done', doneLine);
+              const entry = { tool: toolName, args, noWorkspace: true };
+              toolTrace.push(entry);
+              emitToolLine('start', entry);
+              emitToolLine('done', entry);
               apiMessages.push({
                 role: 'tool',
                 tool_call_id: tc.id,
@@ -319,10 +284,9 @@ function registerChatHandlers({
             } catch {
               args = {};
             }
-            const startLine = summarizeToolCall(toolName, args, 'start');
-            const doneLine = summarizeToolCall(toolName, args, 'done');
-            toolTrace.push(doneLine);
-            emitToolLine('start', startLine);
+            const entry = { tool: toolName, args };
+            toolTrace.push(entry);
+            emitToolLine('start', entry);
             let out;
             try {
               out = await fsService.runWorkspaceTool(toolName, args, workspaceRoot, { abortSignal });
@@ -332,7 +296,7 @@ function registerChatHandlers({
               }
               throw err;
             }
-            emitToolLine('done', doneLine);
+            emitToolLine('done', entry);
             apiMessages.push({
               role: 'tool',
               tool_call_id: tc.id,
@@ -372,6 +336,4 @@ function registerChatHandlers({
 module.exports = {
   registerChatHandlers,
   resolveToolRoundLimit,
-  summarizeToolCall,
-  truncateToolLabel,
 };

@@ -1,12 +1,9 @@
 import { formatHistoryTime, normalizeLoadedMessages } from '../chat/messageUtils.js';
+import { dismissOnOutsideClick } from '../utils/helpers.js';
 
 export function initChatHistoryDrawer({
   api,
   appStore,
-  chatHistoryDrawer,
-  chatHistoryList,
-  chatHistoryEmpty,
-  btnChatHistory,
   stopChatVoiceListening,
   persistCurrentChat,
   renderChatMessages,
@@ -16,6 +13,11 @@ export function initChatHistoryDrawer({
   resetChatTokenUsage,
   onNewChatStarted,
 }) {
+  const chatHistoryDrawer = document.getElementById('chat-history-drawer');
+  const chatHistoryList = document.getElementById('chat-history-list');
+  const chatHistoryEmpty = document.getElementById('chat-history-empty');
+  const btnChatHistory = document.getElementById('btn-chat-history');
+
   function setHistoryDrawerOpen(open) {
     chatHistoryDrawer.classList.toggle('hidden', !open);
     chatHistoryDrawer.setAttribute('aria-hidden', open ? 'false' : 'true');
@@ -135,7 +137,18 @@ export function initChatHistoryDrawer({
 
   chatHistoryDrawer.addEventListener('click', (e) => e.stopPropagation());
 
+  dismissOnOutsideClick({
+    isOpen: isHistoryDrawerOpen,
+    ownsTarget: (t) => chatHistoryDrawer.contains(t) || btnChatHistory.contains(t),
+    onDismiss: () => setHistoryDrawerOpen(false),
+  });
+
+  function isHistoryDrawerOpen() {
+    return !chatHistoryDrawer.classList.contains('hidden');
+  }
+
   return {
+    isHistoryDrawerOpen,
     setHistoryDrawerOpen,
     renderHistoryList,
     openChatSession,

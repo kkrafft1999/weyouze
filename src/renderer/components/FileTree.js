@@ -5,6 +5,7 @@ import {
   svgChevron,
   svgFolder,
   svgFile,
+  dismissOnOutsideClick,
 } from '../utils/helpers.js';
 
 /** Reine Hilfen für den Dateibaum (Phase 4.6.2 — Extraktion ohne DOM). */
@@ -34,30 +35,31 @@ export function initFileTree(deps) {
   const {
     api,
     appStore,
-    treeContainer,
-    welcomeEl,
-    filePreview,
-    fileInfo,
-    previewFilename,
-    previewMeta,
-    previewContent,
-    infoFilename,
-    infoSize,
-    infoModified,
-    infoType,
-    projectName,
-    btnFolderHistory,
-    folderHistoryMenu,
-    welcomeRecentSection,
-    welcomeRecentList,
-    welcomeActionsList,
-    chatInput,
     onInputChanged,
     onWorkspaceChanged,
     onProjectOpened,
     sendChatMessage,
     activeProviderConfigured,
   } = deps;
+
+  const treeContainer = document.getElementById('tree-container');
+  const welcomeEl = document.getElementById('welcome');
+  const filePreview = document.getElementById('file-preview');
+  const fileInfo = document.getElementById('file-info');
+  const previewFilename = document.getElementById('preview-filename');
+  const previewMeta = document.getElementById('preview-meta');
+  const previewContent = document.getElementById('preview-content');
+  const infoFilename = document.getElementById('info-filename');
+  const infoSize = document.getElementById('info-size');
+  const infoModified = document.getElementById('info-modified');
+  const infoType = document.getElementById('info-type');
+  const projectName = document.getElementById('project-name');
+  const btnFolderHistory = document.getElementById('btn-folder-history');
+  const folderHistoryMenu = document.getElementById('folder-history-menu');
+  const welcomeRecentSection = document.getElementById('welcome-recent');
+  const welcomeRecentList = document.getElementById('welcome-recent-list');
+  const welcomeActionsList = document.getElementById('welcome-actions-list');
+  const chatInput = document.getElementById('chat-input');
 
   let historyDrawerCloseOnEscape = null;
 
@@ -230,10 +232,10 @@ export function initFileTree(deps) {
     openFolderHistoryMenu();
   });
 
-  document.addEventListener('click', (e) => {
-    if (folderHistoryMenu.classList.contains('hidden')) return;
-    if (folderHistoryMenu.contains(e.target) || btnFolderHistory.contains(e.target)) return;
-    closeFolderHistoryMenu();
+  dismissOnOutsideClick({
+    isOpen: () => !folderHistoryMenu.classList.contains('hidden'),
+    ownsTarget: (t) => folderHistoryMenu.contains(t) || btnFolderHistory.contains(t),
+    onDismiss: closeFolderHistoryMenu,
   });
 
   document.addEventListener('keydown', (e) => {

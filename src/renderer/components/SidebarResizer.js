@@ -22,15 +22,16 @@ function parsePx(styleWidth) {
 }
 
 export function initSidebarResizer({
-  divider,
-  sidebar,
-  workspace,
-  chatDivider,
-  chatPanel,
   api,
   initialSidebarWidth,
   initialChatPanelWidth,
 }) {
+  const divider = document.getElementById('divider');
+  const sidebar = document.getElementById('sidebar');
+  const workspace = document.getElementById('workspace');
+  const chatDivider = document.getElementById('chat-divider');
+  const chatPanel = document.getElementById('chat-panel');
+
   if (typeof initialSidebarWidth === 'number' && Number.isFinite(initialSidebarWidth)) {
     sidebar.style.width = `${clampSidebarWidth(initialSidebarWidth)}px`;
   }

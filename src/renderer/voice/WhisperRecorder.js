@@ -1,10 +1,11 @@
 export function initWhisperRecorder({
   api,
-  btnChatMic,
-  chatVoiceStatus,
-  chatInput,
   onInputChanged,
 }) {
+  const btnChatMic = document.getElementById('btn-chat-mic');
+  const chatVoiceStatus = document.getElementById('chat-voice-status');
+  const chatInput = document.getElementById('chat-input');
+
   // Aufnahme-State lebt komplett in diesem Component — kein anderer Code
   // liest oder schreibt ihn.
   let voiceRecording = false;

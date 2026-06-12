@@ -1,4 +1,8 @@
-export function initTheme({ themeToggle, iconSun, iconMoon }) {
+export function initTheme() {
+  const themeToggle = document.getElementById('theme-toggle');
+  const iconSun = document.getElementById('icon-sun');
+  const iconMoon = document.getElementById('icon-moon');
+
   function setTheme(mode) {
     if (mode === 'dark') {
       document.documentElement.setAttribute('data-theme', 'dark');

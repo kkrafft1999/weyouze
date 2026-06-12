@@ -25,12 +25,9 @@ const { registerSettingsHandlers } = require('./ipc/settings-handlers');
 const { registerChatHistoryHandlers } = require('./ipc/chat-history-handlers');
 const { registerChatHandlers } = require('./ipc/chat-handlers');
 const workspaceState = require('./workspace-state');
+const { LIMITS } = require('../shared/limits');
 
-const MAX_CHAT_SESSIONS = 200;
-const MAX_FOLDER_HISTORY = 10;
 const DEFAULT_PROVIDER = 'openai';
-const MAX_TOOL_ROUNDS = 14;
-const MAX_READ_FILE_BYTES = 2 * 1024 * 1024;
 
 const WORKSPACE_TOOLS = [
   {
@@ -56,7 +53,8 @@ const WORKSPACE_TOOLS = [
     function: {
       name: 'read_file_text',
       description:
-        'Liest den Textinhalt einer Datei als UTF-8 (nur innerhalb des Projektordners).',
+        'Liest den Textinhalt einer Datei als UTF-8 (nur innerhalb des Projektordners). ' +
+        'Maximale Dateigröße: 2 MB — größere Dateien liefern einen Fehler.',
       parameters: {
         type: 'object',
         properties: {
@@ -100,15 +98,15 @@ const storage = createStorageService({
   fs,
   path,
   providers,
-  maxChatSessions: MAX_CHAT_SESSIONS,
-  maxFolderHistory: MAX_FOLDER_HISTORY,
+  maxChatSessions: LIMITS.MAX_CHAT_SESSIONS,
+  maxFolderHistory: LIMITS.MAX_FOLDER_HISTORY,
   defaultProviderId: DEFAULT_PROVIDER,
 });
 
 const fsService = createFsService({
   fs,
   path,
-  maxReadFileBytes: MAX_READ_FILE_BYTES,
+  maxReadFileBytes: LIMITS.MAX_READ_FILE_BYTES,
 });
 
 const whisperService = createWhisperService({
@@ -145,7 +143,7 @@ registerChatHandlers({
   fsService,
   path,
   defaultProviderId: DEFAULT_PROVIDER,
-  maxToolRounds: MAX_TOOL_ROUNDS,
+  maxToolRounds: LIMITS.MAX_TOOL_ROUNDS,
   workspaceTools: WORKSPACE_TOOLS,
   REQ,
   PUSH,

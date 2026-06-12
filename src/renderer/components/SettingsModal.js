@@ -8,41 +8,6 @@ export function initSettingsModal(deps) {
   const {
     api,
     appStore,
-    modalSettings,
-    modalSettingsBackdrop,
-    settingsPanelHeadingEl,
-    settingsNavTabs,
-    prefModelList,
-    prefListEmpty,
-    btnOpenAddModel,
-    addModelOverlay,
-    selectProvider,
-    providerStatus,
-    providerKeyRow,
-    providerBaseUrlRow,
-    inputApiKey,
-    btnRemoveApiKey,
-    inputBaseUrl,
-    providerInsecureRow,
-    inputInsecureTls,
-    openaiReasoningSection,
-    selectPopupReasoning,
-    selectModel,
-    btnLoadModels,
-    modelLoadProviderLabel,
-    modelStatus,
-    btnAddPresetRow,
-    btnAddModelCloseX,
-    btnAddModelClose,
-    btnSettingsSave,
-    btnSettingsClose,
-    btnSettingsFooterClose,
-    inputGlobalSystemPrompt,
-    selectAppLocale,
-    inputMaxToolRounds,
-    modalEncryptionWarning,
-    modalSaveError,
-    btnChatSettings,
     stopChatVoiceListening,
     closeChatModelMenu,
     refreshLLMState,
@@ -50,6 +15,42 @@ export function initSettingsModal(deps) {
     updateChatChrome,
     DEFAULT_MAX_TOOL_ROUNDS = 14,
   } = deps;
+
+  const modalSettings = document.getElementById('modal-settings');
+  const modalSettingsBackdrop = document.getElementById('modal-settings-backdrop');
+  const settingsPanelHeadingEl = document.getElementById('settings-panel-heading');
+  const settingsNavTabs = [...document.querySelectorAll('.settings-nav-item[role="tab"]')];
+  const prefModelList = document.getElementById('pref-model-list');
+  const prefListEmpty = document.getElementById('pref-list-empty');
+  const btnOpenAddModel = document.getElementById('btn-open-add-model');
+  const addModelOverlay = document.getElementById('add-model-overlay');
+  const selectProvider = document.getElementById('select-provider');
+  const providerStatus = document.getElementById('provider-status');
+  const providerKeyRow = document.getElementById('provider-key-row');
+  const providerBaseUrlRow = document.getElementById('provider-baseurl-row');
+  const inputApiKey = document.getElementById('input-api-key');
+  const btnRemoveApiKey = document.getElementById('btn-remove-api-key');
+  const inputBaseUrl = document.getElementById('input-base-url');
+  const providerInsecureRow = document.getElementById('provider-insecure-row');
+  const inputInsecureTls = document.getElementById('input-insecure-tls');
+  const openaiReasoningSection = document.getElementById('openai-reasoning-section');
+  const selectPopupReasoning = document.getElementById('select-popup-reasoning');
+  const selectModel = document.getElementById('select-model');
+  const btnLoadModels = document.getElementById('btn-load-models');
+  const modelLoadProviderLabel = document.getElementById('model-load-provider-label');
+  const modelStatus = document.getElementById('model-status');
+  const btnAddPresetRow = document.getElementById('btn-add-preset-row');
+  const btnAddModelCloseX = document.getElementById('btn-add-model-close-x');
+  const btnAddModelClose = document.getElementById('btn-add-model-close');
+  const btnSettingsSave = document.getElementById('btn-settings-save');
+  const btnSettingsClose = document.getElementById('btn-settings-close');
+  const btnSettingsFooterClose = document.getElementById('btn-settings-footer-close');
+  const inputGlobalSystemPrompt = document.getElementById('input-global-system-prompt');
+  const selectAppLocale = document.getElementById('select-app-locale');
+  const inputMaxToolRounds = document.getElementById('input-max-tool-rounds');
+  const modalEncryptionWarning = document.getElementById('modal-encryption-warning');
+  const modalSaveError = document.getElementById('modal-save-error');
+  const btnChatSettings = document.getElementById('btn-chat-settings');
 
   function presetDetailRowForDraft(pr) {
     const meta = findProviderMeta(pr.providerId);
