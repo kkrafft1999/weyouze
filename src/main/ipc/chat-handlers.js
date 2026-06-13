@@ -62,6 +62,41 @@ function buildToolEntry(toolName, args, extra) {
   return entry;
 }
 
+// Verdichtet einen tool_call (Chat-Completions-Form) auf das, was im
+// RAW-Protokoll lesbar angezeigt wird.
+function summarizeToolCall(tc) {
+  return {
+    id: tc?.id || null,
+    name: tc?.function?.name || null,
+    arguments: typeof tc?.function?.arguments === 'string' ? tc.function.arguments : '',
+  };
+}
+
+// Kanonischer, kopierbarer Schnappschuss der gesendeten Nachrichten — ohne die
+// internen Mutationen von apiMessages spaeter zu spiegeln.
+function snapshotMessages(apiMessages) {
+  return apiMessages.map((m) => {
+    const row = {
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : m.content == null ? '' : String(m.content),
+    };
+    if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
+      row.tool_calls = m.tool_calls.map(summarizeToolCall);
+    }
+    if (m.tool_call_id) row.tool_call_id = m.tool_call_id;
+    return row;
+  });
+}
+
+// Geparste Modell-Antwort (Text + Tool-Aufrufe) fuer die lesbare Anzeige.
+function parseResponseMessage(message) {
+  if (!message) return null;
+  return {
+    text: typeof message.content === 'string' ? message.content : '',
+    toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls.map(summarizeToolCall) : [],
+  };
+}
+
 function resolveToolRoundLimit(uiPrefs, mainDefault) {
   const MIN = 1;
   const MAX_CAP = 500;
@@ -120,6 +155,68 @@ function registerChatHandlers({
 }) {
   ipcMain.on(REQ.CHAT_ABORT, (event) => {
     abortActiveChat(event.sender.id);
+  });
+
+  // Isolierter Einmal-Aufruf: erklaert z. B. einen RAW-Protokoll-Durchlauf.
+  // Bewusst getrennt vom normalen Chat — keine Tools, kein Workspace-/System-
+  // Prompt, KEINE rawExchanges-Aufzeichnung und keine Abbruch-Registry, damit
+  // der Aufruf weder im RAW-Protokoll auftaucht noch einen laufenden Chat stoert.
+  ipcMain.handle(REQ.CHAT_EXPLAIN, async (_event, payload) => {
+    const messages = payload?.messages;
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return { error: 'Keine Nachrichten übergeben.', code: 'INVALID' };
+    }
+
+    const config = await storage.readLLMConfig();
+    const chatTarget = storage.resolveChatModelTarget(config);
+    const activeId = chatTarget.providerId;
+    const provider = providers.getProvider(activeId);
+    if (!provider) {
+      return { error: `Unbekannter Provider: ${activeId}.`, code: 'INVALID' };
+    }
+    const providerConfig = await storage.getEffectiveProviderConfig(activeId);
+    const model = chatTarget.model || providerConfig?.model || provider.defaultModel;
+    const effectiveConfig =
+      chatTarget.reasoningEffort && activeId === 'openai'
+        ? { ...providerConfig, reasoningEffort: chatTarget.reasoningEffort }
+        : providerConfig;
+
+    if (provider.fields?.apiKey && !providerConfig?.apiKey) {
+      return { error: `Kein API-Key für ${provider.name} hinterlegt.`, code: 'NO_API_KEY' };
+    }
+    if (provider.fields?.baseUrl && !providerConfig?.baseUrl) {
+      return { error: `Keine Server-URL für ${provider.name} hinterlegt.`, code: 'NO_BASE_URL' };
+    }
+
+    const apiMessages = messages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role, content: m.content ?? '' }));
+    if (apiMessages.length === 0) {
+      return { error: 'Keine gültigen Nachrichten.', code: 'INVALID' };
+    }
+
+    const noopCallbacks = {
+      reset() {},
+      onMarkGenerating() {},
+      onTextDelta() {},
+      onReasoningDelta() {},
+    };
+    const controller = new AbortController();
+    try {
+      const streamed = await provider.streamChatRound({
+        config: effectiveConfig,
+        model,
+        messages: apiMessages,
+        tools: undefined,
+        callbacks: noopCallbacks,
+        abortSignal: controller.signal,
+        // kein recorder → keine RAW-Aufzeichnung
+      });
+      if (streamed.error) return { error: streamed.error, code: streamed.code || 'API' };
+      return { content: streamed.message?.content ?? '' };
+    } catch (err) {
+      return { error: describeFetchError(err, 'dem Provider'), code: 'NETWORK' };
+    }
   });
 
   ipcMain.handle(REQ.CHAT_SEND, async (event, payload) => {
@@ -230,6 +327,9 @@ function registerChatHandlers({
         truncateStaleToolOutputs(apiMessages, historyCharLimit);
 
         const recorder = createRoundRecorder();
+        // Snapshot der exakt jetzt gesendeten Konversation (lesbare, kanonische
+        // Sicht — unabhaengig vom provider-spezifischen Roh-Body).
+        const sentMessages = snapshotMessages(apiMessages);
         const streamed = await provider.streamChatRound({
           config: effectiveConfig,
           model,
@@ -250,6 +350,8 @@ function registerChatHandlers({
             cancelled: !!streamed.cancelled,
             error: streamed.error || null,
             usage: streamed.usage || null,
+            messages: sentMessages,
+            response: parseResponseMessage(streamed.message),
           })
         );
 

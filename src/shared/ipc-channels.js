@@ -40,6 +40,12 @@ const REQUEST_CHANNELS = Object.freeze({
   CHAT_SEND: 'chat:send',
   /** Renderer → Main (ipcRenderer.send), bricht laufenden CHAT_SEND ab. */
   CHAT_ABORT: 'chat:abort',
+  /**
+   * Isolierter Einmal-Aufruf ans LLM (z. B. „Ablauf erklären“ im RAW-Protokoll):
+   * ohne Tools, Workspace, RAW-Aufzeichnung oder Abbruch-Registry — beruehrt den
+   * normalen Chat-Flow nicht.
+   */
+  CHAT_EXPLAIN: 'chat:explain',
 
   WHISPER_TRANSCRIBE: 'whisper:transcribe',
 });

@@ -94,7 +94,7 @@ const voice = initWhisperRecorder({
   onInputChanged: syncChatInputHeight,
 });
 
-const rawLogModal = initRawLogModal({ appStore });
+const rawLogModal = initRawLogModal({ api, appStore });
 
 const chatStream = initChatStream({
   api,

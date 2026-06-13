@@ -598,10 +598,15 @@ export function initChatStream({
 
     if (sessionAtSend !== appStore.chatSessionId) return;
 
-    // Rohe LLM-Runden ins Sitzungsprotokoll uebernehmen — auch bei Fehler oder
-    // Abbruch, denn gerade dann ist der RAW-Blick am wertvollsten.
+    // LLM-Runden gruppiert pro User-Anfrage ins Sitzungsprotokoll uebernehmen —
+    // auch bei Fehler/Abbruch, denn gerade dann ist der Blick am wertvollsten.
     if (Array.isArray(result?.rawExchanges) && result.rawExchanges.length) {
-      appStore.rawLlmLog.push(...result.rawExchanges);
+      appStore.rawLlmLog.push({
+        index: appStore.rawLlmLog.length + 1,
+        userText: text,
+        ts: result.rawExchanges[0]?.ts || Date.now(),
+        exchanges: result.rawExchanges,
+      });
       notifyRawLogChanged();
     }
 

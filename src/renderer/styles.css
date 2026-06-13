@@ -2871,66 +2871,302 @@ select.modal-input {
 .raw-log-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.raw-log-entry {
+.raw-log-summary-clean {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.raw-log-summary-clean::-webkit-details-marker {
+  display: none;
+}
+
+/* — Gruppe pro User-Anfrage — */
+.raw-log-turn {
   border: 1px solid var(--ds-grey-divider, var(--border));
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--bg-primary);
 }
 
-.raw-log-entry--error {
-  border-color: var(--ds-red, #d33);
-}
-
-.raw-log-entry-summary {
+.raw-log-turn-summary {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 11px 14px;
   cursor: pointer;
   list-style: none;
   user-select: none;
+  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.06));
 }
 
-.raw-log-entry-summary::-webkit-details-marker {
+.raw-log-turn-summary::-webkit-details-marker {
   display: none;
 }
 
-.raw-log-entry-summary:hover {
+.raw-log-turn-summary:hover {
   background: var(--bg-hover);
 }
 
-.raw-log-entry-idx {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-muted-strong);
-  flex-shrink: 0;
-}
-
-.raw-log-entry-main {
-  font-family: var(--font-mono);
+.raw-log-turn-idx {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   flex-shrink: 0;
 }
 
-.raw-log-entry-meta {
-  margin-left: auto;
+.raw-log-turn-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.raw-log-turn-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-text, #fff);
+  background: var(--accent, var(--ds-blue, #2563eb));
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+
+.raw-log-turn-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--ds-grey-divider, var(--border));
+}
+
+.raw-log-explain-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--ds-grey-divider, var(--border));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--ds-motion-fast),
+    color var(--ds-motion-fast),
+    border-color var(--ds-motion-fast);
+}
+
+.raw-log-explain-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent, var(--ds-blue, #2563eb));
+}
+
+.raw-log-explain-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.raw-log-explain {
+  margin: 0 14px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-grey-divider, var(--border));
+  border-left: 3px solid var(--accent, var(--ds-blue, #2563eb));
+  border-radius: 6px;
+  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.06));
+  font-size: var(--ds-font-size-sm);
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.raw-log-explain.hidden {
+  display: none;
+}
+
+.raw-log-explain--loading {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.raw-log-explain--error {
+  border-left-color: var(--ds-red, #d33);
+  color: var(--ds-red, #d33);
+}
+
+.raw-log-explain > :first-child {
+  margin-top: 0;
+}
+
+.raw-log-explain > :last-child {
+  margin-bottom: 0;
+}
+
+.raw-log-rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--ds-grey-divider, var(--border));
+  border-top: 1px solid var(--ds-grey-divider, var(--border));
+}
+
+/* — Einzelne Runde (LLM-Aufruf) — */
+.raw-log-round {
+  background: var(--bg-primary);
+}
+
+.raw-log-round-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.raw-log-round-summary::-webkit-details-marker {
+  display: none;
+}
+
+.raw-log-round-summary:hover {
+  background: var(--bg-hover);
+}
+
+.raw-log-round-tag {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted-strong);
+  flex-shrink: 0;
+}
+
+.raw-log-round-mid {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.raw-log-round--error .raw-log-round-mid {
+  color: var(--ds-red, #d33);
+}
+
+.raw-log-round-meta {
+  flex-shrink: 0;
   font-size: 11px;
   color: var(--text-muted);
   text-align: right;
+  font-family: var(--font-mono);
 }
 
-.raw-log-entry-body {
-  padding: 4px 12px 12px;
+.raw-log-round-body {
+  padding: 2px 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  border-top: 1px solid var(--ds-grey-divider, var(--border));
+  gap: 8px;
+}
+
+/* — Gesendete Nachrichten — */
+.raw-log-msgs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.raw-log-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--ds-grey-divider, var(--border));
+}
+
+.raw-log-msg--user {
+  border-left-color: var(--accent, var(--ds-blue, #2563eb));
+}
+
+.raw-log-msg--assistant {
+  border-left-color: var(--ds-green, #2a9d5c);
+}
+
+.raw-log-msg--tool {
+  border-left-color: var(--ds-amber, #c98a00);
+}
+
+.raw-log-role {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted-strong);
+}
+
+.raw-log-toolcall {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.raw-log-toolcall--out {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.raw-log-toolcall-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.raw-log-muted {
+  margin: 0;
+  font-size: var(--ds-font-size-sm);
+  color: var(--text-muted);
+}
+
+/* Eingeklappte Unterabschnitte (Gesendet / Rohdaten) */
+.raw-log-sub {
+  border-top: 1px dashed var(--ds-grey-divider, var(--border));
+  padding-top: 6px;
+}
+
+.raw-log-sub > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.raw-log-sub > summary::-webkit-details-marker {
+  display: none;
+}
+
+.raw-log-sub > summary:hover {
+  color: var(--text-primary);
+}
+
+.raw-log-pre--inline {
+  max-height: 220px;
 }
 
 .raw-log-error {
@@ -3004,4 +3240,163 @@ select.modal-input {
   margin: 0;
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* ── Sequenzdiagramm (interaktiver Anfrage-Ablauf) ────────────────────────── */
+
+.seq {
+  padding: 12px 14px 0;
+}
+
+.seq-svg {
+  display: block;
+  max-width: 100%;
+}
+
+.seq-lifeline {
+  stroke: var(--ds-grey-divider, var(--border));
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+/* Akteurs-Farbe als Custom-Property; Pfeile/Köpfe/Boxen erben sie. */
+.seq--user {
+  --seq-c: var(--text-muted-strong);
+}
+.seq--app {
+  --seq-c: var(--ds-blue, #2563eb);
+}
+.seq--model {
+  --seq-c: var(--ds-green, #2a9d5c);
+}
+.seq--tool {
+  --seq-c: var(--ds-amber, #c98a00);
+}
+.seq--error {
+  --seq-c: var(--ds-red, #d33);
+}
+
+.seq-actor {
+  fill: var(--bg-primary);
+  stroke: var(--seq-c, var(--border));
+  stroke-width: 1.3;
+}
+
+.seq-actor-label {
+  fill: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.seq-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.seq-row {
+  outline: none;
+}
+
+.seq-row:hover .seq-hit,
+.seq-row:focus-visible .seq-hit {
+  fill: var(--bg-hover);
+}
+
+.seq-row--active .seq-hit {
+  fill: color-mix(in srgb, var(--seq-c, var(--ds-blue)) 12%, transparent);
+}
+
+.seq-arrow {
+  stroke: var(--seq-c, currentColor);
+  stroke-width: 1.6;
+}
+
+.seq-arrowhead {
+  fill: var(--seq-c, currentColor);
+}
+
+.seq-row--active .seq-arrow {
+  stroke-width: 2.6;
+}
+
+.seq-label {
+  fill: var(--text-primary);
+  font-size: 11px;
+}
+
+.seq-row--active .seq-label {
+  font-weight: 700;
+}
+
+.seq-num {
+  fill: var(--text-muted);
+  font-size: 9px;
+  font-family: var(--font-mono);
+}
+
+.seq-detail {
+  margin: 8px 14px 12px;
+  border: 1px solid var(--ds-grey-divider, var(--border));
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.seq-detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.06));
+  border-bottom: 1px solid var(--ds-grey-divider, var(--border));
+}
+
+.seq-detail-route {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.seq-detail-label {
+  font-size: 11px;
+  color: var(--text-muted-strong);
+}
+
+.seq-detail-body {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 260px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* „Details je Runde“ — eingeklappter Container unter dem Diagramm. */
+.raw-log-rounds-wrap {
+  border-top: 1px solid var(--ds-grey-divider, var(--border));
+}
+
+.raw-log-rounds-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted-strong);
+}
+
+.raw-log-rounds-summary::-webkit-details-marker {
+  display: none;
+}
+
+.raw-log-rounds-summary:hover {
+  background: var(--bg-hover);
 }

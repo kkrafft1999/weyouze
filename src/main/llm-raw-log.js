@@ -117,6 +117,11 @@ function createRoundRecorder() {
         cancelled: !!meta.cancelled,
         error: meta.error ?? null,
         usage: meta.usage ?? null,
+        // Lesbare, provider-unabhaengige Sicht (vom chat-handler befuellt):
+        // die gesendete Konversation und die geparste Modell-Antwort.
+        messages: Array.isArray(meta.messages) ? meta.messages : [],
+        response: meta.response ?? null,
+        // Rohdaten (provider-spezifisch) — fuer den optionalen Roh-Blick.
         request,
         responseRaw,
       };
