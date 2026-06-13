@@ -49,6 +49,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener(channel, listener);
   },
   transcribeAudio: (audioBuffer) => ipcRenderer.invoke(REQ.WHISPER_TRANSCRIBE, audioBuffer),
+
+  // Self-Update (Notifier)
+  getAppVersion: () => ipcRenderer.invoke(REQ.UPDATE_GET_VERSION),
+  checkForUpdate: () => ipcRenderer.invoke(REQ.UPDATE_CHECK),
+  ignoreUpdateVersion: (version) => ipcRenderer.invoke(REQ.UPDATE_IGNORE_VERSION, version),
+  onUpdateAvailable: (callback) => {
+    const channel = PUSH.UPDATE_AVAILABLE;
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
   openExternal: (url) => {
     try {
       const u = new URL(url);

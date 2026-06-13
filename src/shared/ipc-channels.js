@@ -28,6 +28,10 @@ const REQUEST_CHANNELS = Object.freeze({
   SETTINGS_GET_UI_PREFS: 'settings:getUIPrefs',
   SETTINGS_SET_UI_PREFS: 'settings:setUIPrefs',
 
+  UPDATE_CHECK: 'update:check',
+  UPDATE_GET_VERSION: 'update:getVersion',
+  UPDATE_IGNORE_VERSION: 'update:ignoreVersion',
+
   CHAT_HISTORY_GET: 'chatHistory:get',
   CHAT_HISTORY_UPSERT: 'chatHistory:upsert',
   CHAT_HISTORY_DELETE: 'chatHistory:delete',
@@ -46,6 +50,7 @@ const PUSH_CHANNELS = Object.freeze({
   CHAT_DELTA: 'chat:delta',
   CHAT_TOOL_LINE: 'chat:tool-line',
   CHAT_PROGRESS: 'chat:progress',
+  UPDATE_AVAILABLE: 'update:available',
 });
 
 module.exports = {

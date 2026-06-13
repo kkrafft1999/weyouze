@@ -13,6 +13,7 @@ export function initSettingsModal(deps) {
     refreshLLMState,
     findProviderMeta,
     updateChatChrome,
+    onCheckUpdates,
     DEFAULT_MAX_TOOL_ROUNDS = 14,
   } = deps;
 
@@ -51,6 +52,8 @@ export function initSettingsModal(deps) {
   const modalEncryptionWarning = document.getElementById('modal-encryption-warning');
   const modalSaveError = document.getElementById('modal-save-error');
   const btnChatSettings = document.getElementById('btn-chat-settings');
+  const settingsVersionLabel = document.getElementById('settings-version-label');
+  const btnCheckUpdates = document.getElementById('btn-check-updates');
 
   function presetDetailRowForDraft(pr) {
     const meta = findProviderMeta(pr.providerId);
@@ -619,6 +622,22 @@ export function initSettingsModal(deps) {
   modalSettingsBackdrop.addEventListener('click', closeSettingsModal);
   btnSettingsClose.addEventListener('click', closeSettingsModal);
   btnSettingsFooterClose?.addEventListener('click', closeSettingsModal);
+
+  if (settingsVersionLabel && api.getAppVersion) {
+    api.getAppVersion()
+      .then((info) => {
+        if (info && typeof info.version === 'string') {
+          settingsVersionLabel.textContent = `Version ${info.version}`;
+        }
+      })
+      .catch(() => { /* Label bleibt auf "Version —" */ });
+  }
+
+  btnCheckUpdates?.addEventListener('click', () => {
+    // Modal schliessen, damit das Banner (Overlay unter der Titlebar) sichtbar ist.
+    closeSettingsModal();
+    if (typeof onCheckUpdates === 'function') onCheckUpdates();
+  });
 
   settingsNavTabs.forEach((tab) => {
     tab.addEventListener('click', () => {

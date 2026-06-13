@@ -18,12 +18,14 @@ const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('../shared/ipc-ch
 const { createStorageService } = require('./services/storage-service');
 const { createFsService } = require('./services/fs-service');
 const { createWhisperService } = require('./services/whisper-service');
+const { createUpdateService } = require('./services/update-service');
 const { registerDialogHandlers } = require('./ipc/dialog-handlers');
 const { registerFsHandlers } = require('./ipc/fs-handlers');
 const { registerWhisperHandlers } = require('./ipc/whisper-handlers');
 const { registerSettingsHandlers } = require('./ipc/settings-handlers');
 const { registerChatHistoryHandlers } = require('./ipc/chat-history-handlers');
 const { registerChatHandlers } = require('./ipc/chat-handlers');
+const { registerUpdateHandlers } = require('./ipc/update-handlers');
 const workspaceState = require('./workspace-state');
 const { LIMITS } = require('../shared/limits');
 
@@ -118,6 +120,8 @@ const whisperService = createWhisperService({
   },
 });
 
+const updateService = createUpdateService({ app, storage });
+
 registerDialogHandlers({ ipcMain, dialog, getMainWindow, REQ });
 registerFsHandlers({
   ipcMain,
@@ -136,6 +140,7 @@ registerSettingsHandlers({
   setActiveWorkspaceRoot: workspaceState.setActiveWorkspaceRoot,
 });
 registerChatHistoryHandlers({ ipcMain, storage, REQ });
+registerUpdateHandlers({ ipcMain, updateService, REQ });
 registerChatHandlers({
   ipcMain,
   storage,
@@ -148,6 +153,19 @@ registerChatHandlers({
   REQ,
   PUSH,
 });
+
+// Fragt den Update-Service und schickt das Ergebnis an den Renderer. silent=true
+// (Auto-Check beim Start) respektiert eine zuvor uebersprungene Version und
+// meldet sich nur bei einem echten Treffer; bei silent=false (manueller Check
+// ueber das Menue) kommt das Ergebnis immer, damit der Renderer auch
+// "Du bist aktuell" oder einen Fehler anzeigen kann.
+async function runUpdateCheck({ silent }) {
+  const result = await updateService.checkForUpdate({ respectIgnored: silent });
+  const win = getMainWindow();
+  if (!win || win.isDestroyed()) return;
+  if (silent && !result.updateAvailable) return;
+  win.webContents.send(PUSH.UPDATE_AVAILABLE, { ...result, manual: !silent });
+}
 
 function buildApplicationMenu() {
   // Auf macOS muss das ERSTE Submenu den App-Namen als label tragen — das ist
@@ -214,6 +232,11 @@ function buildApplicationMenu() {
     role: 'help',
     submenu: [
       {
+        label: 'Nach Updates suchen…',
+        click: () => { void runUpdateCheck({ silent: false }); },
+      },
+      { type: 'separator' },
+      {
         label: 'Projekt auf GitHub',
         click: () => shell.openExternal('https://github.com/kkrafft1999/weyouze'),
       },
@@ -242,6 +265,9 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+
+  // Verzoegerter Auto-Check, damit der Start nicht auf das Netzwerk wartet.
+  setTimeout(() => { void runUpdateCheck({ silent: true }); }, 4000);
 
   app.on('activate', () => {
     if (!getMainWindow()) {

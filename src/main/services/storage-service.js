@@ -343,6 +343,9 @@ function createStorageService({
       const sidebarWidth = clampSidebarWidth(data.sidebarWidth);
       const chatPanelWidth = clampChatPanelWidth(data.chatPanelWidth);
       const historyCharLimit = clampHistoryCharLimit(data.historyCharLimit);
+      const ignoredUpdateVersion = typeof data.ignoredUpdateVersion === 'string'
+        ? data.ignoredUpdateVersion
+        : undefined;
       return {
         contentPaneVisible: data.contentPaneVisible !== false,
         baseSystemPrompt,
@@ -351,6 +354,7 @@ function createStorageService({
         ...(typeof sidebarWidth === 'number' ? { sidebarWidth } : {}),
         ...(typeof chatPanelWidth === 'number' ? { chatPanelWidth } : {}),
         ...(typeof historyCharLimit === 'number' ? { historyCharLimit } : {}),
+        ...(typeof ignoredUpdateVersion === 'string' ? { ignoredUpdateVersion } : {}),
       };
     } catch {
       return { contentPaneVisible: true, baseSystemPrompt: '', appLocale: 'de' };

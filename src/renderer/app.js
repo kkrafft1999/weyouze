@@ -7,6 +7,7 @@ import { initChatModelPicker } from './components/ChatModelPicker.js';
 import { initChatStream } from './components/ChatStream.js';
 import { initChatHistoryDrawer } from './components/ChatHistoryDrawer.js';
 import { initSettingsModal } from './components/SettingsModal.js';
+import { initUpdateBanner } from './components/UpdateBanner.js';
 
 const api = window.electronAPI;
 const DEFAULT_MAX_TOOL_ROUNDS = 14;
@@ -117,6 +118,8 @@ const chatHistory = initChatHistoryDrawer({
   },
 });
 
+const updateBanner = initUpdateBanner({ api });
+
 const settingsModal = initSettingsModal({
   api,
   appStore,
@@ -125,6 +128,7 @@ const settingsModal = initSettingsModal({
   refreshLLMState: () => modelPicker.refreshLLMState(),
   findProviderMeta: (id) => modelPicker.findProviderMeta(id),
   updateChatChrome: () => modelPicker.updateChatChrome(),
+  onCheckUpdates: () => updateBanner.checkNow(),
   DEFAULT_MAX_TOOL_ROUNDS,
 });
 

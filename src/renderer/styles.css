@@ -1830,9 +1830,38 @@ select.modal-input {
   background: var(--ds-grey-bg);
 }
 
+.settings-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .settings-dialog__footer .modal-actions {
   margin-top: 0;
   justify-content: flex-end;
+}
+
+.settings-version {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-version-link {
+  border: none;
+  background: transparent;
+  color: var(--accent-text);
+  font-size: 12px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.settings-version-link:hover {
+  color: var(--accent-hover);
 }
 
 .settings-dialog__header {
@@ -2726,4 +2755,60 @@ select.modal-input {
     background-image: none;
     -webkit-text-fill-color: currentColor;
   }
+}
+
+/* Update-Notifier-Banner: liegt als Overlay direkt unter der Titlebar, damit
+   die Hoehenberechnung von #app (100% - 44px) unberuehrt bleibt. */
+.update-banner {
+  position: fixed;
+  top: 44px;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--accent);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.update-banner.hidden {
+  display: none;
+}
+
+.update-banner--info {
+  border-bottom-color: var(--border);
+}
+
+.update-banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.update-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.update-banner-close {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.update-banner-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
