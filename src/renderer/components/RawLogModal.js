@@ -144,8 +144,9 @@ function buildExplanationPrompt(turn) {
   return lines.join('\n');
 }
 
-// Lebenslinien des Sequenzdiagramms.
-const SEQ_ACTORS = { user: 'Nutzer', app: 'Anwendung', model: 'Modell', tool: 'Tool' };
+// Lebenslinien des Sequenzdiagramms (Nutzer wird bewusst nicht dargestellt —
+// es geht um das Hin und Her zwischen Anwendung, Modell und Tools).
+const SEQ_ACTORS = { app: 'Anwendung', model: 'Modell', tool: 'Tool' };
 
 // Sucht das Ergebnis eines Tool-Aufrufs (per call_id) in einer der Folge-Runden,
 // in der die Anwendung es ans Modell nachreicht.
@@ -158,6 +159,44 @@ function findToolResult(exchanges, callId, fromIndex) {
   return null;
 }
 
+// Beschreibt den vollständigen Verlauf, der in einer Runde ans Modell geht.
+// Da die LLM-API zustandslos ist, sendet die Anwendung JEDES Mal alles erneut:
+// System, Nutzer, alle bisherigen Modell-Antworten (inkl. Tool-Aufruf-JSON) und
+// alle Tool-Ergebnisse. Neu hinzugekommene Nachrichten werden mit ➕ markiert.
+function describeRequest(messages, prevCount) {
+  const all = Array.isArray(messages) ? messages : [];
+  const counts = { system: 0, user: 0, assistant: 0, tool: 0 };
+  for (const m of all) if (counts[m.role] != null) counts[m.role] += 1;
+  const parts = [];
+  if (counts.system) parts.push(`${counts.system}× System`);
+  if (counts.user) parts.push(`${counts.user}× Nutzer`);
+  if (counts.assistant) parts.push(`${counts.assistant}× Modell-Antwort`);
+  if (counts.tool) parts.push(`${counts.tool}× Tool-Ergebnis`);
+  const header =
+    `Gesendet wird der VOLLSTÄNDIGE bisherige Verlauf — ${all.length} ` +
+    `${all.length === 1 ? 'Nachricht' : 'Nachrichten'} (${parts.join(', ')}). ` +
+    'Die LLM-API ist zustandslos, daher wird jedes Mal alles erneut übergeben ' +
+    '(➕ = neu in dieser Runde):';
+  const transcript = all
+    .map((m, idx) => {
+      const marker = idx >= prevCount ? '➕' : '  ';
+      const role = ROLE_LABELS[m.role] || m.role || '?';
+      const bits = [];
+      const content = String(m.content || '').replace(/\s+/g, ' ').trim();
+      if (content) bits.push(truncate(content, 200));
+      if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
+        bits.push(
+          m.tool_calls
+            .map((tc) => `liefert JSON für Tool-Aufruf ${tc.name || '?'}(${truncate(compactArgs(tc.arguments), 120)})`)
+            .join('; ')
+        );
+      }
+      return `${marker} [${role}] ${bits.join(' · ') || '(leer)'}`;
+    })
+    .join('\n');
+  return `${header}\n\n${transcript}`;
+}
+
 // Wandelt eine Anfrage (Turn) in eine chronologische Liste von Nachrichten
 // zwischen den Lebenslinien um — die Datengrundlage des Sequenzdiagramms.
 function buildTurnSteps(turn) {
@@ -165,44 +204,18 @@ function buildTurnSteps(turn) {
   const steps = [];
   const usesTool = exchanges.some((ex) => (ex.response?.toolCalls || []).length);
 
-  steps.push({
-    from: 'user',
-    to: 'app',
-    kind: 'prompt',
-    label: 'Nutzereingabe',
-    detail: (turn.userText || '').trim() || '(leer)',
-  });
-
   let prevSent = 0;
   exchanges.forEach((ex, i) => {
     const sent = Array.isArray(ex.messages) ? ex.messages : [];
-    const newMsgs = (prevSent > 0 ? sent.slice(prevSent) : sent).filter(
-      (m) => m && m.role !== 'assistant'
-    );
-    prevSent = sent.length;
-
-    let reqDetail;
-    let reqCode = false;
-    if (i === 0) {
-      const u = newMsgs.find((m) => m.role === 'user');
-      reqDetail = u ? String(u.content || '') : 'Erste Anfrage an das Modell.';
-    } else {
-      const toolMsgs = newMsgs.filter((m) => m.role === 'tool');
-      if (toolMsgs.length) {
-        reqDetail = toolMsgs.map((m) => String(m.content || '')).join('\n\n');
-        reqCode = true;
-      } else {
-        reqDetail = 'Bisheriger Gesprächsverlauf erneut gesendet.';
-      }
-    }
     steps.push({
       from: 'app',
       to: 'model',
       kind: 'request',
-      label: i === 0 ? `Runde ${i + 1}: Anfrage` : `Runde ${i + 1}: Tool-Ergebnis nachgereicht`,
-      detail: reqDetail,
-      code: reqCode,
+      label: `Runde ${i + 1}: kompletter Verlauf`,
+      detail: describeRequest(sent, prevSent),
+      code: true,
     });
+    prevSent = sent.length;
 
     if (ex.error) {
       steps.push({ from: 'model', to: 'app', kind: 'error', label: 'Fehler', detail: String(ex.error) });
@@ -245,19 +258,7 @@ function buildTurnSteps(turn) {
     });
   });
 
-  let lastText = '';
-  for (let i = exchanges.length - 1; i >= 0; i -= 1) {
-    const t = (exchanges[i].response?.text || '').trim();
-    if (t) {
-      lastText = t;
-      break;
-    }
-  }
-  if (lastText) {
-    steps.push({ from: 'app', to: 'user', kind: 'final', label: 'Antwort an Nutzer', detail: lastText });
-  }
-
-  const actors = usesTool ? ['user', 'app', 'model', 'tool'] : ['user', 'app', 'model'];
+  const actors = usesTool ? ['app', 'model', 'tool'] : ['app', 'model'];
   return { steps, actors };
 }
 
