@@ -88,7 +88,7 @@ function translateMessagesToResponsesInput(messages) {
   return out;
 }
 
-async function streamChatRound({ config, model, messages, tools, callbacks, abortSignal }) {
+async function streamChatRound({ config, model, messages, tools, callbacks, abortSignal, recorder }) {
   const apiKey = config?.apiKey;
   if (!apiKey) return { error: 'Kein API-Key hinterlegt.', code: 'NO_API_KEY' };
 
@@ -107,14 +107,17 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   }
 
   const base = baseUrlOf(config);
+  const url = `${base}/responses`;
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+  };
+  recorder?.request({ url, method: 'POST', headers, body });
   let res;
   try {
-    res = await fetch(`${base}/responses`, {
+    res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify(body),
       signal: abortSignal,
     });
@@ -137,7 +140,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   let usage = null;
 
   try {
-    for await (const evt of iterSseEvents(reader, abortSignal)) {
+    for await (const evt of iterSseEvents(reader, abortSignal, recorder?.onRawLine)) {
       abortIfRequested(abortSignal);
       const ev = evt.event || '';
       const data = evt.data;

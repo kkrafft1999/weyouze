@@ -22,6 +22,9 @@ export const appStore = {
   chatSendSeq: 0,
   chatAbortedSendSeq: 0,
   chatTokenUsage: { prompt: 0, completion: 0, total: 0 },
+  // Rohes LLM-Protokoll der aktuellen Sitzung (nicht persistiert). Jeder
+  // Eintrag ist eine LLM-Runde: { providerId, model, request, responseRaw, … }.
+  rawLlmLog: [],
   currentChatId: '',
   currentChatWorkspace: null,
   lastFocusBeforeModal: null,

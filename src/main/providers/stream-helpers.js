@@ -1,4 +1,6 @@
-async function* iterStreamLines(reader, abortSignal) {
+// onRawLine (optional) erhaelt jede rohe Stream-Zeile, bevor sie geyieldet
+// wird — genutzt vom RAW-LLM-Protokoll, das hier alle Provider zentral abgreift.
+async function* iterStreamLines(reader, abortSignal, onRawLine) {
   const decoder = new TextDecoder();
   let carry = '';
   while (true) {
@@ -16,18 +18,24 @@ async function* iterStreamLines(reader, abortSignal) {
     const lines = carry.split('\n');
     carry = lines.pop() ?? '';
     for (const raw of lines) {
-      yield raw.replace(/\r$/, '');
+      const line = raw.replace(/\r$/, '');
+      if (onRawLine) onRawLine(line);
+      yield line;
     }
   }
   // Flush: ein Multi-Byte-UTF-8-Zeichen kann genau an der Chunk-Grenze enden.
   carry += decoder.decode();
-  if (carry) yield carry.replace(/\r$/, '');
+  if (carry) {
+    const line = carry.replace(/\r$/, '');
+    if (onRawLine) onRawLine(line);
+    yield line;
+  }
 }
 
-async function* iterSseEvents(reader, abortSignal) {
+async function* iterSseEvents(reader, abortSignal, onRawLine) {
   let currentEvent = null;
   let dataLines = [];
-  for await (const line of iterStreamLines(reader, abortSignal)) {
+  for await (const line of iterStreamLines(reader, abortSignal, onRawLine)) {
     if (line === '') {
       if (dataLines.length > 0) {
         yield { event: currentEvent, data: dataLines.join('\n') };

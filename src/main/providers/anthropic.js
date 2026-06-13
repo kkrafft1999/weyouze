@@ -132,7 +132,7 @@ function translateMessagesToAnthropic(messages) {
   return { system: system || undefined, messages: out };
 }
 
-async function streamChatRound({ config, model, messages, tools, callbacks, abortSignal }) {
+async function streamChatRound({ config, model, messages, tools, callbacks, abortSignal, recorder }) {
   const apiKey = config?.apiKey;
   if (!apiKey) return { error: 'Kein API-Key hinterlegt.', code: 'NO_API_KEY' };
 
@@ -147,11 +147,15 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   if (system) body.system = system;
   if (tooling) body.tools = tooling;
 
+  const url = `${API_BASE}/messages`;
+  const headers = authHeaders(apiKey);
+  recorder?.request({ url, method: 'POST', headers, body });
+
   let res;
   try {
-    res = await fetch(`${API_BASE}/messages`, {
+    res = await fetch(url, {
       method: 'POST',
-      headers: authHeaders(apiKey),
+      headers,
       body: JSON.stringify(body),
       signal: abortSignal,
     });
@@ -172,7 +176,7 @@ async function streamChatRound({ config, model, messages, tools, callbacks, abor
   let usage = null;
 
   try {
-    for await (const evt of iterSseEvents(reader, abortSignal)) {
+    for await (const evt of iterSseEvents(reader, abortSignal, recorder?.onRawLine)) {
       abortIfRequested(abortSignal);
       if (!evt.data) continue;
       let payload;

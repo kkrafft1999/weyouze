@@ -149,11 +149,21 @@ export function initChatStream({
   stopChatVoiceListening,
   activeProviderConfigured,
   syncLiveDot,
+  onRawLogChanged,
 }) {
   const chatMessagesEl = document.getElementById('chat-messages');
   const chatInput = document.getElementById('chat-input');
   const btnChatSend = document.getElementById('btn-chat-send');
   const chatTokenUsageEl = document.getElementById('chat-token-usage');
+
+  function notifyRawLogChanged() {
+    if (typeof onRawLogChanged === 'function') onRawLogChanged();
+  }
+
+  function resetRawLlmLog() {
+    appStore.rawLlmLog = [];
+    notifyRawLogChanged();
+  }
 
   function setChatTokenUsage(usage) {
     appStore.chatTokenUsage = normalizeChatTokenUsage(usage);
@@ -384,6 +394,7 @@ export function initChatStream({
     stopChatVoiceListening();
     await persistCurrentChat();
     appStore.chatSessionId += 1;
+    resetRawLlmLog();
 
     const hist = await api.getChatHistory(workspaceRoot);
     const sessions = Array.isArray(hist?.sessions) ? hist.sessions : [];
@@ -414,6 +425,7 @@ export function initChatStream({
     stopChatVoiceListening();
     await persistCurrentChat();
     appStore.chatSessionId += 1;
+    resetRawLlmLog();
     appStore.currentChatId = crypto.randomUUID();
     appStore.currentChatWorkspace = appStore.rootPath || null;
     appStore.chatMessages = [];
@@ -586,6 +598,13 @@ export function initChatStream({
 
     if (sessionAtSend !== appStore.chatSessionId) return;
 
+    // Rohe LLM-Runden ins Sitzungsprotokoll uebernehmen — auch bei Fehler oder
+    // Abbruch, denn gerade dann ist der RAW-Blick am wertvollsten.
+    if (Array.isArray(result?.rawExchanges) && result.rawExchanges.length) {
+      appStore.rawLlmLog.push(...result.rawExchanges);
+      notifyRawLogChanged();
+    }
+
     const abortedLocally = appStore.chatAbortedSendSeq === sendSeq;
     const last = appStore.chatMessages[appStore.chatMessages.length - 1];
     let skipRender = false;
@@ -673,5 +692,6 @@ export function initChatStream({
     syncChatSendButton,
     resetChatTokenUsage,
     setChatTokenUsage,
+    resetRawLlmLog,
   };
 }

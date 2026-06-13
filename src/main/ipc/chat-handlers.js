@@ -1,4 +1,5 @@
 const { isAbortError, createChatAbortError, mergeUsage, describeFetchError } = require('../providers/stream-helpers');
+const { createRoundRecorder } = require('../llm-raw-log');
 const { resolveDebugWaitMs } = require('../debug-wait');
 const {
   resolveHistoryCharLimit,
@@ -30,9 +31,9 @@ function abortActiveChat(webContentsId) {
   }
 }
 
-function returnCancelledChat(wc, PUSH, toolTrace, content = '', usage = null) {
+function returnCancelledChat(wc, PUSH, toolTrace, content = '', usage = null, rawExchanges = []) {
   emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-  return { cancelled: true, content, toolTrace, usage };
+  return { cancelled: true, content, toolTrace, usage, rawExchanges };
 }
 
 function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirectory, pathMod) {
@@ -127,6 +128,8 @@ function registerChatHandlers({
     const abortSignal = abortController.signal;
     setActiveChatAbort(wc.id, abortController);
     const toolTrace = [];
+    // Rohes Protokoll aller LLM-Runden dieses Sendevorgangs (RAW-LLM-Log).
+    const rawExchanges = [];
     let requestUsage = null;
 
     try {
@@ -219,13 +222,14 @@ function registerChatHandlers({
 
       for (let round = 0; round < toolRoundLimit; round += 1) {
         if (abortSignal.aborted) {
-          return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
+          return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage, rawExchanges);
         }
 
         emitChatProgress(wc, PUSH, { type: 'phase', phase: 'waiting' });
         callbacks.reset();
         truncateStaleToolOutputs(apiMessages, historyCharLimit);
 
+        const recorder = createRoundRecorder();
         const streamed = await provider.streamChatRound({
           config: effectiveConfig,
           model,
@@ -233,18 +237,32 @@ function registerChatHandlers({
           tools,
           callbacks,
           abortSignal,
+          recorder,
         });
+
+        rawExchanges.push(
+          recorder.toExchange({
+            providerId: activeId,
+            model,
+            round,
+            ts: Date.now(),
+            finishReason: streamed.finishReason,
+            cancelled: !!streamed.cancelled,
+            error: streamed.error || null,
+            usage: streamed.usage || null,
+          })
+        );
 
         requestUsage = mergeUsage(requestUsage, streamed.usage);
 
         if (streamed.cancelled) {
           const partial = streamed.message?.content ?? '';
-          return returnCancelledChat(wc, PUSH, toolTrace, partial, requestUsage);
+          return returnCancelledChat(wc, PUSH, toolTrace, partial, requestUsage, rawExchanges);
         }
 
         if (streamed.error) {
           emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-          return { error: streamed.error, code: streamed.code || 'API', usage: requestUsage };
+          return { error: streamed.error, code: streamed.code || 'API', usage: requestUsage, rawExchanges };
         }
 
         const assistantMsg = streamed.message;
@@ -259,7 +277,7 @@ function registerChatHandlers({
           if (!workspaceRoot) {
             for (const tc of toolCalls) {
               if (abortSignal.aborted) {
-                return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
+                return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage, rawExchanges);
               }
               const fn = tc.function;
               const toolName = fn?.name || 'tool';
@@ -285,7 +303,7 @@ function registerChatHandlers({
           }
           for (const tc of toolCalls) {
             if (abortSignal.aborted) {
-              return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
+              return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage, rawExchanges);
             }
             const fn = tc.function;
             const toolName = fn?.name;
@@ -303,7 +321,7 @@ function registerChatHandlers({
               out = await fsService.runWorkspaceTool(toolName, args, workspaceRoot, { abortSignal });
             } catch (err) {
               if (isAbortError(err)) {
-                return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
+                return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage, rawExchanges);
               }
               throw err;
             }
@@ -322,6 +340,7 @@ function registerChatHandlers({
           content: assistantMsg.content ?? '',
           toolTrace,
           usage: requestUsage,
+          rawExchanges,
         };
       }
       emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
@@ -331,13 +350,14 @@ function registerChatHandlers({
           'Erhöhe das Limit unter Einstellungen › Allgemein oder formuliere die Frage enger.',
         code: 'TOOL_LIMIT',
         usage: requestUsage,
+        rawExchanges,
       };
     } catch (err) {
       if (isAbortError(err)) {
-        return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage);
+        return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage, rawExchanges);
       }
       emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-      return { error: describeFetchError(err, 'dem Provider'), code: 'NETWORK' };
+      return { error: describeFetchError(err, 'dem Provider'), code: 'NETWORK', rawExchanges };
     } finally {
       clearActiveChatAbort(wc.id, abortController);
     }

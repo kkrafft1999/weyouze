@@ -751,6 +751,7 @@ summary:focus-visible,
   gap: var(--ds-icon-btn-row-gap);
 }
 
+#btn-raw-log,
 #btn-chat-history,
 #btn-chat-new,
 #btn-chat-settings {
@@ -773,6 +774,7 @@ summary:focus-visible,
     box-shadow 0.1s ease;
 }
 
+#btn-raw-log:hover,
 #btn-chat-history:hover,
 #btn-chat-new:hover,
 #btn-chat-settings:hover {
@@ -2811,4 +2813,195 @@ select.modal-input {
 .update-banner-close:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+/* ── RAW-LLM-Protokoll ──────────────────────────────────────────────────────
+ * Header-Button mit Zaehler-Badge + Lese-Dialog mit rohen Requests/Antworten.
+ * Der Dialog teilt sich Chrome (Header/Footer/Backdrop) mit dem Settings-Modal
+ * ueber die settings-dialog__*-Klassen; hier nur das Eigene. */
+
+.chat-action-with-badge {
+  position: relative;
+}
+
+.chat-action-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--accent, var(--ds-blue, #2563eb));
+  color: var(--accent-text, #fff);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.chat-action-badge.hidden {
+  display: none;
+}
+
+.modal-raw-log-root .modal-dialog.raw-log-dialog {
+  max-width: 860px;
+  width: 100%;
+  height: min(90vh, 820px);
+  max-height: min(90vh, 820px);
+}
+
+.raw-log-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 20px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.raw-log-empty {
+  margin: 24px 4px;
+  color: var(--text-muted);
+  font-size: var(--ds-font-size-sm);
+}
+
+.raw-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.raw-log-entry {
+  border: 1px solid var(--ds-grey-divider, var(--border));
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.raw-log-entry--error {
+  border-color: var(--ds-red, #d33);
+}
+
+.raw-log-entry-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.raw-log-entry-summary::-webkit-details-marker {
+  display: none;
+}
+
+.raw-log-entry-summary:hover {
+  background: var(--bg-hover);
+}
+
+.raw-log-entry-idx {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted-strong);
+  flex-shrink: 0;
+}
+
+.raw-log-entry-main {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.raw-log-entry-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.raw-log-entry-body {
+  padding: 4px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--ds-grey-divider, var(--border));
+}
+
+.raw-log-error {
+  margin: 8px 0 0;
+  color: var(--ds-red, #d33);
+  font-size: var(--ds-font-size-sm);
+}
+
+.raw-log-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.raw-log-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted-strong);
+}
+
+.raw-log-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--ds-grey-divider, var(--border));
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--ds-motion-fast),
+    color var(--ds-motion-fast),
+    border-color var(--ds-motion-fast);
+}
+
+.raw-log-copy:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.raw-log-copy--ok {
+  color: var(--accent-text, #fff);
+  background: var(--accent, var(--ds-blue, #2563eb));
+  border-color: transparent;
+}
+
+.raw-log-pre {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 340px;
+  overflow: auto;
+  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--ds-grey-divider, var(--border));
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.raw-log-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
 }
