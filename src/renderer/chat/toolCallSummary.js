@@ -18,8 +18,11 @@ function formatRelativePathForLabel(relativePath) {
   return truncateToolLabel(raw);
 }
 
-// Muss zur Clamp-Logik in src/main/debug-wait.js passen, damit das Label die
-// tatsächliche Wartezeit nennt.
+// Fallback: Normalerweise reicht der Main die bereits geclampte Wartezeit als
+// entry.waitMs mit (siehe summarizeToolEvent), sodass die Live-Anzeige auf dem
+// autoritativen Wert des Main basiert. Diese Rekonstruktion aus den Rohargs
+// greift nur, wenn summarizeToolCall ohne waitMs aufgerufen wird (z. B. in
+// Unit-Tests). Sie muss dann zur Clamp-Logik in src/main/debug-wait.js passen.
 function resolveDebugWaitMs(args) {
   let ms;
   if (Number.isFinite(args?.duration_seconds)) {
@@ -67,11 +70,16 @@ export function summarizeToolCall(toolName, args, phase = 'start') {
 
 /**
  * Formatiert ein Tool-Ereignis aus dem Main-Prozess ({ tool, args,
- * noWorkspace }) zur Anzeige-Zeile. Bereits formatierte Strings (persistierte
- * Alt-Sessions) gehen unverändert durch.
+ * noWorkspace, waitMs }) zur Anzeige-Zeile. Bereits formatierte Strings
+ * (persistierte Alt-Sessions) gehen unverändert durch.
  */
 export function summarizeToolEvent(entry, phase = 'start') {
   if (typeof entry === 'string') return entry;
-  const line = summarizeToolCall(entry?.tool, entry?.args, phase);
+  // Für debug_wait das vom Main mitgelieferte, bereits geclampte waitMs nutzen,
+  // statt es im Renderer erneut aus den Rohargs abzuleiten.
+  const line =
+    entry?.tool === 'debug_wait' && Number.isFinite(entry?.waitMs)
+      ? formatPauseDurationLabel(entry.waitMs, phase)
+      : summarizeToolCall(entry?.tool, entry?.args, phase);
   return entry?.noWorkspace ? `${line} · kein Ordner geöffnet` : line;
 }

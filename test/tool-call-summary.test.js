@@ -54,3 +54,17 @@ test('summarizeToolEvent formats raw main-process entries', async () => {
   // Persistierte Alt-Sessions enthalten bereits formatierte Strings.
   assert.equal(summarizeToolEvent('Datei x gelesen', 'done'), 'Datei x gelesen');
 });
+
+test('summarizeToolEvent uses main-supplied waitMs for debug_wait', async () => {
+  const { summarizeToolEvent } = await summaryModule;
+  // Der Main reicht die bereits geclampte Wartezeit mit; sie hat Vorrang vor
+  // einer Rekonstruktion aus den Rohargs.
+  assert.equal(
+    summarizeToolEvent({ tool: 'debug_wait', args: {}, waitMs: 1200 }, 'start'),
+    'Warte 1,2 Sekunden …'
+  );
+  assert.equal(
+    summarizeToolEvent({ tool: 'debug_wait', args: {}, waitMs: 1000 }, 'done'),
+    '1 Sekunde gewartet'
+  );
+});

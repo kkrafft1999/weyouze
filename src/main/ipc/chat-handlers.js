@@ -1,4 +1,5 @@
 const { isAbortError, createChatAbortError, mergeUsage, describeFetchError } = require('../providers/stream-helpers');
+const { resolveDebugWaitMs } = require('../debug-wait');
 const {
   resolveHistoryCharLimit,
   trimHistoryMessages,
@@ -48,6 +49,16 @@ function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirecto
       `Beziehe dich bei Fragen ohne expliziten Pfad auf diese Auswahl.`;
   }
   return prompt;
+}
+
+// Baut das Tool-Ereignis, das an den Renderer gepusht und in toolTrace
+// persistiert wird. Für debug_wait reicht der Main die bereits geclampte
+// Wartezeit (waitMs) mit, damit der Renderer das Label nicht aus den Rohargs
+// rekonstruieren (und dabei abdriften) muss.
+function buildToolEntry(toolName, args, extra) {
+  const entry = { tool: toolName, args, ...extra };
+  if (toolName === 'debug_wait') entry.waitMs = resolveDebugWaitMs(args);
+  return entry;
 }
 
 function resolveToolRoundLimit(uiPrefs, mainDefault) {
@@ -258,7 +269,7 @@ function registerChatHandlers({
               } catch {
                 args = {};
               }
-              const entry = { tool: toolName, args, noWorkspace: true };
+              const entry = buildToolEntry(toolName, args, { noWorkspace: true });
               toolTrace.push(entry);
               emitToolLine('start', entry);
               emitToolLine('done', entry);
@@ -284,7 +295,7 @@ function registerChatHandlers({
             } catch {
               args = {};
             }
-            const entry = { tool: toolName, args };
+            const entry = buildToolEntry(toolName, args);
             toolTrace.push(entry);
             emitToolLine('start', entry);
             let out;
