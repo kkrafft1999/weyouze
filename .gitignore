@@ -41,5 +41,8 @@ Thumbs.db
 !.cursor/rules/
 !.cursor/rules/**
 
-# Lokale Claude-Code-Konfiguration
-.claude/
+# Claude Code: geteilte Skills unter .claude/skills/ versionieren;
+# persoenliche Settings/Caches (settings*.json u. a.) lokal ignorieren
+.claude/*
+!.claude/skills/
+!.claude/skills/**
