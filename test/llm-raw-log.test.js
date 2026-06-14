@@ -4,6 +4,7 @@ const {
   createRoundRecorder,
   redactHeaders,
   redactUrl,
+  redactSecrets,
   serializeBody,
 } = require('../src/main/llm-raw-log');
 
@@ -37,6 +38,22 @@ test('serializeBody pretty-prints JSON and masks secret-ish fields', () => {
 test('serializeBody passes raw strings through unchanged', () => {
   assert.equal(serializeBody('already-a-string'), 'already-a-string');
   assert.equal(serializeBody(null), '');
+});
+
+test('redactSecrets masks known key formats in free-text, keeps the rest', () => {
+  assert.equal(redactSecrets('oops sk-ant-api03-LEAKED here'), 'oops ***redigiert*** here');
+  assert.equal(redactSecrets('token sk-LEAKEDLEAKEDLEAKED end'), 'token ***redigiert*** end');
+  assert.equal(redactSecrets('key AIzaLEAKEDLEAKEDLEAKED end'), 'key ***redigiert*** end');
+  assert.equal(redactSecrets('Authorization: Bearer abcdef0123456789'), 'Authorization: Bearer ***redigiert***');
+  assert.equal(redactSecrets('just normal text, no secrets'), 'just normal text, no secrets');
+});
+
+test('round recorder redacts secrets echoed back in the response stream', () => {
+  const rec = createRoundRecorder();
+  rec.onRawLine('data: {"error":"invalid key sk-ant-api03-SECRETSECRETSECRET"}');
+  const ex = rec.toExchange({});
+  assert.doesNotMatch(ex.responseRaw, /SECRETSECRETSECRET/);
+  assert.match(ex.responseRaw, /\*\*\*redigiert\*\*\*/);
 });
 
 test('round recorder captures request and accumulates raw response lines', () => {

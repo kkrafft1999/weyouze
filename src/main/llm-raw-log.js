@@ -25,6 +25,15 @@ const SECRET_QUERY_KEYS = new Set(['key', 'api_key', 'apikey', 'access_token', '
 // doch in den Body legt.
 const SECRET_BODY_KEYS = new Set(['apikey', 'api_key', 'key', 'authorization', 'access_token']);
 
+// Credential-Muster im Freitext der Stream-Antwort. Anders als Header/URL/Body
+// ist der Stream Provider-Freitext ohne feste Struktur — ein Fehler-Payload
+// kann den Request (inkl. Key) zurueckspiegeln. Strukturelle Redaction greift
+// hier nicht, daher Best-Effort ueber die verbreiteten Key-Formate.
+const SECRET_TEXT_PATTERNS = [
+  /\bsk-[A-Za-z0-9_-]{16,}/g, // OpenAI / Anthropic (sk-…, sk-ant-…)
+  /\bAIza[A-Za-z0-9_-]{16,}/g, // Google API-Key
+];
+
 // Obergrenze fuer die rohe Antwort pro Runde, damit lange Streams den
 // Renderer-Speicher nicht unbegrenzt fluten.
 const MAX_RESPONSE_CHARS = 2_000_000;
@@ -63,6 +72,16 @@ function redactBodyValue(value) {
   return value;
 }
 
+// Maskiert bekannte Credential-Formate in beliebigem Freitext (Stream-Antwort).
+function redactSecrets(text) {
+  if (typeof text !== 'string' || !text) return text;
+  let out = text;
+  for (const re of SECRET_TEXT_PATTERNS) out = out.replace(re, REDACTED);
+  // Bearer-Tokens: das Schema behalten, nur den Token-Teil maskieren.
+  out = out.replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]{12,}=*/gi, `$1${REDACTED}`);
+  return out;
+}
+
 // Liefert den Body als huebsch formatierten JSON-String (oder rohen String,
 // falls kein JSON-Objekt uebergeben wurde).
 function serializeBody(body) {
@@ -99,12 +118,13 @@ function createRoundRecorder() {
     onRawLine(line) {
       if (typeof line !== 'string') return;
       if (truncated) return;
-      if (responseRaw.length + line.length + 1 > MAX_RESPONSE_CHARS) {
+      const safe = redactSecrets(line);
+      if (responseRaw.length + safe.length + 1 > MAX_RESPONSE_CHARS) {
         responseRaw += '\n…(gekuerzt — Stream ueberschritt das Anzeigelimit)…';
         truncated = true;
         return;
       }
-      responseRaw += (responseRaw ? '\n' : '') + line;
+      responseRaw += (responseRaw ? '\n' : '') + safe;
     },
     /** Baut den fertigen Protokolleintrag inkl. uebergebener Metadaten. */
     toExchange(meta = {}) {
@@ -133,5 +153,6 @@ module.exports = {
   createRoundRecorder,
   redactHeaders,
   redactUrl,
+  redactSecrets,
   serializeBody,
 };

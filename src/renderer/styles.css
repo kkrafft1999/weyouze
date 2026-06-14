@@ -3009,6 +3009,93 @@ select.modal-input {
   margin-bottom: 0;
 }
 
+/* Gesendete Nachricht (Volltext-Drilldown einer Schicht). */
+.raw-log-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--ds-grey-divider, var(--border));
+}
+
+.raw-log-msg--user {
+  border-left-color: var(--accent, var(--ds-blue, #2563eb));
+}
+
+.raw-log-msg--assistant {
+  border-left-color: var(--ds-green, #2a9d5c);
+}
+
+.raw-log-msg--tool {
+  border-left-color: var(--ds-amber, #c98a00);
+}
+
+.raw-log-role {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted-strong);
+}
+
+.raw-log-toolcall {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.raw-log-pre--inline {
+  max-height: 220px;
+}
+
+.raw-log-pre {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 340px;
+  overflow: auto;
+  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--ds-grey-divider, var(--border));
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.raw-log-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Details je Runde (Drilldown: Volltext, Rohdaten, Stream). */
+.raw-log-rounds-wrap {
+  border-top: 1px solid var(--ds-grey-divider, var(--border));
+}
+
+.raw-log-rounds-summary {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.06));
+}
+
+.raw-log-rounds-summary::-webkit-details-marker {
+  display: none;
+}
+
+.raw-log-rounds-summary:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
 .raw-log-rounds {
   display: flex;
   flex-direction: column;
@@ -3017,7 +3104,6 @@ select.modal-input {
   border-top: 1px solid var(--ds-grey-divider, var(--border));
 }
 
-/* — Einzelne Runde (LLM-Aufruf) — */
 .raw-log-round {
   background: var(--bg-primary);
 }
@@ -3077,47 +3163,11 @@ select.modal-input {
   gap: 8px;
 }
 
-/* — Gesendete Nachrichten — */
 .raw-log-msgs {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-top: 6px;
-}
-
-.raw-log-msg {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-left: 10px;
-  border-left: 2px solid var(--ds-grey-divider, var(--border));
-}
-
-.raw-log-msg--user {
-  border-left-color: var(--accent, var(--ds-blue, #2563eb));
-}
-
-.raw-log-msg--assistant {
-  border-left-color: var(--ds-green, #2a9d5c);
-}
-
-.raw-log-msg--tool {
-  border-left-color: var(--ds-amber, #c98a00);
-}
-
-.raw-log-role {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted-strong);
-}
-
-.raw-log-toolcall {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-secondary);
-  word-break: break-word;
 }
 
 .raw-log-toolcall--out {
@@ -3139,7 +3189,6 @@ select.modal-input {
   color: var(--text-muted);
 }
 
-/* Eingeklappte Unterabschnitte (Gesendet / Rohdaten) */
 .raw-log-sub {
   border-top: 1px dashed var(--ds-grey-divider, var(--border));
   padding-top: 6px;
@@ -3163,10 +3212,6 @@ select.modal-input {
 
 .raw-log-sub > summary:hover {
   color: var(--text-primary);
-}
-
-.raw-log-pre--inline {
-  max-height: 220px;
 }
 
 .raw-log-error {
@@ -3220,183 +3265,462 @@ select.modal-input {
   border-color: transparent;
 }
 
-.raw-log-pre {
+/* ── Kontext-Schichtstapel (wachsender Verlauf je Anfrage) ────────────────── */
+
+.cstack {
+  padding: 10px 14px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Meta-/Steuerzeile */
+.cstack-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cstack-meta-stat {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.cstack-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.cstack-toggle input {
   margin: 0;
+  cursor: pointer;
+}
+
+/* Legende der Schicht-Farben */
+.cstack-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.cstack-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cstack-sw {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.cstack-sw--system { background: var(--text-muted); }
+.cstack-sw--tools { background: var(--ds-purple, #8b5cf6); }
+.cstack-sw--user { background: var(--accent, var(--ds-blue, #2563eb)); }
+.cstack-sw--model { background: var(--ds-green, #2a9d5c); }
+.cstack-sw--tool { background: var(--ds-amber, #c98a00); }
+.cstack-sw--new {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--accent, var(--ds-blue, #2563eb)),
+    var(--accent, var(--ds-blue, #2563eb)) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  border: 1px solid var(--accent, var(--ds-blue, #2563eb));
+}
+
+/* Runden-Block */
+.cstack-round {
+  border: 1px solid var(--ds-grey-divider, var(--border));
+  border-radius: 8px;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.cstack-round--error {
+  border-color: color-mix(in srgb, var(--ds-red, #d33) 55%, transparent);
+  background: color-mix(in srgb, var(--ds-red, #d33) 5%, var(--bg-primary));
+}
+
+.cstack-round-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.06));
+  border-bottom: 1px solid var(--ds-grey-divider, var(--border));
+}
+
+.cstack-round-head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.cstack-round-head .raw-log-copy {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.cstack-round-tag {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cstack-round-sent {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.cstack-round-cols {
+  display: flex;
+  gap: 14px;
   padding: 10px 12px;
-  max-height: 340px;
+  align-items: flex-start;
+}
+
+.cstack-sent {
+  flex: 1.7 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Schichten */
+.cstack-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cstack-layer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 8px 4px 9px;
+  border-left: 3px solid var(--text-muted);
+  border-radius: 0 4px 4px 0;
+  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.05));
+  cursor: pointer;
+  flex-wrap: wrap;
+  transition: background var(--ds-motion-fast);
+}
+
+.cstack-layer:hover,
+.cstack-layer--hl,
+.cstack-layer--open {
+  background: var(--bg-hover);
+}
+
+.cstack-layer-role {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+/* Tool-Aufruf (Name + Parameter) hinter „Tool-Erg." — gleicher Stil wie die
+   Rolle, darf aber als Erstes schrumpfen und kürzt dann per Ellipse. */
+.cstack-layer-call {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cstack-layer-snippet {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}
+
+.cstack-layer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px 1px 5px;
+  border-radius: 9px;
+  background: var(--accent, var(--ds-blue, #2563eb));
+  color: #fff;
+}
+
+/* Rollenfarben — linker Farbrand je Rolle. */
+.cstack-layer--system { border-left-color: var(--text-muted); }
+.cstack-layer--user { border-left-color: var(--accent, var(--ds-blue, #2563eb)); }
+.cstack-layer--model { border-left-color: var(--ds-green, #2a9d5c); }
+.cstack-layer--tool { border-left-color: var(--ds-amber, #c98a00); }
+
+/* Neue Schicht: getönter Hintergrund + voller Textkontrast. */
+.cstack-layer.is-new.cstack-layer--system {
+  background: color-mix(in srgb, var(--text-muted) 10%, var(--bg-primary));
+}
+.cstack-layer.is-new.cstack-layer--user {
+  background: color-mix(in srgb, var(--accent, var(--ds-blue, #2563eb)) 10%, var(--bg-primary));
+}
+.cstack-layer.is-new.cstack-layer--model {
+  background: color-mix(in srgb, var(--ds-green, #2a9d5c) 11%, var(--bg-primary));
+}
+.cstack-layer.is-new.cstack-layer--tool {
+  background: color-mix(in srgb, var(--ds-amber, #c98a00) 12%, var(--bg-primary));
+}
+
+.cstack-layer.is-new .cstack-layer-role { color: var(--text-primary); }
+.cstack-layer.is-new .cstack-layer-snippet { color: var(--text-secondary); }
+
+/* Badge-Farbe folgt der Rolle. */
+.cstack-layer--model .cstack-layer-badge { background: var(--ds-green, #2a9d5c); }
+.cstack-layer--tool .cstack-layer-badge { background: var(--ds-amber, #c98a00); }
+.cstack-layer--system .cstack-layer-badge { background: var(--text-muted); }
+
+/* Alte „war schon da"-Schicht: grau, niedriger Kontrast (der wiederkehrende Sockel). */
+.cstack-layer.is-old {
+  border-left-color: var(--ds-grey-divider, var(--border));
+  opacity: 0.72;
+}
+
+/* Tool-Definitionen: keine Nachricht, sondern mitgesendetes Request-Feld —
+   eigene Kategorie (gestrichelter violetter Rand), auch im grauen Sockel
+   erkennbar. Steht nach .cstack-layer.is-old, um dessen Rand zu überschreiben. */
+.cstack-layer--tools {
+  border-left-color: var(--ds-purple, #8b5cf6);
+}
+
+.cstack-layer--tools.is-old {
+  border-left-style: dashed;
+  border-left-color: var(--ds-purple, #8b5cf6);
+  opacity: 0.85;
+}
+
+.cstack-layer.is-old .cstack-layer-role,
+.cstack-layer.is-old .cstack-layer-snippet {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* „nur Neues zeigen" blendet die grauen Sockel-Schichten aus. */
+.cstack--new-only .cstack-layer.is-old {
+  display: none;
+}
+
+/* Volltext-Drilldown beim Klick auf eine Schicht. */
+.cstack-layer-full {
+  flex-basis: 100%;
+  margin-top: 6px;
+}
+
+.cstack-layer-full.hidden {
+  display: none;
+}
+
+/* Gesamt-Balken (skaliert echt nach Token; normiert auf die größte Runde). */
+.cstack-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  cursor: help;
+}
+
+.cstack-bar-track {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.cstack-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: var(--accent, var(--ds-blue, #2563eb));
+  transition: width var(--ds-motion-fast);
+}
+
+.cstack-bar-label {
+  font-size: 11px;
+  color: var(--text-muted-strong);
+  font-family: var(--font-mono);
+}
+
+/* Modell-Antwort-Karte (bewusst schmal: rein ≫ raus). */
+.cstack-resp {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.cstack-resp-card {
+  border: 1px solid color-mix(in srgb, var(--ds-green, #2a9d5c) 45%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ds-green, #2a9d5c) 7%, var(--bg-primary));
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cstack-resp-card--error {
+  border-color: color-mix(in srgb, var(--ds-red, #d33) 50%, transparent);
+  background: color-mix(in srgb, var(--ds-red, #d33) 6%, var(--bg-primary));
+}
+
+.cstack-resp-head {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ds-green, #2a9d5c);
+}
+
+.cstack-resp-card--error .cstack-resp-head {
+  color: var(--ds-red, #d33);
+}
+
+.cstack-resp-out {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.cstack-resp-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cstack-resp-kind--text { color: var(--ds-green, #2a9d5c); }
+.cstack-resp-kind--error { color: var(--ds-red, #d33); }
+
+.cstack-resp-call {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-word;
+  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.08));
+  border-radius: 4px;
+  padding: 3px 6px;
+}
+
+.cstack-resp-text {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* „Anwendung führt aus"-Streifen zwischen den Runden (kein Modell-Element). */
+.cstack-exec {
+  border: 1px solid color-mix(in srgb, var(--ds-amber, #c98a00) 40%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ds-amber, #c98a00) 8%, var(--bg-primary));
+  margin: 0 20px;
+}
+
+.cstack-exec-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 7px 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.cstack-exec-summary::-webkit-details-marker { display: none; }
+
+.cstack-exec-summary strong {
+  color: var(--ds-amber, #c98a00);
+  font-weight: 600;
+}
+
+.cstack-exec-summary-call {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cstack-exec-summary:hover { color: var(--text-primary); }
+
+.cstack-exec-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.cstack-exec-call {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.cstack-exec-result-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ds-amber, #c98a00);
+}
+
+.cstack-exec-result {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 200px;
   overflow: auto;
   background: var(--ds-grey-bg, rgba(127, 127, 127, 0.08));
   border: 1px solid var(--ds-grey-divider, var(--border));
   border-radius: 5px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.raw-log-hint {
-  margin: 0;
+.cstack-exec-note {
+  font-size: 11px;
+  color: var(--ds-amber, #c98a00);
+}
+
+/* Fuß: verbalisiert die Zustandslosigkeit. */
+.cstack-foot {
+  margin: 2px 0 0;
   font-size: 11px;
   color: var(--text-muted);
+  font-style: italic;
 }
 
-/* ── Sequenzdiagramm (interaktiver Anfrage-Ablauf) ────────────────────────── */
-
-.seq {
-  padding: 12px 14px 0;
-}
-
-.seq-svg {
-  display: block;
-  max-width: 100%;
-}
-
-.seq-lifeline {
-  stroke: var(--ds-grey-divider, var(--border));
-  stroke-width: 1;
-  stroke-dasharray: 3 4;
-}
-
-/* Akteurs-Farbe als Custom-Property; Pfeile/Köpfe/Boxen erben sie. */
-.seq--user {
-  --seq-c: var(--text-muted-strong);
-}
-.seq--app {
-  --seq-c: var(--ds-blue, #2563eb);
-}
-.seq--model {
-  --seq-c: var(--ds-green, #2a9d5c);
-}
-.seq--tool {
-  --seq-c: var(--ds-amber, #c98a00);
-}
-.seq--error {
-  --seq-c: var(--ds-red, #d33);
-}
-
-.seq-actor {
-  fill: var(--bg-primary);
-  stroke: var(--seq-c, var(--border));
-  stroke-width: 1.3;
-}
-
-.seq-actor-label {
-  fill: var(--text-primary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.seq-hit {
-  fill: transparent;
-  cursor: pointer;
-}
-
-.seq-row {
-  outline: none;
-}
-
-.seq-row:hover .seq-hit,
-.seq-row:focus-visible .seq-hit {
-  fill: var(--bg-hover);
-}
-
-.seq-row--active .seq-hit {
-  fill: color-mix(in srgb, var(--seq-c, var(--ds-blue)) 12%, transparent);
-}
-
-.seq-arrow {
-  stroke: var(--seq-c, currentColor);
-  stroke-width: 1.6;
-}
-
-.seq-arrowhead {
-  fill: var(--seq-c, currentColor);
-}
-
-.seq-row--active .seq-arrow {
-  stroke-width: 2.6;
-}
-
-.seq-label {
-  fill: var(--text-primary);
-  font-size: 11px;
-}
-
-.seq-row--active .seq-label {
-  font-weight: 700;
-}
-
-.seq-num {
-  fill: var(--text-muted);
-  font-size: 9px;
-  font-family: var(--font-mono);
-}
-
-.seq-detail {
-  margin: 8px 14px 12px;
-  border: 1px solid var(--ds-grey-divider, var(--border));
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.seq-detail-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 8px 10px;
-  background: var(--ds-grey-bg, rgba(127, 127, 127, 0.06));
-  border-bottom: 1px solid var(--ds-grey-divider, var(--border));
-}
-
-.seq-detail-route {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.seq-detail-label {
-  font-size: 11px;
-  color: var(--text-muted-strong);
-}
-
-.seq-detail-body {
-  margin: 0;
-  padding: 10px 12px;
-  max-height: 260px;
-  overflow: auto;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* „Details je Runde“ — eingeklappter Container unter dem Diagramm. */
-.raw-log-rounds-wrap {
-  border-top: 1px solid var(--ds-grey-divider, var(--border));
-}
-
-.raw-log-rounds-summary {
-  list-style: none;
-  cursor: pointer;
-  user-select: none;
-  padding: 8px 14px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--text-muted-strong);
-}
-
-.raw-log-rounds-summary::-webkit-details-marker {
-  display: none;
-}
-
-.raw-log-rounds-summary:hover {
-  background: var(--bg-hover);
+@media (max-width: 620px) {
+  .cstack-round-cols { flex-direction: column; }
 }

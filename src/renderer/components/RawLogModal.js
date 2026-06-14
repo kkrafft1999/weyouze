@@ -144,10 +144,6 @@ function buildExplanationPrompt(turn) {
   return lines.join('\n');
 }
 
-// Lebenslinien des Sequenzdiagramms (Nutzer wird bewusst nicht dargestellt —
-// es geht um das Hin und Her zwischen Anwendung, Modell und Tools).
-const SEQ_ACTORS = { app: 'Anwendung', model: 'Modell', tool: 'Tool' };
-
 // Sucht das Ergebnis eines Tool-Aufrufs (per call_id) in einer der Folge-Runden,
 // in der die Anwendung es ans Modell nachreicht.
 function findToolResult(exchanges, callId, fromIndex) {
@@ -159,107 +155,171 @@ function findToolResult(exchanges, callId, fromIndex) {
   return null;
 }
 
-// Beschreibt den vollständigen Verlauf, der in einer Runde ans Modell geht.
-// Da die LLM-API zustandslos ist, sendet die Anwendung JEDES Mal alles erneut:
-// System, Nutzer, alle bisherigen Modell-Antworten (inkl. Tool-Aufruf-JSON) und
-// alle Tool-Ergebnisse. Neu hinzugekommene Nachrichten werden mit ➕ markiert.
-function describeRequest(messages, prevCount) {
-  const all = Array.isArray(messages) ? messages : [];
-  const counts = { system: 0, user: 0, assistant: 0, tool: 0 };
-  for (const m of all) if (counts[m.role] != null) counts[m.role] += 1;
-  const parts = [];
-  if (counts.system) parts.push(`${counts.system}× System`);
-  if (counts.user) parts.push(`${counts.user}× Nutzer`);
-  if (counts.assistant) parts.push(`${counts.assistant}× Modell-Antwort`);
-  if (counts.tool) parts.push(`${counts.tool}× Tool-Ergebnis`);
-  const header =
-    `Gesendet wird der VOLLSTÄNDIGE bisherige Verlauf — ${all.length} ` +
-    `${all.length === 1 ? 'Nachricht' : 'Nachrichten'} (${parts.join(', ')}). ` +
-    'Die LLM-API ist zustandslos, daher wird jedes Mal alles erneut übergeben ' +
-    '(➕ = neu in dieser Runde):';
-  const transcript = all
-    .map((m, idx) => {
-      const marker = idx >= prevCount ? '➕' : '  ';
-      const role = ROLE_LABELS[m.role] || m.role || '?';
-      const bits = [];
-      const content = String(m.content || '').replace(/\s+/g, ' ').trim();
-      if (content) bits.push(truncate(content, 200));
-      if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
-        bits.push(
-          m.tool_calls
-            .map((tc) => `liefert JSON für Tool-Aufruf ${tc.name || '?'}(${truncate(compactArgs(tc.arguments), 120)})`)
-            .join('; ')
-        );
-      }
-      return `${marker} [${role}] ${bits.join(' · ') || '(leer)'}`;
-    })
-    .join('\n');
-  return `${header}\n\n${transcript}`;
+// Findet den zugehörigen tool_call (per id) zu einer Tool-Ergebnis-Nachricht in
+// den Assistant-Nachrichten desselben Verlaufs. So bleibt auch in einer Folge-
+// Runde erkennbar, zu welchem Aufruf (Name + Argumente) das Ergebnis gehört.
+function toolCallForResult(messages, toolCallId) {
+  if (!toolCallId) return null;
+  for (const m of Array.isArray(messages) ? messages : []) {
+    if (!Array.isArray(m.tool_calls)) continue;
+    const hit = m.tool_calls.find((tc) => tc && tc.id === toolCallId);
+    if (hit) return hit;
+  }
+  return null;
 }
 
-// Wandelt eine Anfrage (Turn) in eine chronologische Liste von Nachrichten
-// zwischen den Lebenslinien um — die Datengrundlage des Sequenzdiagramms.
-function buildTurnSteps(turn) {
-  const exchanges = Array.isArray(turn.exchanges) ? turn.exchanges : [];
-  const steps = [];
-  const usesTool = exchanges.some((ex) => (ex.response?.toolCalls || []).length);
+// Parst den rohen Request-Body (JSON-String) einmal zu einem Objekt — Grundlage,
+// um die mitgesendeten, sonst versteckten Felder (tools, tool_choice, max_tokens)
+// sichtbar zu machen. Gibt null zurück, wenn nichts/Ungültiges vorliegt.
+function parseRequestBody(requestBody) {
+  if (typeof requestBody !== 'string' || !requestBody) return null;
+  try {
+    const obj = JSON.parse(requestBody);
+    return obj && typeof obj === 'object' ? obj : null;
+  } catch {
+    return null;
+  }
+}
 
-  let prevSent = 0;
-  exchanges.forEach((ex, i) => {
-    const sent = Array.isArray(ex.messages) ? ex.messages : [];
-    steps.push({
-      from: 'app',
-      to: 'model',
-      kind: 'request',
-      label: `Runde ${i + 1}: kompletter Verlauf`,
-      detail: describeRequest(sent, prevSent),
-      code: true,
-    });
-    prevSent = sent.length;
-
-    if (ex.error) {
-      steps.push({ from: 'model', to: 'app', kind: 'error', label: 'Fehler', detail: String(ex.error) });
-      return;
+// Liest die Tool-Definitionen aus dem geparsten Request-Body (Feld `tools`). Sie
+// reisen in JEDEM Request als eigenes Feld mit (nicht als Nachricht) — nur so
+// weiß das Modell, welche Tools es anfordern darf. Die Schema-Form ist
+// provider-spezifisch; dieser Parser deckt alle hier genutzten Formen ab:
+//  - Anthropic / OpenAI-Responses:  { name, description, input_schema|parameters }
+//  - OpenAI-ChatCompletions / Ollama / MLX:  { type:'function', function:{ name, … } }
+//  - Google:  { functionDeclarations: [ { name, … } ] }
+function extractToolDefs(body) {
+  const raw = body && Array.isArray(body.tools) ? body.tools : [];
+  const defs = [];
+  for (const t of raw) {
+    if (!t || typeof t !== 'object') continue;
+    if (Array.isArray(t.functionDeclarations)) {
+      for (const fd of t.functionDeclarations) {
+        if (fd && typeof fd === 'object') defs.push({ name: fd.name || '?', schema: fd });
+      }
+    } else if (t.function && typeof t.function === 'object') {
+      defs.push({ name: t.function.name || '?', schema: t });
+    } else if (t.name) {
+      defs.push({ name: t.name, schema: t });
     }
+  }
+  return defs;
+}
 
-    const text = (ex.response?.text || '').trim();
-    const calls = ex.response?.toolCalls || [];
+// Tool-Wahl-Modus aus dem Body (OpenAI/MLX setzen `tool_choice:'auto'`). Leer,
+// wenn der Provider nichts sendet.
+function requestToolChoice(body) {
+  const tc = body && body.tool_choice;
+  if (typeof tc === 'string') return tc;
+  if (tc && typeof tc === 'object') return tc.type || 'spezifisch';
+  return '';
+}
 
-    if (text) {
-      steps.push({ from: 'model', to: 'app', kind: 'answer', label: 'Text-Antwort', detail: text });
+// Output-Limit aus dem Body — provider-spezifische Feldnamen.
+function requestMaxTokens(body) {
+  if (!body) return null;
+  const cand = body.max_tokens ?? body.max_output_tokens ?? body.generationConfig?.maxOutputTokens;
+  const n = Number(cand);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Übersetzt den (provider-spezifischen) Abschlussgrund in eine verständliche
+// Aussage + Kategorie (tool = treibt eine weitere Runde, done = fertig,
+// warn = abgeschnitten/gestoppt).
+function describeFinishReason(reason, hasToolCalls) {
+  const r = String(reason || '').toLowerCase();
+  if (r === 'tool_calls' || r === 'tool_use' || (!r && hasToolCalls)) {
+    return { text: 'Tool-Wunsch → weitere Runde nötig', kind: 'tool' };
+  }
+  if (!r) return null;
+  if (r === 'stop' || r === 'end_turn' || r === 'stop_sequence' || r === 'complete' || r === 'completed') {
+    return { text: 'fertig (stop)', kind: 'done' };
+  }
+  if (r === 'length' || r === 'max_tokens' || r === 'model_length' || r === 'max_output_tokens') {
+    return { text: 'abgeschnitten — Output-Limit erreicht', kind: 'warn' };
+  }
+  if (r.includes('safety') || r.includes('filter') || r.includes('content') || r.includes('recitation')) {
+    return { text: `gestoppt (${reason})`, kind: 'warn' };
+  }
+  return { text: `beendet (${reason})`, kind: 'done' };
+}
+
+// Rollen-Konfiguration für die Schichten des Kontext-Stapels: Anzeigename und
+// CSS-Klassen-Suffix (das die Rollenfarbe trägt). Reihenfolge entspricht der
+// üblichen Verlaufsstruktur System → Nutzer → Modell-JSON → Tool-Ergebnis.
+const STACK_ROLES = {
+  system: { label: 'System', cls: 'system' },
+  user: { label: 'Nutzer', cls: 'user' },
+  assistant: { label: 'Modell-JSON', cls: 'model' },
+  tool: { label: 'Tool-Erg.', cls: 'tool' },
+};
+
+// Knapper Lehrsatz je Schicht-Typ (Didaktik ohne Klick-Overhead) — als Tooltip
+// an NEUEN Schichten. Alte Schichten tragen stattdessen den Amnesie-Tooltip.
+const STACK_ROLE_HINTS = {
+  system: 'Systemprompt — legt Rolle und Regeln des Modells fest.',
+  user: 'Die ursprüngliche Eingabe des Nutzers.',
+  assistant: 'JSON-Tool-Wunsch des Modells — die Datei ist damit NICHT gelesen.',
+  tool: 'Die ANWENDUNG hat das Tool ausgeführt und reicht das Ergebnis nach.',
+};
+
+const AMNESIA_TOOLTIP =
+  'Das Modell erinnert sich an nichts — darum reist jedes Mal alles erneut mit.';
+
+// Kurzes Snippet einer gesendeten Nachricht für die Schicht-Zeile.
+function layerSnippet(m) {
+  const content = String(m.content || '').replace(/\s+/g, ' ').trim();
+  if (content) return content;
+  if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
+    return m.tool_calls.map((tc) => `${tc.name || 'tool'}(${compactArgs(tc.arguments)})`).join(', ');
+  }
+  return '';
+}
+
+// Zeichen-Schätzung des gesendeten Verlaufs — Fallback für den Token-Balken,
+// wenn keine usage-Daten vorliegen (lokale Modelle, Fehlerrunden).
+function sumCharLen(messages) {
+  let n = 0;
+  for (const m of Array.isArray(messages) ? messages : []) {
+    n += String(m.content || '').length;
+    if (Array.isArray(m.tool_calls)) {
+      for (const tc of m.tool_calls) n += String(tc.name || '').length + String(tc.arguments || '').length;
     }
-    calls.forEach((c) => {
-      const args = prettyMaybeJson(c.arguments) || '{}';
-      steps.push({
-        from: 'model',
-        to: 'app',
-        kind: 'toolcall',
-        label: `JSON: Tool „${c.name || '?'}“`,
-        detail: args,
-        code: true,
-      });
-      steps.push({
-        from: 'app',
-        to: 'tool',
-        kind: 'exec',
-        label: `führt „${c.name || 'Tool'}“ aus`,
-        detail: args,
-        code: true,
-      });
-      const result = findToolResult(exchanges, c.id, i);
-      steps.push({
-        from: 'tool',
-        to: 'app',
-        kind: 'result',
-        label: 'Ergebnis',
-        detail: result == null ? '(nicht protokolliert)' : result,
-        code: result != null,
-      });
-    });
-  });
+  }
+  return n;
+}
 
-  const actors = usesTool ? ['app', 'model', 'tool'] : ['app', 'model'];
-  return { steps, actors };
+// Faktor „↑ x,x×" gegenüber der Vorrunde (deutsche Dezimalschreibweise).
+function formatFactor(cur, prev) {
+  if (!prev) return '';
+  const f = cur / prev;
+  if (!Number.isFinite(f) || f <= 1) return '';
+  return `↑ ${f.toFixed(1).replace('.', ',')}× ggü. Vorrunde`;
+}
+
+// Roher Request + Response-Stream einer Runde fürs Clipboard (wie übertragen).
+function formatRoundRawForClipboard(ex, roundNo) {
+  const parts = [];
+  parts.push(`=== Runde ${roundNo} · REQUEST (roh) ===`);
+
+  const req = ex.request || {};
+  const reqLines = [];
+  if (req.method || req.url) reqLines.push(`${req.method || 'POST'} ${req.url || ''}`.trim());
+  if (req.headers && typeof req.headers === 'object') {
+    for (const [k, v] of Object.entries(req.headers)) reqLines.push(`${k}: ${v}`);
+  }
+  if (reqLines.length) parts.push(reqLines.join('\n'));
+  if (typeof req.body === 'string' && req.body) {
+    parts.push('');
+    parts.push(req.body);
+  }
+  if (!reqLines.length && !req.body) parts.push('(kein Request protokolliert)');
+
+  parts.push('');
+  parts.push(`=== Runde ${roundNo} · RESPONSE (roh) ===`);
+  parts.push(ex.responseRaw || '(leer)');
+
+  return parts.join('\n');
 }
 
 export function initRawLogModal({ api, appStore }) {
@@ -299,6 +359,13 @@ export function initRawLogModal({ api, appStore }) {
     }
   }
 
+  function buildPre(text, extraClass) {
+    const pre = document.createElement('pre');
+    pre.className = extraClass ? `raw-log-pre ${extraClass}` : 'raw-log-pre';
+    pre.textContent = text || '';
+    return pre;
+  }
+
   function makeCopyButton(getText, label) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -309,22 +376,40 @@ export function initRawLogModal({ api, appStore }) {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       e.preventDefault();
+      const text = getText() || '';
+      let ok = false;
       try {
-        await navigator.clipboard.writeText(getText() || '');
+        if (typeof api.writeClipboardText === 'function') {
+          api.writeClipboardText(text);
+          ok = true;
+        } else if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          ok = true;
+        }
+      } catch {
+        /* Fallback unten */
+      }
+      if (!ok) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch {
+          ok = false;
+        }
+      }
+      if (ok) {
         btn.classList.add('raw-log-copy--ok');
         setTimeout(() => btn.classList.remove('raw-log-copy--ok'), 1200);
-      } catch {
-        /* Clipboard nicht verfuegbar */
       }
     });
     return btn;
-  }
-
-  function buildPre(text, extraClass) {
-    const pre = document.createElement('pre');
-    pre.className = extraClass ? `raw-log-pre ${extraClass}` : 'raw-log-pre';
-    pre.textContent = text || '';
-    return pre;
   }
 
   function sectionLabel(text) {
@@ -370,14 +455,12 @@ export function initRawLogModal({ api, appStore }) {
     return '—';
   }
 
-  // Ein einzelner LLM-Aufruf (Runde) innerhalb einer Anfrage.
-  // prevSentCount = Anzahl Nachrichten, die schon in fruehere Runden gingen —
-  // erlaubt, nur das in dieser Runde NEU Gesendete hervorzuheben.
+  // Ein einzelner LLM-Aufruf (Runde) — Volltext, Rohdaten und Stream als Drilldown.
   function buildRound(ex, roundNo, prevSentCount = 0) {
     const det = document.createElement('details');
     det.className = 'raw-log-round';
-    if (ex.error) det.classList.add('raw-log-round--error');
-    det.open = true;
+    if (ex.error || ex.cancelled) det.classList.add('raw-log-round--error');
+    det.open = false;
 
     const summary = document.createElement('summary');
     summary.className = 'raw-log-round-summary';
@@ -407,10 +490,6 @@ export function initRawLogModal({ api, appStore }) {
     const body = document.createElement('div');
     body.className = 'raw-log-round-body';
 
-    // — 1. Anwendung → Modell (chronologisch zuerst) —
-    // Assistant-Nachrichten hier ausblenden: das sind frühere Modell-Antworten,
-    // die bereits als „Antwort" ihrer eigenen Runde erscheinen. Neu und relevant
-    // ist, was die Anwendung beisteuert (Nutzereingabe bzw. Tool-Ergebnisse).
     const sent = Array.isArray(ex.messages) ? ex.messages : [];
     const newMsgs = (prevSentCount > 0 ? sent.slice(prevSentCount) : sent).filter(
       (m) => m && m.role !== 'assistant'
@@ -435,7 +514,6 @@ export function initRawLogModal({ api, appStore }) {
       body.appendChild(none);
     }
 
-    // Vollständiger gesendeter Verlauf bei Folge-Runden zusätzlich einklappbar.
     if (prevSentCount > 0 && sent.length) {
       const allDet = document.createElement('details');
       allDet.className = 'raw-log-sub';
@@ -449,7 +527,6 @@ export function initRawLogModal({ api, appStore }) {
       body.appendChild(allDet);
     }
 
-    // — 2. Modell → Anwendung (Antwort) —
     if (ex.error) {
       const err = document.createElement('p');
       err.className = 'raw-log-error';
@@ -492,14 +569,29 @@ export function initRawLogModal({ api, appStore }) {
         body.appendChild(wrap);
       }
     }
-    if (!ansText.trim() && !ansCalls.length && !ex.error) {
+    if (!ansText.trim() && !ansCalls.length && !ex.error && !ex.cancelled) {
       const none = document.createElement('p');
       none.className = 'raw-log-muted';
       none.textContent = '(keine Antwort)';
       body.appendChild(none);
     }
+    if (ex.cancelled && !ex.error) {
+      const cancelled = document.createElement('p');
+      cancelled.className = 'raw-log-error';
+      cancelled.textContent = 'Abgebrochen — kam nicht durch';
+      body.appendChild(cancelled);
+    }
 
-    // — 3. Rohdaten (provider-spezifisch, eingeklappt) —
+    // Abschlussgrund — nur die Warnfälle (abgeschnitten / Safety-Filter) sind
+    // eigenständig wichtig; „stop" und „tool_calls" verrät bereits roundOutcome.
+    const finish = describeFinishReason(ex.finishReason, ansCalls.length > 0);
+    if (finish && finish.kind === 'warn' && !ex.error && !ex.cancelled) {
+      const warn = document.createElement('p');
+      warn.className = 'raw-log-error';
+      warn.textContent = `⚠ ${finish.text}`;
+      body.appendChild(warn);
+    }
+
     const req = ex.request || {};
     const reqLines = [];
     if (req.method || req.url) reqLines.push(`${req.method || 'POST'} ${req.url || ''}`.trim());
@@ -523,6 +615,19 @@ export function initRawLogModal({ api, appStore }) {
         h.appendChild(sectionLabel('Request (roh)'));
         h.appendChild(makeCopyButton(() => rawReq, 'Request kopieren'));
         rawDet.appendChild(h);
+        // Steuerparameter aus dem Body hervorheben (sonst gehen sie im JSON unter).
+        const reqBody = parseRequestBody(req.body);
+        const reqBits = [];
+        const toolChoice = requestToolChoice(reqBody);
+        if (toolChoice) reqBits.push(`tool_choice: ${toolChoice}`);
+        const maxTokens = requestMaxTokens(reqBody);
+        if (maxTokens) reqBits.push(`max_tokens: ${maxTokens}`);
+        if (reqBits.length) {
+          const params = document.createElement('p');
+          params.className = 'raw-log-muted';
+          params.textContent = reqBits.join('  ·  ');
+          rawDet.appendChild(params);
+        }
         rawDet.appendChild(buildPre(rawReq));
       }
       const h2 = document.createElement('div');
@@ -583,125 +688,426 @@ export function initRawLogModal({ api, appStore }) {
     }
   }
 
-  function svgEl(name, attrs) {
-    const el = document.createElementNS('http://www.w3.org/2000/svg', name);
-    if (attrs) for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
-    return el;
+  function plusIconSvg() {
+    return (
+      '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" aria-hidden="true">' +
+      '<path d="M12 5v14M5 12h14"/></svg>'
+    );
   }
 
-  // Interaktives Sequenzdiagramm einer Anfrage: Lebenslinien (Nutzer, Anwendung,
-  // Modell, ggf. Tool), chronologische Pfeile, klickbare Schritte mit Detail.
-  function buildSequenceDiagram(turn) {
-    const { steps, actors } = buildTurnSteps(turn);
+  function checkIconSvg() {
+    return (
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M20 6L9 17l-5-5"/></svg>'
+    );
+  }
+
+  // Vertikaler Kontext-Schichtstapel einer Anfrage: zeigt pro Runde den komplett
+  // erneut gesendeten Verlauf als Schicht-Stapel (alte Schichten grau, neue
+  // farbig + „neu"), einen wachsenden Gesamt-Token-Balken und eine bewusst
+  // schmale Modell-Antwort-Karte rechts (rein ≫ raus). Zwischen den Runden liegt
+  // der „Anwendung führt aus"-Streifen (kein Modell-Element).
+  function buildContextStack(turn) {
     const wrap = document.createElement('div');
-    wrap.className = 'seq';
-    if (!steps.length) return wrap;
+    wrap.className = 'cstack';
+    const exchanges = Array.isArray(turn.exchanges) ? turn.exchanges : [];
+    if (!exchanges.length) return wrap;
 
-    const W = 760;
-    const M = 64;
-    const HEADER_H = 26;
-    const Y0 = HEADER_H + 24;
-    const ROW_H = 46;
-    const H = Y0 + steps.length * ROW_H + 14;
-
-    const n = actors.length;
-    const laneX = {};
-    actors.forEach((a, i) => {
-      laneX[a] = n === 1 ? W / 2 : M + (i * (W - 2 * M)) / (n - 1);
+    // Pro Runde den „rein"-Wert ermitteln: usage.prompt exakt, sonst ≈ Zeichen
+    // der gesendeten Nachrichten (lokale Modelle / Fehlerrunden ohne usage).
+    const rounds = exchanges.map((ex) => {
+      const messages = Array.isArray(ex.messages) ? ex.messages : [];
+      const prompt = Number(ex.usage?.prompt) || 0;
+      const completion = Number(ex.usage?.completion) || 0;
+      const approx = !(prompt > 0);
+      return { ex, messages, prompt, completion, approx, value: approx ? sumCharLen(messages) : prompt };
     });
+    const maxValue = Math.max(1, ...rounds.map((r) => r.value));
+    const first = rounds[0];
+    const last = rounds[rounds.length - 1];
+    // „rein"-Werte sind nur vergleichbar, wenn alle Runden dieselbe Einheit
+    // benutzen — entweder durchgängig Token (usage) oder durchgängig ≈ Zeichen.
+    // Mischt sich das (z. B. erste Runde mit usage, spätere Fehlerrunde ohne),
+    // darf weder die Wachstums-Statistik noch eine Pro-Runden-Zunahme über die
+    // Einheiten hinweg rechnen — sonst stünde Token gegen Zeichen.
+    const unitsConsistent = rounds.every((r) => r.approx === first.approx);
+    const unitOf = (r) => (r.approx ? 'Zeichen' : 'Token');
+    const toolCount = exchanges.reduce((s, ex) => s + (ex.response?.toolCalls?.length || 0), 0);
 
-    const svg = svgEl('svg', {
-      class: 'seq-svg',
-      viewBox: `0 0 ${W} ${H}`,
-      width: '100%',
-      role: 'group',
-      'aria-label': 'Sequenzdiagramm des Anfrageablaufs',
-    });
-
-    for (const a of actors) {
-      const x = laneX[a];
-      svg.appendChild(svgEl('line', { x1: x, y1: HEADER_H, x2: x, y2: H - 8, class: 'seq-lifeline' }));
-      svg.appendChild(
-        svgEl('rect', { x: x - 46, y: 2, width: 92, height: HEADER_H - 4, rx: 6, class: `seq-actor seq--${a}` })
+    // — Meta-/Steuerzeile —
+    const meta = document.createElement('div');
+    meta.className = 'cstack-meta';
+    const stat = document.createElement('div');
+    stat.className = 'cstack-meta-stat';
+    const statBits = [
+      `${rounds.length} ${rounds.length === 1 ? 'Runde' : 'Runden'}`,
+      `${toolCount} ${toolCount === 1 ? 'Tool' : 'Tools'}`,
+    ];
+    if (rounds.length > 1 && unitsConsistent && first.value > 0 && last.value > first.value) {
+      const delta = last.value - first.value;
+      const pct = Math.round((delta / first.value) * 100);
+      statBits.push(
+        `Kontext wächst: ${first.approx ? '≈ ' : ''}${first.value} → ${last.value} ${unitOf(first)} (+${delta} / +${pct}%)`
       );
-      const t = svgEl('text', { x, y: HEADER_H / 2 + 4, class: 'seq-actor-label', 'text-anchor': 'middle' });
-      t.textContent = SEQ_ACTORS[a] || a;
-      svg.appendChild(t);
+    } else {
+      statBits.push(`${first.approx ? '≈ ' : ''}${first.value} ${unitOf(first)} gehen rein`);
+    }
+    stat.textContent = statBits.join(' · ');
+    meta.appendChild(stat);
+
+    const toggle = document.createElement('label');
+    toggle.className = 'cstack-toggle';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.addEventListener('change', () => wrap.classList.toggle('cstack--new-only', cb.checked));
+    toggle.appendChild(cb);
+    const tlabel = document.createElement('span');
+    tlabel.textContent = 'nur Neues zeigen';
+    toggle.appendChild(tlabel);
+    meta.appendChild(toggle);
+    wrap.appendChild(meta);
+
+    // — Legende der Schicht-Farben —
+    const legend = document.createElement('div');
+    legend.className = 'cstack-legend';
+    for (const [cls, label] of [
+      ['system', 'System'],
+      ['tools', 'Tools'],
+      ['user', 'Nutzer'],
+      ['model', 'Modell'],
+      ['tool', 'Tool-Erg.'],
+      ['new', 'neu in dieser Runde'],
+    ]) {
+      const item = document.createElement('span');
+      item.className = 'cstack-legend-item';
+      const sw = document.createElement('i');
+      sw.className = `cstack-sw cstack-sw--${cls}`;
+      item.appendChild(sw);
+      item.appendChild(document.createTextNode(label));
+      legend.appendChild(item);
+    }
+    wrap.appendChild(legend);
+
+    // Hover über eine Schicht hebt dieselbe Nachricht (gleicher Schlüssel) in
+    // allen Runden hervor — „dieselbe Nachricht, erneut geschickt".
+    function highlightIndex(key, on) {
+      wrap
+        .querySelectorAll(`.cstack-layer[data-msg-index="${key}"]`)
+        .forEach((el) => el.classList.toggle('cstack-layer--hl', on));
     }
 
-    const rows = [];
-    const detail = document.createElement('div');
-    detail.className = 'seq-detail';
-    const dHead = document.createElement('div');
-    dHead.className = 'seq-detail-head';
-    const dRoute = document.createElement('span');
-    dRoute.className = 'seq-detail-route';
-    const dLabel = document.createElement('span');
-    dLabel.className = 'seq-detail-label';
-    dHead.appendChild(dRoute);
-    dHead.appendChild(dLabel);
-    const dBody = document.createElement('pre');
-    dBody.className = 'seq-detail-body';
-    detail.appendChild(dHead);
-    detail.appendChild(dBody);
-
-    function select(idx) {
-      rows.forEach((r, i) => r.classList.toggle('seq-row--active', i === idx));
-      const s = steps[idx];
-      if (!s) return;
-      dRoute.textContent = `${SEQ_ACTORS[s.from]} → ${SEQ_ACTORS[s.to]}`;
-      dLabel.textContent = s.label;
-      dBody.textContent = s.detail || '';
-    }
-
-    steps.forEach((s, i) => {
-      const rowTop = Y0 + i * ROW_H;
-      const yArrow = rowTop + ROW_H - 16;
-      const xF = laneX[s.from];
-      const xT = laneX[s.to];
-      const dir = xT >= xF ? 1 : -1;
-
-      const g = svgEl('g', {
-        class: `seq-row seq--${s.kind === 'error' ? 'error' : s.from}`,
-        tabindex: '0',
-        role: 'button',
-        'aria-label': `Schritt ${i + 1}: ${SEQ_ACTORS[s.from]} an ${SEQ_ACTORS[s.to]} — ${s.label}`,
-      });
-      g.appendChild(svgEl('rect', { x: 2, y: rowTop, width: W - 4, height: ROW_H, class: 'seq-hit' }));
-      g.appendChild(svgEl('line', { x1: xF, y1: yArrow, x2: xT - dir * 9, y2: yArrow, class: 'seq-arrow' }));
-      g.appendChild(
-        svgEl('path', {
-          d: `M ${xT} ${yArrow} L ${xT - dir * 9} ${yArrow - 4} L ${xT - dir * 9} ${yArrow + 4} Z`,
-          class: 'seq-arrowhead',
-        })
-      );
-      const label = svgEl('text', {
-        x: (xF + xT) / 2,
-        y: yArrow - 6,
-        class: 'seq-label',
-        'text-anchor': 'middle',
-      });
-      label.textContent = truncate(s.label, 34);
-      g.appendChild(label);
-      const num = svgEl('text', { x: 8, y: yArrow + 4, class: 'seq-num' });
-      num.textContent = String(i + 1);
-      g.appendChild(num);
-
-      g.addEventListener('click', () => select(i));
-      g.addEventListener('keydown', (e) => {
+    // Macht eine Schicht per Klick/Tastatur zum Volltext-Drilldown auf- und
+    // zuklappbar und verknüpft Hover mit der runden-übergreifenden Hervorhebung.
+    function wireLayer(layer, full) {
+      function toggleFull() {
+        const nowHidden = full.classList.toggle('hidden');
+        layer.classList.toggle('cstack-layer--open', !nowHidden);
+      }
+      layer.addEventListener('click', toggleFull);
+      layer.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          select(i);
+          toggleFull();
         }
       });
+      const key = layer.dataset.msgIndex;
+      layer.addEventListener('mouseenter', () => highlightIndex(key, true));
+      layer.addEventListener('mouseleave', () => highlightIndex(key, false));
+    }
 
-      rows.push(g);
-      svg.appendChild(g);
+    // — Runden-Blöcke (vertikal gestapelt) —
+    let prevSent = 0;
+    let prevValue = 0;
+    let prevApprox = first.approx;
+    rounds.forEach((r, i) => {
+      const { ex, messages, value, approx, completion } = r;
+      const errored = !!(ex.error || ex.cancelled);
+
+      const block = document.createElement('div');
+      block.className = 'cstack-round';
+      if (errored) block.classList.add('cstack-round--error');
+
+      const head = document.createElement('div');
+      head.className = 'cstack-round-head';
+      const tag = document.createElement('span');
+      tag.className = 'cstack-round-tag';
+      tag.textContent = `Runde ${i + 1}`;
+      // Genuin „neu" ist nur, was die ANWENDUNG in dieser Runde beisteuert:
+      // die Nutzereingabe (Runde 1) bzw. Tool-Ergebnisse. System ist der
+      // ewige Sockel, Assistant-Nachrichten sind Echos früherer Modell-
+      // Antworten — beide kehren als grauer Sockel wieder.
+      const newFlags = messages.map(
+        (m, idx) => m.role !== 'system' && m.role !== 'assistant' && idx >= prevSent
+      );
+      const newCount = newFlags.filter(Boolean).length;
+
+      const sentInfo = document.createElement('span');
+      sentInfo.className = 'cstack-round-sent';
+      const reused = messages.length - newCount;
+      sentInfo.textContent =
+        `gesendet: ${messages.length} ${messages.length === 1 ? 'Nachricht' : 'Nachrichten'}` +
+        (i > 0 && reused > 0 ? ` — davon ${reused} erneut` : '');
+      head.appendChild(tag);
+      const headRight = document.createElement('div');
+      headRight.className = 'cstack-round-head-right';
+      headRight.appendChild(sentInfo);
+      headRight.appendChild(
+        makeCopyButton(() => formatRoundRawForClipboard(ex, i + 1), `Runde ${i + 1} Rohdaten kopieren`)
+      );
+      head.appendChild(headRight);
+      block.appendChild(head);
+
+      const cols = document.createElement('div');
+      cols.className = 'cstack-round-cols';
+
+      // Links: Schicht-Stapel + Gesamt-Balken
+      const left = document.createElement('div');
+      left.className = 'cstack-sent';
+      const layers = document.createElement('div');
+      layers.className = 'cstack-layers';
+
+      // Tool-Definitionen reisen als eigenes Request-Feld (body.tools) in JEDER
+      // Runde mit — keine Nachricht, aber Teil dessen, was „rein" geht. Eine
+      // dauerhaft graue Schicht ganz oben (Teil des Sockels, kehrt jede Runde
+      // wieder); klickbar zum Aufklappen der vollen Schemas.
+      const toolDefs = extractToolDefs(parseRequestBody(ex.request?.body));
+      if (toolDefs.length) {
+        const tLayer = document.createElement('div');
+        tLayer.className = 'cstack-layer cstack-layer--tools is-old';
+        tLayer.dataset.msgIndex = 'tools';
+        tLayer.tabIndex = 0;
+        tLayer.setAttribute('role', 'button');
+        tLayer.title =
+          'Die Tool-Definitionen reisen in jedem Request erneut mit — nur dadurch weiß das Modell, welche Tools es anfordern darf.';
+        tLayer.setAttribute('aria-label', `Tool-Definitionen: ${toolDefs.length} verfügbar. Enter für die Schemas.`);
+
+        const tRole = document.createElement('span');
+        tRole.className = 'cstack-layer-role';
+        tRole.textContent = 'Tools';
+        tLayer.appendChild(tRole);
+
+        const tCount = document.createElement('span');
+        tCount.className = 'cstack-layer-role cstack-layer-call';
+        tCount.textContent = `${toolDefs.length} ${toolDefs.length === 1 ? 'Definition' : 'Definitionen'}`;
+        tLayer.appendChild(tCount);
+
+        const tSnip = document.createElement('span');
+        tSnip.className = 'cstack-layer-snippet';
+        tSnip.textContent = toolDefs.map((t) => t.name).join(', ');
+        tLayer.appendChild(tSnip);
+
+        const tFull = document.createElement('div');
+        tFull.className = 'cstack-layer-full hidden';
+        tFull.appendChild(buildPre(JSON.stringify(toolDefs.map((t) => t.schema), null, 2)));
+        tLayer.appendChild(tFull);
+
+        wireLayer(tLayer, tFull);
+        layers.appendChild(tLayer);
+      }
+
+      messages.forEach((m, idx) => {
+        const isNew = newFlags[idx];
+        const role = STACK_ROLES[m.role] || { label: m.role || '?', cls: 'system' };
+        const layer = document.createElement('div');
+        layer.className = `cstack-layer cstack-layer--${role.cls} ${isNew ? 'is-new' : 'is-old'}`;
+        layer.dataset.msgIndex = String(idx);
+        layer.tabIndex = 0;
+        layer.setAttribute('role', 'button');
+
+        const roleEl = document.createElement('span');
+        roleEl.className = 'cstack-layer-role';
+        roleEl.textContent = role.label;
+        layer.appendChild(roleEl);
+
+        // Bei Tool-Ergebnissen den zugehörigen Aufruf (Name + Parameter) im
+        // gleichen Stil hinter „Tool-Erg." setzen, damit erkennbar bleibt, zu
+        // welchem Aufruf das Ergebnis gehört — auch als grauer Sockel in einer
+        // Folge-Runde. Lange Parameter werden gekürzt.
+        const toolCall = m.role === 'tool' ? toolCallForResult(messages, m.tool_call_id) : null;
+        if (toolCall) {
+          const callEl = document.createElement('span');
+          callEl.className = 'cstack-layer-role cstack-layer-call';
+          callEl.textContent = `${toolCall.name || 'tool'}(${truncate(compactArgs(toolCall.arguments), 48)})`;
+          layer.appendChild(callEl);
+        }
+
+        // „war schon da" nur, wenn die Nachricht in einer FRÜHEREN Runde bereits
+        // mitgesendet wurde. In Runde 1 (und beim erstmaligen Echo der Modell-
+        // Antwort) zeigt auch eine graue Schicht ihren echten Inhalt.
+        const resent = idx < prevSent;
+        const snip = document.createElement('span');
+        snip.className = 'cstack-layer-snippet';
+        snip.textContent = resent ? 'war schon da' : truncate(layerSnippet(m), 60);
+        layer.appendChild(snip);
+
+        if (isNew) {
+          const badge = document.createElement('span');
+          badge.className = 'cstack-layer-badge';
+          badge.innerHTML = `${plusIconSvg()}<span>neu${m.role === 'tool' ? ' · von App' : ''}</span>`;
+          layer.appendChild(badge);
+          layer.title = STACK_ROLE_HINTS[m.role] || '';
+          layer.setAttribute('aria-label', `Neu in Runde ${i + 1}: ${role.label}. Enter für Volltext.`);
+        } else {
+          layer.title = AMNESIA_TOOLTIP;
+          layer.setAttribute(
+            'aria-label',
+            `${role.label} — war schon da, wird erneut gesendet. Enter für Volltext.`
+          );
+        }
+
+        // Volltext-Drilldown beim Klick.
+        const full = document.createElement('div');
+        full.className = 'cstack-layer-full hidden';
+        full.appendChild(buildMessageBlock(m));
+        layer.appendChild(full);
+
+        wireLayer(layer, full);
+        layers.appendChild(layer);
+      });
+      left.appendChild(layers);
+
+      const bar = document.createElement('div');
+      bar.className = 'cstack-bar';
+      // Wachstumsfaktor nur, wenn die Vorrunde dieselbe Einheit hatte.
+      const factorText = i > 0 && approx === prevApprox ? formatFactor(value, prevValue) : '';
+      const tipBits = [];
+      if (!approx) {
+        tipBits.push(`prompt ${r.prompt} Token`);
+        if (completion) tipBits.push(`completion ${completion} Token`);
+      } else {
+        tipBits.push(`≈ ${value} Zeichen (keine usage-Daten)`);
+      }
+      if (factorText) tipBits.push(factorText.replace('↑ ', ''));
+      bar.title = tipBits.join(' · ');
+      const track = document.createElement('div');
+      track.className = 'cstack-bar-track';
+      const fill = document.createElement('div');
+      fill.className = 'cstack-bar-fill';
+      fill.style.width = `${Math.max(4, Math.round((value / maxValue) * 100))}%`;
+      track.appendChild(fill);
+      bar.appendChild(track);
+      const barLabel = document.createElement('div');
+      barLabel.className = 'cstack-bar-label';
+      barLabel.textContent =
+        `${approx ? '≈ ' : ''}${value} ${approx ? 'Zeichen' : 'Token'} gehen rein` +
+        (factorText ? ` · ${factorText}` : '');
+      bar.appendChild(barLabel);
+      left.appendChild(bar);
+      cols.appendChild(left);
+
+      // Rechts: schmale Modell-Antwort-Karte (rein ≫ raus).
+      const right = document.createElement('div');
+      right.className = 'cstack-resp';
+      const card = document.createElement('div');
+      card.className = 'cstack-resp-card';
+      if (errored) card.classList.add('cstack-resp-card--error');
+      const rHead = document.createElement('div');
+      rHead.className = 'cstack-resp-head';
+      rHead.textContent = 'Modell → Anwendung';
+      card.appendChild(rHead);
+
+      const outEl = document.createElement('div');
+      outEl.className = 'cstack-resp-out';
+      outEl.textContent = completion ? `out ${completion} Token` : 'out —';
+      card.appendChild(outEl);
+
+      if (errored) {
+        const e = document.createElement('div');
+        e.className = 'cstack-resp-kind cstack-resp-kind--error';
+        e.textContent = ex.cancelled ? 'abgebrochen — kam nicht durch' : 'Fehler — kam nicht durch';
+        card.appendChild(e);
+      } else {
+        const calls = ex.response?.toolCalls || [];
+        const text = (ex.response?.text || '').trim();
+        if (calls.length) {
+          const k = document.createElement('div');
+          k.className = 'cstack-resp-kind';
+          k.textContent = 'JSON, KEIN Text:';
+          card.appendChild(k);
+          for (const c of calls) {
+            const code = document.createElement('code');
+            code.className = 'cstack-resp-call';
+            code.textContent = `${c.name || 'tool'}(${truncate(compactArgs(c.arguments), 80)})`;
+            card.appendChild(code);
+          }
+        } else if (text) {
+          const k = document.createElement('div');
+          k.className = 'cstack-resp-kind cstack-resp-kind--text';
+          k.innerHTML = `${checkIconSvg()}<span>Text</span>`;
+          card.appendChild(k);
+          const t = document.createElement('div');
+          t.className = 'cstack-resp-text';
+          t.textContent = truncate(text, 220);
+          card.appendChild(t);
+        } else {
+          const k = document.createElement('div');
+          k.className = 'cstack-resp-kind';
+          k.textContent = '(keine Antwort)';
+          card.appendChild(k);
+        }
+      }
+      right.appendChild(card);
+      cols.appendChild(right);
+      block.appendChild(cols);
+      wrap.appendChild(block);
+
+      // — „Anwendung führt aus"-Streifen zwischen den Runden —
+      const execCalls = ex.response?.toolCalls || [];
+      if (execCalls.length && !errored) {
+        // Zunahme nur ausweisen, wenn die Folge-Runde dieselbe Einheit nutzt —
+        // sonst verglichen wir Token gegen Zeichen.
+        const nextRound = i + 1 < rounds.length ? rounds[i + 1] : null;
+        const added = nextRound && nextRound.approx === approx ? nextRound.value - value : null;
+        execCalls.forEach((c) => {
+          const exec = document.createElement('details');
+          exec.className = 'cstack-exec';
+          const sum = document.createElement('summary');
+          sum.className = 'cstack-exec-summary';
+          const callLabel = `${c.name || 'tool'}(${truncate(compactArgs(c.arguments), 60)})`;
+          const callEl = document.createElement('code');
+          callEl.className = 'cstack-exec-summary-call';
+          callEl.textContent = callLabel;
+          sum.appendChild(callEl);
+          sum.appendChild(document.createTextNode(' — Klick für Ergebnis'));
+          exec.appendChild(sum);
+          const body = document.createElement('div');
+          body.className = 'cstack-exec-body';
+          const call = document.createElement('code');
+          call.className = 'cstack-exec-call';
+          call.textContent = `${c.name || 'tool'}(${truncate(compactArgs(c.arguments), 120)})`;
+          body.appendChild(call);
+          const result = findToolResult(exchanges, c.id, i);
+          const resultLabel = document.createElement('div');
+          resultLabel.className = 'cstack-exec-result-label';
+          resultLabel.textContent = `→ Ergebnis von ${c.name || 'tool'}`;
+          body.appendChild(resultLabel);
+          const pre = document.createElement('pre');
+          pre.className = 'cstack-exec-result';
+          pre.textContent = result == null ? '(nicht protokolliert)' : truncate(prettyMaybeJson(result), 600);
+          body.appendChild(pre);
+          const note = document.createElement('div');
+          note.className = 'cstack-exec-note';
+          note.textContent =
+            added != null && added > 0 && execCalls.length === 1
+              ? `heftet ein · Kontext +${added} ${approx ? 'Zeichen' : 'Token'}`
+              : 'heftet das Ergebnis in den Verlauf ein';
+          body.appendChild(note);
+          exec.appendChild(body);
+          wrap.appendChild(exec);
+        });
+      }
+
+      prevSent = messages.length;
+      prevValue = value;
+      prevApprox = approx;
     });
 
-    wrap.appendChild(svg);
-    wrap.appendChild(detail);
-    select(0);
+    // — Fuß —
+    const foot = document.createElement('p');
+    foot.className = 'cstack-foot';
+    foot.textContent = 'Der graue Sockel kehrt jede Runde wieder — die LLM-API ist zustandslos.';
+    wrap.appendChild(foot);
+
     return wrap;
   }
 
@@ -755,10 +1161,10 @@ export function initRawLogModal({ api, appStore }) {
       runExplanation(turn, explainBtn, explainBtn.querySelector('.raw-log-explain-label'), out);
     });
 
-    // — Sequenzdiagramm (Überblick über das Hin und Her) —
-    det.appendChild(buildSequenceDiagram(turn));
+    // — Kontext-Schichtstapel (Überblick über das Hin und Her) —
+    det.appendChild(buildContextStack(turn));
 
-    // — Details je Runde (eingeklappt) —
+    // — Details je Runde (Volltext, Rohdaten, Stream) —
     const exs = Array.isArray(turn.exchanges) ? turn.exchanges : [];
     const roundsDet = document.createElement('details');
     roundsDet.className = 'raw-log-rounds-wrap';
@@ -776,6 +1182,7 @@ export function initRawLogModal({ api, appStore }) {
     });
     roundsDet.appendChild(rounds);
     det.appendChild(roundsDet);
+
     return det;
   }
 

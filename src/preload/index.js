@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, shell } = require('electron');
+const { contextBridge, ipcRenderer, shell, clipboard } = require('electron');
 const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('../shared/ipc-channels');
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -71,4 +71,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
       /* ignore invalid URL */
     }
   },
+  writeClipboardText: (text) => clipboard.writeText(String(text ?? '')),
 });
