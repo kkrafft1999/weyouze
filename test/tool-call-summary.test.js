@@ -25,6 +25,16 @@ test('summarizeToolCall formats workspace tools with start and done labels', asy
     'Datei README.md gelesen'
   );
   assert.equal(summarizeToolCall('read_file_text', {}, 'start'), 'Datei wird gelesen …');
+  assert.equal(
+    summarizeToolCall('write_file_text', { relative_path: 'notes/todo.md' }, 'start'),
+    'Datei notes/todo.md wird geschrieben …'
+  );
+  assert.equal(
+    summarizeToolCall('write_file_text', { relative_path: 'notes/todo.md' }, 'done'),
+    'Datei notes/todo.md geschrieben'
+  );
+  assert.equal(summarizeToolCall('write_file_text', {}, 'start'), 'Datei wird geschrieben …');
+  assert.equal(summarizeToolCall('write_file_text', {}, 'done'), 'Datei geschrieben');
   assert.equal(summarizeToolCall('debug_wait', {}, 'start'), 'Warte 5 Sekunden …');
   assert.equal(summarizeToolCall('debug_wait', {}, 'done'), '5 Sekunden gewartet');
   assert.equal(summarizeToolCall('debug_wait', { duration_seconds: 1.2 }, 'start'), 'Warte 1,2 Sekunden …');

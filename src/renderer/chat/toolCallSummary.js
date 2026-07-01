@@ -61,6 +61,13 @@ export function summarizeToolCall(toolName, args, phase = 'start') {
     }
     return isDone ? 'Datei gelesen' : 'Datei wird gelesen …';
   }
+  if (toolName === 'write_file_text') {
+    const pathLabel = formatRelativePathForLabel(args?.relative_path);
+    if (pathLabel) {
+      return isDone ? `Datei ${pathLabel} geschrieben` : `Datei ${pathLabel} wird geschrieben …`;
+    }
+    return isDone ? 'Datei geschrieben' : 'Datei wird geschrieben …';
+  }
   if (toolName === 'debug_wait') {
     return formatPauseDurationLabel(resolveDebugWaitMs(args), phase);
   }

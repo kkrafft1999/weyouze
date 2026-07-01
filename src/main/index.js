@@ -94,6 +94,36 @@ const WORKSPACE_TOOLS = [
   },
 ];
 
+// Nur aktiv, wenn ui-preferences.json → allowWorkspaceWrite === true (Default: aus).
+// Getrennt von WORKSPACE_TOOLS, damit chat-handlers.js die Tool-Liste je Anfrage
+// abhaengig von dieser Einstellung zusammenstellen kann (Einstellungen › Tools).
+const WRITE_WORKSPACE_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'write_file_text',
+      description:
+        'Erstellt oder überschreibt eine Textdatei (UTF-8) innerhalb des geöffneten Projektordners. ' +
+        'Fehlende Zwischenordner werden automatisch angelegt. Überschreibt vorhandenen Inhalt vollständig. ' +
+        'Maximale Inhaltsgröße: 2 MB.',
+      parameters: {
+        type: 'object',
+        properties: {
+          relative_path: {
+            type: 'string',
+            description: 'Relativer Pfad zur Zieldatei, z. B. "src/notes.md" oder "docs/neu.md".',
+          },
+          content: {
+            type: 'string',
+            description: 'Vollständiger neuer Textinhalt der Datei.',
+          },
+        },
+        required: ['relative_path', 'content'],
+      },
+    },
+  },
+];
+
 const storage = createStorageService({
   app,
   safeStorage,
@@ -109,6 +139,7 @@ const fsService = createFsService({
   fs,
   path,
   maxReadFileBytes: LIMITS.MAX_READ_FILE_BYTES,
+  maxWriteFileBytes: LIMITS.MAX_WRITE_FILE_BYTES,
 });
 
 const whisperService = createWhisperService({
@@ -150,6 +181,7 @@ registerChatHandlers({
   defaultProviderId: DEFAULT_PROVIDER,
   maxToolRounds: LIMITS.MAX_TOOL_ROUNDS,
   workspaceTools: WORKSPACE_TOOLS,
+  writeWorkspaceTools: WRITE_WORKSPACE_TOOLS,
   REQ,
   PUSH,
 });

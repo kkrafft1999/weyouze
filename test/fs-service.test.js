@@ -6,7 +6,7 @@ const path = require('path');
 const { createFsService } = require('../src/main/services/fs-service');
 
 function makeFsService() {
-  return createFsService({ fs, path, maxReadFileBytes: 1024 * 1024 });
+  return createFsService({ fs, path, maxReadFileBytes: 1024 * 1024, maxWriteFileBytes: 1024 * 1024 });
 }
 
 test('resolveWorkspacePath accepts paths inside workspace', () => {
@@ -68,6 +68,121 @@ test('runWorkspaceTool debug_wait waits for the requested duration', async () =>
   assert.equal(out.waited_ms, 600);
   assert.equal(out.waited_seconds, 0.6);
   assert.ok(elapsed >= 550);
+});
+
+test('runWorkspaceTool write_file_text is disabled unless allowWrite is set', async () => {
+  const svc = makeFsService();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+
+  const denied = JSON.parse(
+    await svc.runWorkspaceTool(
+      'write_file_text',
+      { relative_path: 'note.txt', content: 'hi' },
+      tmpRoot
+    )
+  );
+  assert.match(denied.error, /Schreibzugriff ist deaktiviert/);
+  await assert.rejects(fs.access(path.join(tmpRoot, 'note.txt')));
+
+  await fs.rm(tmpRoot, { recursive: true, force: true });
+});
+
+test('runWorkspaceTool write_file_text creates new files and reports created:true', async () => {
+  const svc = makeFsService();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+
+  const out = JSON.parse(
+    await svc.runWorkspaceTool(
+      'write_file_text',
+      { relative_path: 'nested/new/note.txt', content: 'hello world' },
+      tmpRoot,
+      { allowWrite: true }
+    )
+  );
+  assert.equal(out.created, true);
+  assert.equal(out.overwritten, false);
+  assert.equal(out.bytes_written, Buffer.byteLength('hello world', 'utf8'));
+  const written = await fs.readFile(path.join(tmpRoot, 'nested/new/note.txt'), 'utf8');
+  assert.equal(written, 'hello world');
+
+  await fs.rm(tmpRoot, { recursive: true, force: true });
+});
+
+test('runWorkspaceTool write_file_text overwrites existing files and reports overwritten:true', async () => {
+  const svc = makeFsService();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  await fs.writeFile(path.join(tmpRoot, 'existing.txt'), 'old', 'utf8');
+
+  const out = JSON.parse(
+    await svc.runWorkspaceTool(
+      'write_file_text',
+      { relative_path: 'existing.txt', content: 'new content' },
+      tmpRoot,
+      { allowWrite: true }
+    )
+  );
+  assert.equal(out.created, false);
+  assert.equal(out.overwritten, true);
+  const written = await fs.readFile(path.join(tmpRoot, 'existing.txt'), 'utf8');
+  assert.equal(written, 'new content');
+
+  await fs.rm(tmpRoot, { recursive: true, force: true });
+});
+
+test('runWorkspaceTool write_file_text respects workspace bounds and rejects directory targets', async () => {
+  const svc = makeFsService();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  await fs.mkdir(path.join(tmpRoot, 'adir'));
+
+  const outside = JSON.parse(
+    await svc.runWorkspaceTool(
+      'write_file_text',
+      { relative_path: '../outside.txt', content: 'x' },
+      tmpRoot,
+      { allowWrite: true }
+    )
+  );
+  assert.match(outside.error, /außerhalb/);
+
+  const isDir = JSON.parse(
+    await svc.runWorkspaceTool(
+      'write_file_text',
+      { relative_path: 'adir', content: 'x' },
+      tmpRoot,
+      { allowWrite: true }
+    )
+  );
+  assert.match(isDir.error, /Ordner/);
+
+  const missingContent = JSON.parse(
+    await svc.runWorkspaceTool(
+      'write_file_text',
+      { relative_path: 'a.txt' },
+      tmpRoot,
+      { allowWrite: true }
+    )
+  );
+  assert.match(missingContent.error, /content/);
+
+  await fs.rm(tmpRoot, { recursive: true, force: true });
+});
+
+test('runWorkspaceTool write_file_text enforces the max content size', async () => {
+  const svc = createFsService({ fs, path, maxReadFileBytes: 1024, maxWriteFileBytes: 10 });
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+
+  const out = JSON.parse(
+    await svc.runWorkspaceTool(
+      'write_file_text',
+      { relative_path: 'big.txt', content: 'this is definitely more than ten bytes' },
+      tmpRoot,
+      { allowWrite: true }
+    )
+  );
+  assert.match(out.error, /zu groß/);
+  await assert.rejects(fs.access(path.join(tmpRoot, 'big.txt')));
+
+  await fs.rm(tmpRoot, { recursive: true, force: true });
 });
 
 test('containsPath accepts the root itself and children, rejects siblings and traversal', () => {

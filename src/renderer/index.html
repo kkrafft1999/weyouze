@@ -310,6 +310,17 @@
               <p class="settings-placeholder-card__text">
                 Globale Schalter (z. B. Netzwerkzugriff für Tools, Signatur-Anforderungen) lassen sich hier bündeln.
               </p>
+              <div class="modal-checkbox-row">
+                <label class="modal-checkbox">
+                  <input type="checkbox" id="input-allow-workspace-write" />
+                  <span>KI darf Dateien im Projektordner erstellen und bearbeiten</span>
+                </label>
+                <p class="modal-hint">
+                  Aktiviert das Tool <code lang="en">write_file_text</code>: Das Modell kann Dateien im geöffneten
+                  Ordner anlegen oder komplett überschreiben (max. 2 MB je Datei). Standardmäßig aus — ohne diese
+                  Option kann die KI Dateien nur lesen.
+                </p>
+              </div>
             </div>
           </section>
 
