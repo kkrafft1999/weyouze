@@ -1,0 +1,70 @@
+name: 🐛 Bug Report
+description: Etwas funktioniert nicht wie erwartet.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Was ist passiert?
+      description: Kurze Beschreibung des Problems.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zur Reproduktion
+      description: Wie kann man den Bug nachstellen?
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Erwartetes Verhalten
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: App-Version
+      placeholder: z. B. 1.0.1 (siehe Einstellungen › Über)
+    validations:
+      required: false
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Betriebssystem
+      options:
+        - macOS (Apple Silicon)
+        - Windows
+        - Sonstiges
+    validations:
+      required: false
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Betroffener Provider (falls relevant)
+      options:
+        - OpenAI
+        - Anthropic
+        - Google (Gemini)
+        - Ollama
+        - Nicht relevant
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Screenshots
+      description: Fehlermeldungen, Konsolen-Output oder Screenshots, falls vorhanden.
+    validations:
+      required: false

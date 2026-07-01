@@ -1,0 +1,41 @@
+name: 💡 Feature Request
+description: Idee für ein neues Feature, Skill oder Tool.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Welches Problem / welcher Use Case steckt dahinter?
+      description: Kontext, warum das gebraucht wird (siehe auch die Vision im README).
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Vorschlag
+      description: Wie könnte die Lösung aussehen?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Bereich
+      options:
+        - Chat / Provider
+        - Workspace-Tools
+        - Skills-Konzept
+        - UI / UX
+        - Build & Release
+        - Dokumentation
+        - Sonstiges
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativen / bereits Erwogenes
+    validations:
+      required: false
