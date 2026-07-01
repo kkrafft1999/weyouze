@@ -10,8 +10,14 @@ Status einzelner Issues lässt sich im zugehörigen
 [GitHub Project](https://github.com/kkrafft1999/weyouze/projects) als
 Kanban-Board verfolgen (Spalten: *Backlog* → *To do* → *In Progress* → *Done*).
 
+Solange eine Aufgabe noch nicht als Issue angelegt ist (z. B. weil gerade
+kein Schreibzugriff auf GitHub besteht), wird sie zwischenzeitlich in
+[`docs/task.md`](./task.md) gesammelt und beim Anlegen des Issues dort
+wieder entfernt.
+
 > Kurz gesagt: **Diese Datei = Wohin geht's grundsätzlich. Issues = Was ist
-> gerade konkret zu tun.**
+> gerade konkret zu tun. `task.md` = Warteschlange für Aufgaben, die noch
+> kein Issue sind.**
 
 ## ✅ Bereits umgesetzt
 
