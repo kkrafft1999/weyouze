@@ -18,21 +18,9 @@ Der Name betont den Plattform-Charakter: *"Wir nutzen alles"* – jedes Modell, 
 
 > Status: **persönliches Hobby- / Experimentier-Projekt.** Schnittstellen, UI und Konfiguration können sich jederzeit ändern.
 
-## Aktueller Stand
+## Aktueller Stand & Roadmap
 
-Bereits umgesetzt:
-
-- 🗂️ **Datei-Explorer** für einen frei wählbaren Projektordner inkl. Verlauf zuletzt geöffneter Ordner
-- 💬 **Chat mit Workspace-Kontext** – das Modell kann Dateien lesen, Verzeichnisse listen und im Projekt arbeiten
-- 🔌 **Mehrere LLM-Provider:** OpenAI, Anthropic, Google (Gemini), Ollama (lokal)
-- 🔐 **API-Keys lokal & verschlüsselt** über Electrons `safeStorage`
-- 🧰 **Tool-Use-Loop** mit eingebauten Workspace-Tools (`list_directory`, `read_file_text`, optional `write_file_text`, …)
-- 🖥️ Builds für **macOS (Apple Silicon)** und **Windows** über Electron Forge
-
-In Arbeit / geplant (siehe Vision):
-
-- 🧩 Erweiterbares **Skill-** und **Tool-Konzept** (Konfiguration + dynamisches Laden)
-- 🎯 **Use-Case-Profile**, die Plattform + Skills + Tools zu einer dedizierten Anwendung bündeln
+Den aktuellen Stand, was gerade in Arbeit ist und was als Nächstes geplant ist, gibt es in [`docs/roadmap.md`](./docs/roadmap.md). Konkrete Aufgaben (Bugs, einzelne Features) werden als [GitHub Issues](https://github.com/kkrafft1999/weyouze/issues) getrackt, der Fortschritt im zugehörigen [GitHub Project](https://github.com/kkrafft1999/weyouze/projects) (Kanban-Board).
 
 ## Tech-Stack
 
