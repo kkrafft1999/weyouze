@@ -6,6 +6,7 @@ const LIMITS = Object.freeze({
   MAX_FOLDER_HISTORY: 10,
   MAX_TOOL_ROUNDS: 14,
   MAX_READ_FILE_BYTES: 2 * 1024 * 1024,
+  MAX_WRITE_FILE_BYTES: 2 * 1024 * 1024,
 });
 
 module.exports = { LIMITS };

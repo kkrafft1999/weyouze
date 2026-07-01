@@ -150,6 +150,7 @@ export function initChatStream({
   activeProviderConfigured,
   syncLiveDot,
   onRawLogChanged,
+  onWorkspaceFileWritten,
 }) {
   const chatMessagesEl = document.getElementById('chat-messages');
   const chatInput = document.getElementById('chat-input');
@@ -550,6 +551,13 @@ export function initChatStream({
               setToolLineDone(target, line);
               if (target && Array.isArray(last.toolTrace) && last.toolTrace.length > 0) {
                 last.toolTrace[last.toolTrace.length - 1] = line;
+              }
+              if (
+                payload?.tool === 'write_file_text'
+                && typeof payload?.args?.relative_path === 'string'
+                && typeof onWorkspaceFileWritten === 'function'
+              ) {
+                onWorkspaceFileWritten(payload.args.relative_path);
               }
             } else {
               if (!Array.isArray(last.toolTrace)) last.toolTrace = [];

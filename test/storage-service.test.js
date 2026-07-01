@@ -348,6 +348,23 @@ test('readUIPrefs validates and clamps sidebarWidth and chatPanelWidth', async (
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
+test('readUIPrefs defaults allowWorkspaceWrite to false and round-trips true', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-storage-'));
+  const storage = makeStorage(tmpDir);
+
+  let prefs = await storage.readUIPrefs();
+  assert.equal(prefs.allowWorkspaceWrite, false);
+
+  await storage.updateUIPrefs(async (out) => {
+    out.allowWorkspaceWrite = true;
+    return out;
+  });
+  prefs = await storage.readUIPrefs();
+  assert.equal(prefs.allowWorkspaceWrite, true);
+
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
 test('readChatHistoryStore falls back to plaintext when encryption unavailable', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-storage-'));
   const storage = makeStorage(tmpDir);

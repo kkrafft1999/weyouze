@@ -49,6 +49,7 @@ export function initSettingsModal(deps) {
   const inputGlobalSystemPrompt = document.getElementById('input-global-system-prompt');
   const selectAppLocale = document.getElementById('select-app-locale');
   const inputMaxToolRounds = document.getElementById('input-max-tool-rounds');
+  const inputAllowWorkspaceWrite = document.getElementById('input-allow-workspace-write');
   const modalEncryptionWarning = document.getElementById('modal-encryption-warning');
   const modalSaveError = document.getElementById('modal-save-error');
   const btnChatSettings = document.getElementById('btn-chat-settings');
@@ -443,10 +444,12 @@ export function initSettingsModal(deps) {
           ? up.maxToolRounds
           : DEFAULT_MAX_TOOL_ROUNDS;
       if (inputMaxToolRounds) inputMaxToolRounds.value = String(mtr);
+      if (inputAllowWorkspaceWrite) inputAllowWorkspaceWrite.checked = up.allowWorkspaceWrite === true;
     } catch {
       inputGlobalSystemPrompt.value = '';
       selectAppLocale.value = 'de';
       if (inputMaxToolRounds) inputMaxToolRounds.value = String(DEFAULT_MAX_TOOL_ROUNDS);
+      if (inputAllowWorkspaceWrite) inputAllowWorkspaceWrite.checked = false;
     }
     renderDraftPresetList();
     renderProviderSelect();
@@ -605,6 +608,7 @@ export function initSettingsModal(deps) {
             const n = parseInt(inputMaxToolRounds?.value || '', 10);
             return Number.isFinite(n) ? n : DEFAULT_MAX_TOOL_ROUNDS;
           })(),
+          allowWorkspaceWrite: !!inputAllowWorkspaceWrite?.checked,
         },
       });
       if (!res?.ok) {

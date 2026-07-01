@@ -350,6 +350,9 @@ function createStorageService({
         contentPaneVisible: data.contentPaneVisible !== false,
         baseSystemPrompt,
         appLocale,
+        // Default AUS: das Modell darf ohne explizite Zustimmung keine Dateien
+        // schreiben (Einstellungen › Tools).
+        allowWorkspaceWrite: data.allowWorkspaceWrite === true,
         ...(typeof maxToolRounds === 'number' ? { maxToolRounds } : {}),
         ...(typeof sidebarWidth === 'number' ? { sidebarWidth } : {}),
         ...(typeof chatPanelWidth === 'number' ? { chatPanelWidth } : {}),
@@ -357,7 +360,12 @@ function createStorageService({
         ...(typeof ignoredUpdateVersion === 'string' ? { ignoredUpdateVersion } : {}),
       };
     } catch {
-      return { contentPaneVisible: true, baseSystemPrompt: '', appLocale: 'de' };
+      return {
+        contentPaneVisible: true,
+        baseSystemPrompt: '',
+        appLocale: 'de',
+        allowWorkspaceWrite: false,
+      };
     }
   }
 

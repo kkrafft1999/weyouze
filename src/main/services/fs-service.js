@@ -1,8 +1,9 @@
 const { resolveDebugWaitMs } = require('../debug-wait');
 const { sleepAbortable } = require('../providers/stream-helpers');
 
-function createFsService({ fs, path, maxReadFileBytes }) {
+function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
   const MAX_READ_FILE_BYTES = maxReadFileBytes;
+  const MAX_WRITE_FILE_BYTES = maxWriteFileBytes || maxReadFileBytes;
 
   /** true, wenn candidate (aufgelöst) innerhalb von root liegt — Root selbst zählt mit. */
   function containsPath(root, candidate) {
@@ -100,6 +101,54 @@ function createFsService({ fs, path, maxReadFileBytes }) {
           size_bytes: st.size,
           truncated,
           content: text,
+        });
+      } catch (e) {
+        return JSON.stringify({ error: e.message });
+      }
+    }
+
+    if (toolName === 'write_file_text') {
+      if (!options.allowWrite) {
+        return JSON.stringify({
+          error: 'Schreibzugriff ist deaktiviert. Aktivierbar unter Einstellungen › Tools.',
+        });
+      }
+      const rel = typeof args.relative_path === 'string' ? args.relative_path.trim() : '';
+      if (!rel) {
+        return JSON.stringify({ error: 'relative_path ist erforderlich.' });
+      }
+      if (typeof args.content !== 'string') {
+        return JSON.stringify({ error: 'content (Text) ist erforderlich.' });
+      }
+      const byteLength = Buffer.byteLength(args.content, 'utf8');
+      if (byteLength > MAX_WRITE_FILE_BYTES) {
+        return JSON.stringify({
+          error: `Inhalt zu groß (>${MAX_WRITE_FILE_BYTES} Bytes). Bitte kleiner aufteilen.`,
+        });
+      }
+      const { absPath, error } = resolveWorkspacePath(workspaceRoot, rel);
+      if (error) return JSON.stringify({ error });
+      if (path.resolve(absPath) === path.resolve(workspaceRoot)) {
+        return JSON.stringify({ error: 'Der Projektordner selbst kann nicht als Datei beschrieben werden.' });
+      }
+      try {
+        let existed = false;
+        try {
+          const st = await fs.stat(absPath);
+          if (st.isDirectory()) {
+            return JSON.stringify({ error: 'Pfad ist ein Ordner, keine Datei.' });
+          }
+          existed = true;
+        } catch {
+          existed = false;
+        }
+        await fs.mkdir(path.dirname(absPath), { recursive: true });
+        await fs.writeFile(absPath, args.content, 'utf8');
+        return JSON.stringify({
+          relative_path: rel,
+          created: !existed,
+          overwritten: existed,
+          bytes_written: byteLength,
         });
       } catch (e) {
         return JSON.stringify({ error: e.message });

@@ -466,6 +466,31 @@ export function initFileTree(deps) {
     await refreshFolder(parentDir);
   }
 
+  // Wird nach einem write_file_text-Tool-Aufruf (KI hat eine Datei angelegt/
+  // überschrieben) aus app.js gerufen, damit Baum und Vorschau ohne manuelles
+  // Neuladen den aktuellen Stand zeigen.
+  async function notifyExternalFileWrite(relativePath) {
+    if (!appStore.rootPath || typeof relativePath !== 'string') return;
+    const rel = relativePath.trim().replace(/^\.\/?/, '').replace(/^\/+/, '');
+    if (!rel) return;
+    const rootPath = appStore.rootPath.replace(/\/$/, '');
+    const absPath = `${rootPath}/${rel}`;
+
+    await refreshParentOf(absPath);
+
+    if (appStore.selectedPath === absPath && !appStore.selectedIsDirectory) {
+      const result = await api.readFile(absPath);
+      if (!result.error) {
+        welcomeEl.classList.add('hidden');
+        filePreview.classList.remove('hidden');
+        fileInfo.classList.add('hidden');
+        previewFilename.textContent = absPath.split('/').pop() || absPath;
+        previewMeta.textContent = formatSize(result.size);
+        previewContent.textContent = result.content;
+      }
+    }
+  }
+
   async function refreshFolder(dirPath) {
     if (dirPath === appStore.rootPath) {
       const expandedBefore = collectExpandedFolderPaths();
@@ -574,5 +599,6 @@ export function initFileTree(deps) {
     refreshWelcomeRecent,
     setHistoryDrawerCloseOnEscape,
     closeFolderHistoryMenu,
+    notifyExternalFileWrite,
   };
 }

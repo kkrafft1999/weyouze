@@ -186,6 +186,7 @@ function registerSettingsHandlers({
       || typeof uiPatch.sidebarWidth === 'number'
       || typeof uiPatch.chatPanelWidth === 'number'
       || typeof uiPatch.historyCharLimit === 'number'
+      || typeof uiPatch.allowWorkspaceWrite === 'boolean'
     ) {
       await storage.updateUIPrefs(async (out) => {
         if (typeof uiPatch.baseSystemPrompt === 'string') {
@@ -209,6 +210,9 @@ function registerSettingsHandlers({
         const historyCharLimit = storage.clampHistoryCharLimit(uiPatch.historyCharLimit);
         if (typeof historyCharLimit === 'number') {
           out.historyCharLimit = historyCharLimit;
+        }
+        if (typeof uiPatch.allowWorkspaceWrite === 'boolean') {
+          out.allowWorkspaceWrite = uiPatch.allowWorkspaceWrite;
         }
         return out;
       });
@@ -296,6 +300,9 @@ function registerSettingsHandlers({
       const historyCharLimit = storage.clampHistoryCharLimit(patch.historyCharLimit);
       if (typeof historyCharLimit === 'number') {
         out.historyCharLimit = historyCharLimit;
+      }
+      if (typeof patch.allowWorkspaceWrite === 'boolean') {
+        out.allowWorkspaceWrite = patch.allowWorkspaceWrite;
       }
       return out;
     });

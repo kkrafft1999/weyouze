@@ -104,6 +104,7 @@ const chatStream = initChatStream({
   activeProviderConfigured: () => modelPicker.activeProviderConfigured(),
   syncLiveDot: () => modelPicker.syncLiveDot(),
   onRawLogChanged: () => rawLogModal.syncBadge(),
+  onWorkspaceFileWritten: (relativePath) => fileTree.notifyExternalFileWrite(relativePath),
 });
 
 const chatHistory = initChatHistoryDrawer({

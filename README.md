@@ -26,7 +26,7 @@ Bereits umgesetzt:
 - 💬 **Chat mit Workspace-Kontext** – das Modell kann Dateien lesen, Verzeichnisse listen und im Projekt arbeiten
 - 🔌 **Mehrere LLM-Provider:** OpenAI, Anthropic, Google (Gemini), Ollama (lokal)
 - 🔐 **API-Keys lokal & verschlüsselt** über Electrons `safeStorage`
-- 🧰 **Tool-Use-Loop** mit eingebauten Workspace-Tools (`list_directory`, `read_file_text`, …)
+- 🧰 **Tool-Use-Loop** mit eingebauten Workspace-Tools (`list_directory`, `read_file_text`, optional `write_file_text`, …)
 - 🖥️ Builds für **macOS (Apple Silicon)** und **Windows** über Electron Forge
 
 In Arbeit / geplant (siehe Vision):
@@ -85,8 +85,11 @@ Die meisten Einstellungen (Provider, Modelle, System-Prompt, Sprache) pflegst du
 | ------------------ | -------------------------------------------------------------------------- | --------- | ---------------- |
 | `maxToolRounds`    | Maximale Tool-Runden pro Chat-Anfrage (auch in der App einstellbar)         | 14        | 1 – 500          |
 | `historyCharLimit` | Zeichen-Budget für den an den Provider gesendeten Chat-Verlauf (siehe unten)| 200 000   | 4 000 – 2 000 000 |
+| `allowWorkspaceWrite` | Schaltet das Tool `write_file_text` frei (Einstellungen › Tools); ohne diese Option kann das Modell Dateien nur lesen | `false` | – |
 
 **Verlaufs-Trimming (`historyCharLimit`):** Damit lange Sessions nicht ins Token-Limit des Providers laufen, wird der Verlauf pro Anfrage budgetiert (Heuristik: 1 Token ≈ 4 Zeichen). Ältere Nachrichten jenseits des Budgets werden weggelassen, und große Tool-Ausgaben früherer Tool-Runden (z. B. gelesene Dateien) werden auf einen Platzhalter gekürzt. Die aktuelle Frage, alle User-Nachrichten im Fenster und die Tool-Ausgaben der jüngsten Runde bleiben immer vollständig erhalten.
+
+**Schreibzugriff (`write_file_text`):** Standardmäßig kann das Modell im Workspace nur lesen. Wird `allowWorkspaceWrite` aktiviert, kommt zusätzlich `write_file_text` zum Einsatz — das Modell kann damit Textdateien im geöffneten Projektordner anlegen oder komplett überschreiben (max. 2 MB, fehlende Zwischenordner werden automatisch erzeugt). Der Zugriff bleibt wie bei den Lese-Tools strikt auf den Projektordner beschränkt.
 
 ## Projektstruktur
 
@@ -111,6 +114,7 @@ Die meisten Einstellungen (Provider, Modelle, System-Prompt, Sprache) pflegst du
 
 - API-Keys werden **lokal** gespeichert und nicht an Dritte weitergegeben.
 - Der Workspace-Zugriff der Tools ist auf den jeweils geöffneten Projektordner beschränkt.
+- Schreibzugriff (`write_file_text`) ist standardmäßig **deaktiviert** und muss bewusst unter Einstellungen › Tools aktiviert werden.
 - Trotzdem gilt: lass das Modell nichts in Ordnern arbeiten, in denen sensible Daten liegen, denen du nicht traust.
 
 ## Lizenz
