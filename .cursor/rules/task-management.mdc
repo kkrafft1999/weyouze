@@ -1,5 +1,5 @@
 ---
-description: Task-Management-Konventionen für Weyouze — wo Aufgaben erfasst werden (GitHub Issues + docs/roadmap.md) und wie auf Fragen wie "Was steht an?" geantwortet wird. Immer anwenden, unabhängig vom bearbeiteten Dateityp.
+description: Task-Management-Konventionen für Weyouze — wo Aufgaben erfasst werden (GitHub Issues + docs/roadmap.md + docs/task.md) und wie auf Fragen wie "Was steht an?" geantwortet wird. Immer anwenden, unabhängig vom bearbeiteten Dateityp.
 alwaysApply: true
 ---
 
@@ -18,8 +18,27 @@ Für dieses Projekt gilt folgende Konvention (Entscheidung vom 2026-07-01, siehe
   Nächstes geplant, was sind spätere Ideen) steht in
   [`docs/roadmap.md`](../../docs/roadmap.md). Diese Datei wird nur bei
   größeren Verschiebungen aktualisiert, nicht für jede einzelne Aufgabe.
+- Solange Aufgaben noch **nicht** als GitHub Issue existieren (z. B. weil
+  `gh` in der aktuellen Umgebung nur lesend nutzbar ist), werden sie
+  vorübergehend in [`docs/task.md`](../../docs/task.md) gesammelt — siehe
+  eigener Abschnitt „Zwischenablage `docs/task.md`“ unten (Entscheidung vom
+  2026-07-01).
 - Bewusst **kein** externes Tool (Linear/Trello/Notion/Jira) — alles bleibt
-  in GitHub, da Solo-/Hobby-Projekt und bereits vollständig GitHub-basiert.
+  in GitHub bzw. im Repo, da Solo-/Hobby-Projekt und bereits vollständig
+  GitHub-basiert.
+
+## Zwischenablage `docs/task.md`
+
+- **Zweck:** Aufgaben/Ideen zwischenspeichern, die schon konkret genug für
+  ein GitHub Issue sind, aber (noch) nicht als Issue angelegt wurden.
+- **Regelmäßig synchronisieren**: Vor größeren Antworten zum Thema
+  Aufgaben/Backlog mit den GitHub Issues abgleichen (`gh issue list
+  --repo kkrafft1999/weyouze --state all`).
+- **Sobald ein Eintrag als GitHub Issue existiert**, wird der Eintrag aus
+  `docs/task.md` **entfernt** — das Issue ist danach die einzige Quelle der
+  Wahrheit, keine Duplikate pflegen.
+- Details zum genauen Ablauf stehen direkt in der Kopfzeile von
+  `docs/task.md`.
 
 ## Verhalten bei Fragen wie "Was steht an?", "Was ist der aktuelle Stand?", "Backlog?"
 
@@ -27,21 +46,25 @@ Für dieses Projekt gilt folgende Konvention (Entscheidung vom 2026-07-01, siehe
    ```sh
    gh issue list --repo kkrafft1999/weyouze --state open
    ```
-2. **`docs/roadmap.md` lesen** für die grobe Richtung (Abschnitte „Jetzt / als
+2. **`docs/task.md` lesen** für Aufgaben, die schon formuliert, aber noch
+   nicht als Issue angelegt sind.
+3. **`docs/roadmap.md` lesen** für die grobe Richtung (Abschnitte „Jetzt / als
    Nächstes“ und „Später / Ideen“).
-3. Beide Quellen zusammenfassen: offene Issues = konkrete nächste Schritte,
-   Roadmap = übergeordneter Kontext dazu.
-4. Falls es weder offene Issues noch relevante Roadmap-Einträge gibt, das
-   explizit sagen statt etwas zu erfinden.
+4. Alle drei Quellen zusammenfassen: offene Issues + `task.md`-Einträge =
+   konkrete nächste Schritte, Roadmap = übergeordneter Kontext dazu.
+5. Falls keine der drei Quellen etwas liefert, das explizit sagen statt
+   etwas zu erfinden.
 
 ## Verhalten bei neuen Aufgaben/Ideen im Gespräch
 
-- Wenn der Nutzer eine **konkrete Aufgabe oder einen Bug** nennt: anbieten,
-  dafür ein GitHub Issue anzulegen (passendes Template nutzen). Da `gh` in
-  dieser Umgebung nur lesend nutzbar ist, kann das Issue nicht direkt per
-  CLI erstellt werden — stattdessen den fertigen Issue-Text/Link zum
-  manuellen Anlegen vorschlagen, bzw. den Nutzer bitten, es selbst
-  anzulegen, wenn kein Schreibzugriff besteht.
+- Wenn der Nutzer eine **konkrete Aufgabe oder einen Bug** nennt: fertigen
+  Issue-Text (passendes Template) formulieren und als neuen Eintrag in
+  `docs/task.md` ablegen. Da `gh` in dieser Umgebung nur lesend nutzbar
+  ist, kann das Issue nicht direkt per CLI erstellt werden — zusätzlich
+  weiterhin den fertigen Issue-Text/Link zum manuellen Anlegen anbieten.
+  Sobald das Issue tatsächlich existiert (z. B. weil der Nutzer es
+  manuell angelegt hat oder ein Agent mit Schreibzugriff es erstellt hat),
+  den Eintrag aus `docs/task.md` wieder entfernen.
 - Wenn der Nutzer eine **größere/grundsätzliche Idee** nennt (Epic-Level,
   passt eher zur Vision als zu einer einzelnen Aufgabe): Ergänzung in
-  `docs/roadmap.md` vorschlagen statt (nur) ein Issue.
+  `docs/roadmap.md` vorschlagen statt (nur) ein Issue/Task.
