@@ -1,0 +1,47 @@
+---
+description: Task-Management-Konventionen für Weyouze — wo Aufgaben erfasst werden (GitHub Issues + docs/roadmap.md) und wie auf Fragen wie "Was steht an?" geantwortet wird. Immer anwenden, unabhängig vom bearbeiteten Dateityp.
+alwaysApply: true
+---
+
+# Task-Management
+
+Für dieses Projekt gilt folgende Konvention (Entscheidung vom 2026-07-01, siehe PR #16):
+
+- **Konkrete, abarbeitbare Aufgaben** (Bugs, einzelne Features, Tasks) werden als
+  **GitHub Issues** erfasst — https://github.com/kkrafft1999/weyouze/issues.
+  Vorlagen: `.github/ISSUE_TEMPLATE/bug_report.yml` (🐛) und
+  `.github/ISSUE_TEMPLATE/feature_request.yml` (💡).
+- Der **Fortschritt** einzelner Issues wird in einem **GitHub Project**
+  (Kanban-Board: Backlog → To do → In Progress → Done) verfolgt —
+  https://github.com/kkrafft1999/weyouze/projects.
+- Die **grobe Richtung / der Fahrplan** (was ist umgesetzt, was ist als
+  Nächstes geplant, was sind spätere Ideen) steht in
+  [`docs/roadmap.md`](../../docs/roadmap.md). Diese Datei wird nur bei
+  größeren Verschiebungen aktualisiert, nicht für jede einzelne Aufgabe.
+- Bewusst **kein** externes Tool (Linear/Trello/Notion/Jira) — alles bleibt
+  in GitHub, da Solo-/Hobby-Projekt und bereits vollständig GitHub-basiert.
+
+## Verhalten bei Fragen wie "Was steht an?", "Was ist der aktuelle Stand?", "Backlog?"
+
+1. **GitHub Issues abfragen** (offene Tasks), z. B. mit dem `gh` CLI (read-only):
+   ```sh
+   gh issue list --repo kkrafft1999/weyouze --state open
+   ```
+2. **`docs/roadmap.md` lesen** für die grobe Richtung (Abschnitte „Jetzt / als
+   Nächstes“ und „Später / Ideen“).
+3. Beide Quellen zusammenfassen: offene Issues = konkrete nächste Schritte,
+   Roadmap = übergeordneter Kontext dazu.
+4. Falls es weder offene Issues noch relevante Roadmap-Einträge gibt, das
+   explizit sagen statt etwas zu erfinden.
+
+## Verhalten bei neuen Aufgaben/Ideen im Gespräch
+
+- Wenn der Nutzer eine **konkrete Aufgabe oder einen Bug** nennt: anbieten,
+  dafür ein GitHub Issue anzulegen (passendes Template nutzen). Da `gh` in
+  dieser Umgebung nur lesend nutzbar ist, kann das Issue nicht direkt per
+  CLI erstellt werden — stattdessen den fertigen Issue-Text/Link zum
+  manuellen Anlegen vorschlagen, bzw. den Nutzer bitten, es selbst
+  anzulegen, wenn kein Schreibzugriff besteht.
+- Wenn der Nutzer eine **größere/grundsätzliche Idee** nennt (Epic-Level,
+  passt eher zur Vision als zu einer einzelnen Aufgabe): Ergänzung in
+  `docs/roadmap.md` vorschlagen statt (nur) ein Issue.
