@@ -33,27 +33,5 @@ existieren — z. B. weil in der aktuellen Arbeitsumgebung nur lesender
 
 ## Offene Einträge (noch kein GitHub Issue)
 
-### Website für weyouze.dev: Produkt bewerben & Download anbieten
-
-- **Problem/Use Case:** Aktuell gibt es keinen öffentlichen, zentralen Ort,
-  an dem Interessenten Weyouze Anything kennenlernen können. Die Domain
-  `weyouze.dev` ist dafür vorgesehen, wird aber noch nicht genutzt.
-  Downloads liegen bisher nur auf der GitHub-Releases-Seite, was für
-  Außenwirkung/Marketing wenig einladend ist und keine Produktvorstellung
-  (Vision, Screenshots, Use Cases) bietet.
-- **Vorschlag:** Landingpage unter `weyouze.dev` mit
-  - kurzer Produktbeschreibung/Vision (siehe README),
-  - Screenshots bzw. kurzer Demo,
-  - Download-Buttons für die aktuellen Builds (macOS/Windows), z. B.
-    verlinkt auf die neuesten GitHub Releases,
-  - optional: Link zu Changelog/Release-Notes.
-
-  Technischer Ansatz (statische Seite, Framework, Hosting) ist offen und
-  kann bei Bedarf in einem eigenen Umsetzungs-Issue konkretisiert werden.
-- **Bereich:** Sonstiges
-- **Alternativen:** Nur die GitHub-Releases-Seite als Download-Ort nutzen
-  (aktueller Zustand) — funktional ausreichend, aber ungeeignet zur
-  Produktbewerbung nach außen.
-- **Label:** `enhancement`
-- **Status:** Issue-Text vorbereitet (2026-07-01), noch nicht als GitHub
-  Issue angelegt.
+_Aktuell keine offenen Einträge — alle bisher hier gesammelten Aufgaben_
+_wurden als GitHub Issues übernommen._
