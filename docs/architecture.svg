@@ -89,17 +89,17 @@
   <rect class="label-bg" x="676" y="551" width="90" height="20"/>
   <text class="flow-label" x="682" y="566">lesen / schreiben</text>
 
-  <path class="flow" d="M 950 266 C 880 300, 870 618, 830 665"/>
-  <rect class="label-bg" x="841" y="448" width="97" height="20"/>
-  <text class="flow-label" x="847" y="463">Konfiguration</text>
-
-  <path class="flow" d="M 390 335 C 430 370, 445 441, 500 451"/>
-  <rect class="label-bg" x="398" y="381" width="89" height="20"/>
-  <text class="flow-label" x="404" y="396">Dateizugriff</text>
+  <path class="flow" d="M 830 266 C 910 330, 900 790, 830 830"/>
+  <rect class="label-bg" x="846" y="536" width="122" height="20"/>
+  <text class="flow-label" x="852" y="551">Config / Verlauf</text>
 
   <path class="flow" d="M 390 372 C 430 480, 420 660, 500 676"/>
   <rect class="label-bg" x="394" y="536" width="73" height="20"/>
   <text class="flow-label" x="400" y="551">Explorer</text>
+
+  <path class="flow" d="M 390 318 C 610 318, 790 436, 950 436"/>
+  <rect class="label-bg" x="682" y="360" width="119" height="20"/>
+  <text class="flow-label" x="688" y="375">Ordnerauswahl</text>
 
   <path class="flow" d="M 830 676 C 888 676, 890 436, 950 436"/>
   <rect class="label-bg" x="846" y="552" width="79" height="20"/>
@@ -109,17 +109,13 @@
   <rect class="label-bg" x="392" y="657" width="72" height="20"/>
   <text class="flow-label" x="398" y="672">Historie</text>
 
-  <path class="flow" d="M 830 266 C 915 325, 870 785, 950 795"/>
-  <rect class="label-bg" x="851" y="701" width="71" height="20"/>
-  <text class="flow-label" x="857" y="716">Modelle</text>
+  <path class="flow" d="M 300 460 C 350 570, 800 520, 950 700"/>
+  <rect class="label-bg" x="734" y="558" width="103" height="20"/>
+  <text class="flow-label" x="740" y="573">Audioeingabe</text>
 
-  <path class="flow" d="M 225 460 C 225 714, 480 882, 950 882"/>
-  <rect class="label-bg" x="456" y="850" width="91" height="20"/>
-  <text class="flow-label" x="462" y="865">Audioeingabe</text>
-
-  <path class="flow" d="M 390 430 C 610 956, 1160 914, 1160 880"/>
-  <rect class="label-bg" x="725" y="916" width="90" height="20"/>
-  <text class="flow-label" x="731" y="931">Release-Check</text>
+  <path class="flow" d="M 390 430 C 560 930, 800 860, 950 860"/>
+  <rect class="label-bg" x="705" y="890" width="103" height="20"/>
+  <text class="flow-label" x="711" y="905">Release-Check</text>
 
   <!-- Interaction -->
   <rect class="module module--primary" x="60" y="180" width="330" height="280"/>
