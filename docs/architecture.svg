@@ -67,7 +67,7 @@
   <rect class="canvas" width="1600" height="980"/>
 
   <text class="page-title" x="64" y="58">Funktionale Architektur</text>
-  <text class="page-subtitle" x="64" y="88">Weyouze Anything · Module und ihre direkten Beziehungen</text>
+  <text class="page-subtitle" x="64" y="88">Weyouze Anything &#183; Module und ihre direkten Beziehungen</text>
 
   <!-- Relationships are drawn before modules so boxes remain visually clear. -->
   <path class="flow" d="M 390 248 C 445 248, 445 220, 500 220"/>
@@ -83,7 +83,7 @@
 
   <path class="flow" d="M 665 300 L 665 390"/>
   <rect class="label-bg" x="676" y="331" width="73" height="20"/>
-  <text class="flow-label" x="682" y="346">ausführen</text>
+  <text class="flow-label" x="682" y="346">ausf&#252;hren</text>
 
   <path class="flow" d="M 665 520 L 665 610"/>
   <rect class="label-bg" x="676" y="551" width="90" height="20"/>
@@ -103,7 +103,7 @@
 
   <path class="flow" d="M 830 676 C 888 676, 890 436, 950 436"/>
   <rect class="label-bg" x="846" y="552" width="79" height="20"/>
-  <text class="flow-label" x="852" y="567">Pfadprüfung</text>
+  <text class="flow-label" x="852" y="567">Pfadpr&#252;fung</text>
 
   <path class="flow" d="M 390 402 C 430 556, 424 776, 500 787"/>
   <rect class="label-bg" x="392" y="657" width="72" height="20"/>
@@ -124,7 +124,7 @@
   <!-- Interaction -->
   <rect class="module module--primary" x="60" y="180" width="330" height="280"/>
   <text class="eyebrow" x="90" y="218">INTERAKTION</text>
-  <text class="heading" x="90" y="255">Benutzeroberfläche</text>
+  <text class="heading" x="90" y="255">Benutzeroberfl&#228;che</text>
   <text class="description" x="90" y="292">
     <tspan x="90" dy="0">Chat und RAW-Protokoll</tspan>
     <tspan x="90" dy="28">Workspace-Explorer</tspan>
@@ -144,14 +144,14 @@
   <rect class="module" x="950" y="120" width="330" height="146"/>
   <text class="eyebrow" x="980" y="158">KI-ZUGANG</text>
   <text class="heading" x="980" y="195">LLM-Provider</text>
-  <text class="description" x="980" y="229">OpenAI · Anthropic · Google</text>
-  <text class="description" x="980" y="253">Ollama · MLX-LM</text>
+  <text class="description" x="980" y="229">OpenAI &#183; Anthropic &#183; Google</text>
+  <text class="description" x="980" y="253">Ollama &#183; MLX-LM</text>
 
   <!-- Workspace flow -->
   <rect class="module" x="500" y="390" width="330" height="130"/>
   <text class="eyebrow" x="530" y="428">ARBEITSBEREICH</text>
   <text class="heading" x="530" y="465">Workspace-Tools</text>
-  <text class="description" x="530" y="499">Auflisten · Lesen · Schreiben</text>
+  <text class="description" x="530" y="499">Auflisten &#183; Lesen &#183; Schreiben</text>
 
   <rect class="module" x="500" y="610" width="330" height="130"/>
   <text class="eyebrow" x="530" y="648">DATEIEN</text>
@@ -167,7 +167,7 @@
   <rect class="module" x="500" y="770" width="330" height="120"/>
   <text class="eyebrow" x="530" y="808">DATEN</text>
   <text class="heading" x="530" y="845">Persistenz</text>
-  <text class="description" x="530" y="875">Keys · Konfiguration · Historie</text>
+  <text class="description" x="530" y="875">Keys &#183; Konfiguration &#183; Historie</text>
 
   <rect class="module" x="950" y="640" width="330" height="120"/>
   <text class="eyebrow" x="980" y="678">SPRACHE</text>
@@ -177,5 +177,5 @@
   <rect class="module" x="950" y="800" width="330" height="120"/>
   <text class="eyebrow" x="980" y="838">VERSION</text>
   <text class="heading" x="980" y="875">Update-Notifier</text>
-  <text class="description" x="980" y="905">Release-Prüfung und Hinweis</text>
+  <text class="description" x="980" y="905">Release-Pr&#252;fung und Hinweis</text>
 </svg>
