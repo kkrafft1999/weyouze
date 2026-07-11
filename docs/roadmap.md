@@ -34,6 +34,21 @@ wieder entfernt.
 
 ## 🚧 Jetzt / als Nächstes
 
+- 🏗️ **Saubere, frontend-unabhängige Anwendungsarchitektur** als Grundlage
+  für Provider, Tools, Skills und weitere funktionale Module:
+  1. **Stabile Verträge definieren:** versionierte DTOs und Events für Chat,
+     Streaming, Tools und Einstellungen in einer gemeinsamen Contract-Schicht
+  2. **Anwendungs-Core extrahieren:** Chat-Orchestrierung, Tool-Schleife und
+     Workspace-Kontext aus Electron-IPC lösen und ohne UI-/Electron-Abhängigkeit
+     testbar machen
+  3. **Provider und Tools über Ports anbinden:** Registries und Adapter hinter
+     klaren Schnittstellen kapseln; provider- und tool-spezifisches Wissen aus
+     dem Frontend entfernen
+  4. **Infrastruktur abgrenzen:** Dateisystem, Storage, Netzwerk, Whisper und
+     Updates als austauschbare Adapter des Anwendungs-Cores behandeln
+  5. **Frontend zur reinen Präsentationsschicht machen:** Der Renderer erhält
+     nur normalisierte Anzeige-Daten und löst Aktionen über die Preload-/IPC-
+     Schnittstelle aus
 - 🧩 Erweiterbares **Skill-Konzept** (Konfiguration + dynamisches Laden)
 - 🛠️ Erweiterbares **Tool-Konzept** über das bestehende Workspace-Tool-Set
   hinaus
