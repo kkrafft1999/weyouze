@@ -1,11 +1,11 @@
 function registerFsHandlers({ ipcMain, fsService, REQ, getActiveWorkspaceRoot }) {
-  function boundPath(absPath) {
+  async function boundPath(absPath) {
     const workspaceRoot = getActiveWorkspaceRoot();
-    return fsService.assertAbsolutePathInWorkspace(workspaceRoot, absPath);
+    return fsService.assertPathAccessibleInWorkspace(workspaceRoot, absPath);
   }
 
   ipcMain.handle(REQ.FS_READ_DIRECTORY, async (_event, dirPath) => {
-    const { absPath, error } = boundPath(dirPath);
+    const { absPath, error } = await boundPath(dirPath);
     if (error) {
       console.error('readDirectory denied:', error);
       return [];
@@ -19,9 +19,9 @@ function registerFsHandlers({ ipcMain, fsService, REQ, getActiveWorkspaceRoot })
   });
 
   ipcMain.handle(REQ.FS_MOVE_ITEM, async (_event, sourcePath, destDir) => {
-    const source = boundPath(sourcePath);
+    const source = await boundPath(sourcePath);
     if (source.error) return { error: source.error };
-    const dest = boundPath(destDir);
+    const dest = await boundPath(destDir);
     if (dest.error) return { error: dest.error };
     try {
       return await fsService.moveItem(source.absPath, dest.absPath);
@@ -31,7 +31,7 @@ function registerFsHandlers({ ipcMain, fsService, REQ, getActiveWorkspaceRoot })
   });
 
   ipcMain.handle(REQ.FS_READ_FILE, async (_event, filePath) => {
-    const { absPath, error } = boundPath(filePath);
+    const { absPath, error } = await boundPath(filePath);
     if (error) return { error };
     try {
       return await fsService.readFilePreview(absPath);

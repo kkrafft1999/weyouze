@@ -36,10 +36,60 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
     return { absPath: resolved };
   }
 
+  /**
+   * Resolves the nearest existing path (including symlinks) and appends any
+   * not-yet-existing suffix. lstat is intentionally separate from realpath:
+   * a dangling symlink must be rejected, not treated as a missing path.
+   */
+  async function resolveExistingRealPath(absPath) {
+    let current = path.resolve(absPath);
+    const missingSegments = [];
+
+    while (true) {
+      try {
+        await fs.lstat(current);
+      } catch (e) {
+        if (e.code !== 'ENOENT') throw e;
+        const parent = path.dirname(current);
+        if (parent === current) throw e;
+        missingSegments.push(path.basename(current));
+        current = parent;
+        continue;
+      }
+
+      const realPath = await fs.realpath(current);
+      return missingSegments.length
+        ? path.join(realPath, ...missingSegments.reverse())
+        : realPath;
+    }
+  }
+
+  async function assertPathAccessibleInWorkspace(workspaceRoot, absPath) {
+    const lexical = assertAbsolutePathInWorkspace(workspaceRoot, absPath);
+    if (lexical.error) return lexical;
+
+    try {
+      const realRoot = await fs.realpath(path.resolve(workspaceRoot));
+      const realTarget = await resolveExistingRealPath(lexical.absPath);
+      if (!containsPath(realRoot, realTarget)) {
+        return { error: 'Pfad liegt außerhalb des Arbeitsordners.' };
+      }
+      return { absPath: lexical.absPath };
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+
+  async function resolveWorkspacePathForAccess(workspaceRoot, relativePath) {
+    const lexical = resolveWorkspacePath(workspaceRoot, relativePath);
+    if (lexical.error) return lexical;
+    return assertPathAccessibleInWorkspace(workspaceRoot, lexical.absPath);
+  }
+
   async function runListDirectoryTool(args, workspaceRoot) {
     const relArg = args.relative_path;
     const rel = typeof relArg === 'string' ? relArg : '';
-    const { absPath, error } = resolveWorkspacePath(workspaceRoot, rel);
+    const { absPath, error } = await resolveWorkspacePathForAccess(workspaceRoot, rel);
     if (error) return JSON.stringify({ error });
     try {
       const st = await fs.stat(absPath);
@@ -70,7 +120,7 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
     }
     let maxChars = Number.isFinite(args.max_characters) ? Math.floor(args.max_characters) : 32000;
     maxChars = Math.min(Math.max(1000, maxChars), 200000);
-    const { absPath, error } = resolveWorkspacePath(workspaceRoot, rel);
+    const { absPath, error } = await resolveWorkspacePathForAccess(workspaceRoot, rel);
     if (error) return JSON.stringify({ error });
     try {
       const st = await fs.stat(absPath);
@@ -113,7 +163,7 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
         error: `Inhalt zu groß (>${MAX_WRITE_FILE_BYTES} Bytes). Bitte kleiner aufteilen.`,
       });
     }
-    const { absPath, error } = resolveWorkspacePath(workspaceRoot, rel);
+    const { absPath, error } = await resolveWorkspacePathForAccess(workspaceRoot, rel);
     if (error) return JSON.stringify({ error });
     if (path.resolve(absPath) === path.resolve(workspaceRoot)) {
       return JSON.stringify({ error: 'Der Projektordner selbst kann nicht als Datei beschrieben werden.' });
@@ -151,7 +201,7 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
           const fullPath = path.join(dirPath, entry.name);
           let stats = null;
           try {
-            stats = await fs.stat(fullPath);
+            stats = await fs.lstat(fullPath);
           } catch {
             // skip inaccessible files
           }
@@ -223,6 +273,9 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
     containsPath,
     resolveWorkspacePath,
     assertAbsolutePathInWorkspace,
+    resolveExistingRealPath,
+    assertPathAccessibleInWorkspace,
+    resolveWorkspacePathForAccess,
     runListDirectoryTool,
     runReadFileTextTool,
     runWriteFileTextTool,
