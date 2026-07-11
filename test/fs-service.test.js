@@ -4,9 +4,14 @@ const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
 const { createFsService } = require('../src/main/services/fs-service');
+const { createWorkspaceToolRegistry } = require('../src/main/tools/workspace-tool-registry');
 
 function makeFsService() {
   return createFsService({ fs, path, maxReadFileBytes: 1024 * 1024, maxWriteFileBytes: 1024 * 1024 });
+}
+
+function makeToolRegistry(fsService = makeFsService()) {
+  return createWorkspaceToolRegistry({ fsService });
 }
 
 test('resolveWorkspacePath accepts paths inside workspace', () => {
@@ -43,26 +48,32 @@ test('assertAbsolutePathInWorkspace validates absolute paths', () => {
   );
 });
 
-test('runWorkspaceTool read_file_text respects workspace bounds', async () => {
-  const svc = makeFsService();
+test('read_file_text respects workspace bounds through the registry', async () => {
+  const registry = makeToolRegistry();
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
   const nested = path.join(tmpRoot, 'nested');
   await fs.mkdir(nested);
   await fs.writeFile(path.join(nested, 'note.txt'), 'hello', 'utf8');
 
-  const ok = JSON.parse(await svc.runWorkspaceTool('read_file_text', { relative_path: 'nested/note.txt' }, tmpRoot));
+  const ok = JSON.parse(
+    await registry.execute('read_file_text', { relative_path: 'nested/note.txt' }, { workspaceRoot: tmpRoot })
+  );
   assert.equal(ok.content, 'hello');
 
-  const bad = JSON.parse(await svc.runWorkspaceTool('read_file_text', { relative_path: '../outside.txt' }, tmpRoot));
+  const bad = JSON.parse(
+    await registry.execute('read_file_text', { relative_path: '../outside.txt' }, { workspaceRoot: tmpRoot })
+  );
   assert.match(bad.error, /außerhalb/);
 
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
 
-test('runWorkspaceTool debug_wait waits for the requested duration', async () => {
-  const svc = makeFsService();
+test('debug_wait waits for the requested duration through the registry', async () => {
+  const registry = makeToolRegistry();
   const started = Date.now();
-  const out = JSON.parse(await svc.runWorkspaceTool('debug_wait', { duration_seconds: 0.6 }, '/tmp/project'));
+  const out = JSON.parse(
+    await registry.execute('debug_wait', { duration_seconds: 0.6 }, { workspaceRoot: '/tmp/project' })
+  );
   const elapsed = Date.now() - started;
   assert.equal(out.ok, true);
   assert.equal(out.waited_ms, 600);
@@ -70,15 +81,15 @@ test('runWorkspaceTool debug_wait waits for the requested duration', async () =>
   assert.ok(elapsed >= 550);
 });
 
-test('runWorkspaceTool write_file_text is disabled unless allowWrite is set', async () => {
-  const svc = makeFsService();
+test('write_file_text is disabled unless allowWrite is set', async () => {
+  const registry = makeToolRegistry();
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
 
   const denied = JSON.parse(
-    await svc.runWorkspaceTool(
+    await registry.execute(
       'write_file_text',
       { relative_path: 'note.txt', content: 'hi' },
-      tmpRoot
+      { workspaceRoot: tmpRoot }
     )
   );
   assert.match(denied.error, /Schreibzugriff ist deaktiviert/);
@@ -87,16 +98,15 @@ test('runWorkspaceTool write_file_text is disabled unless allowWrite is set', as
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
 
-test('runWorkspaceTool write_file_text creates new files and reports created:true', async () => {
-  const svc = makeFsService();
+test('write_file_text creates new files and reports created:true', async () => {
+  const registry = makeToolRegistry();
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
 
   const out = JSON.parse(
-    await svc.runWorkspaceTool(
+    await registry.execute(
       'write_file_text',
       { relative_path: 'nested/new/note.txt', content: 'hello world' },
-      tmpRoot,
-      { allowWrite: true }
+      { workspaceRoot: tmpRoot, allowWrite: true }
     )
   );
   assert.equal(out.created, true);
@@ -108,17 +118,16 @@ test('runWorkspaceTool write_file_text creates new files and reports created:tru
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
 
-test('runWorkspaceTool write_file_text overwrites existing files and reports overwritten:true', async () => {
-  const svc = makeFsService();
+test('write_file_text overwrites existing files and reports overwritten:true', async () => {
+  const registry = makeToolRegistry();
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
   await fs.writeFile(path.join(tmpRoot, 'existing.txt'), 'old', 'utf8');
 
   const out = JSON.parse(
-    await svc.runWorkspaceTool(
+    await registry.execute(
       'write_file_text',
       { relative_path: 'existing.txt', content: 'new content' },
-      tmpRoot,
-      { allowWrite: true }
+      { workspaceRoot: tmpRoot, allowWrite: true }
     )
   );
   assert.equal(out.created, false);
@@ -129,37 +138,34 @@ test('runWorkspaceTool write_file_text overwrites existing files and reports ove
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
 
-test('runWorkspaceTool write_file_text respects workspace bounds and rejects directory targets', async () => {
-  const svc = makeFsService();
+test('write_file_text respects workspace bounds and rejects directory targets', async () => {
+  const registry = makeToolRegistry();
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
   await fs.mkdir(path.join(tmpRoot, 'adir'));
 
   const outside = JSON.parse(
-    await svc.runWorkspaceTool(
+    await registry.execute(
       'write_file_text',
       { relative_path: '../outside.txt', content: 'x' },
-      tmpRoot,
-      { allowWrite: true }
+      { workspaceRoot: tmpRoot, allowWrite: true }
     )
   );
   assert.match(outside.error, /außerhalb/);
 
   const isDir = JSON.parse(
-    await svc.runWorkspaceTool(
+    await registry.execute(
       'write_file_text',
       { relative_path: 'adir', content: 'x' },
-      tmpRoot,
-      { allowWrite: true }
+      { workspaceRoot: tmpRoot, allowWrite: true }
     )
   );
   assert.match(isDir.error, /Ordner/);
 
   const missingContent = JSON.parse(
-    await svc.runWorkspaceTool(
+    await registry.execute(
       'write_file_text',
       { relative_path: 'a.txt' },
-      tmpRoot,
-      { allowWrite: true }
+      { workspaceRoot: tmpRoot, allowWrite: true }
     )
   );
   assert.match(missingContent.error, /content/);
@@ -167,16 +173,16 @@ test('runWorkspaceTool write_file_text respects workspace bounds and rejects dir
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
 
-test('runWorkspaceTool write_file_text enforces the max content size', async () => {
+test('write_file_text enforces the max content size', async () => {
   const svc = createFsService({ fs, path, maxReadFileBytes: 1024, maxWriteFileBytes: 10 });
+  const registry = makeToolRegistry(svc);
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
 
   const out = JSON.parse(
-    await svc.runWorkspaceTool(
+    await registry.execute(
       'write_file_text',
       { relative_path: 'big.txt', content: 'this is definitely more than ten bytes' },
-      tmpRoot,
-      { allowWrite: true }
+      { workspaceRoot: tmpRoot, allowWrite: true }
     )
   );
   assert.match(out.error, /zu groß/);

@@ -36,19 +36,18 @@ function returnCancelledChat(wc, PUSH, toolTrace, content = '', usage = null, ra
   return { cancelled: true, content, toolTrace, usage, rawExchanges };
 }
 
-function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirectory, pathMod, allowWrite) {
+function workspaceSystemPrompt(
+  workspaceRoot,
+  selectedRelPath,
+  selectedIsDirectory,
+  pathMod,
+  toolsPrompt
+) {
   const name = pathMod.basename(workspaceRoot);
   let prompt =
-    `Du hilfst beim Durchsuchen des in der App geöffneten Ordners („${name}“). ` +
-    `Du hast die Tools list_directory, read_file_text und debug_wait (nur UI-Test). Nutze nur relative Pfade zum Ordnerroot ` +
-    `(z. B. "" oder "." für die Wurzel, "src/index.js" für eine Datei). `;
-  if (allowWrite) {
-    prompt +=
-      `Außerdem darfst du mit write_file_text Dateien im Projektordner erstellen oder überschreiben. ` +
-      `Nutze es zurückhaltend: nur wenn der Nutzer ausdrücklich eine Änderung/neue Datei wünscht, und fasse danach ` +
-      `kurz zusammen, was du geschrieben hast. `;
-  }
-  prompt += `Antworte auf Deutsch, sachlich und knapp.`;
+    `Du hilfst beim Durchsuchen des in der App geöffneten Ordners („${name}“).`;
+  if (toolsPrompt) prompt += `\n\n${toolsPrompt}`;
+  prompt += `\n\nAntworte auf Deutsch, sachlich und knapp.`;
   if (selectedRelPath) {
     const kind = selectedIsDirectory ? 'Ordner' : 'Datei';
     prompt +=
@@ -151,12 +150,10 @@ function registerChatHandlers({
   ipcMain,
   storage,
   providers,
-  fsService,
+  toolRegistry,
   path: pathMod,
   defaultProviderId,
   maxToolRounds,
-  workspaceTools,
-  writeWorkspaceTools,
   REQ,
   PUSH,
 }) {
@@ -288,10 +285,17 @@ function registerChatHandlers({
     const extraSystem =
       typeof uiPrefsAll.baseSystemPrompt === 'string' ? uiPrefsAll.baseSystemPrompt.trim() : '';
     const allowWrite = uiPrefsAll.allowWorkspaceWrite === true;
+    const toolOptions = { allowWrite };
 
     const apiMessages = [];
     const workspaceSystem = workspaceRoot
-      ? workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirectory, pathMod, allowWrite)
+      ? workspaceSystemPrompt(
+          workspaceRoot,
+          selectedRelPath,
+          selectedIsDirectory,
+          pathMod,
+          toolRegistry.buildSystemPrompt(toolOptions)
+        )
       : '';
     let combinedSystem = workspaceSystem;
     if (extraSystem && combinedSystem) {
@@ -313,11 +317,7 @@ function registerChatHandlers({
     const { messages: windowedHistory } = trimHistoryMessages(historyRows, historyCharLimit);
     apiMessages.push(...windowedHistory);
 
-      const tools = workspaceRoot
-        ? allowWrite && Array.isArray(writeWorkspaceTools) && writeWorkspaceTools.length
-          ? [...workspaceTools, ...writeWorkspaceTools]
-          : workspaceTools
-        : undefined;
+      const tools = workspaceRoot ? toolRegistry.getTools(toolOptions) : undefined;
       const callbacks = makeStreamCallbacks(wc, PUSH);
       const toolRoundLimit = resolveToolRoundLimit(uiPrefsAll, maxToolRounds);
 
@@ -432,7 +432,11 @@ function registerChatHandlers({
             emitToolLine('start', entry);
             let out;
             try {
-              out = await fsService.runWorkspaceTool(toolName, args, workspaceRoot, { abortSignal, allowWrite });
+              out = await toolRegistry.execute(toolName, args, {
+                workspaceRoot,
+                abortSignal,
+                allowWrite,
+              });
             } catch (err) {
               if (isAbortError(err)) {
                 return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage, rawExchanges);

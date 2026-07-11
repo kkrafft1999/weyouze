@@ -13,7 +13,7 @@ test('resolveToolRoundLimit clamps to configured bounds', () => {
 
 // ---------------------------------------------------------------------------
 // Integration-Test-Harness fuer registerChatHandlers: baut minimale, aber
-// realistische Stubs fuer ipcMain/storage/providers/fsService, damit der
+// realistische Stubs fuer ipcMain/storage/providers/toolRegistry, damit der
 // komplette Tool-Use-Loop (nicht nur einzelne Hilfsfunktionen) abgedeckt ist.
 // ---------------------------------------------------------------------------
 
@@ -70,13 +70,22 @@ function makeStorage(overrides = {}) {
   };
 }
 
-function makeFsServiceStub(impl) {
+function makeToolRegistryStub(impl) {
   const calls = [];
+  const readTools = [{ type: 'function', function: { name: 'list_directory' } }];
+  const writeTools = [{ type: 'function', function: { name: 'write_file_text' } }];
   return {
     calls,
-    async runWorkspaceTool(toolName, args, workspaceRoot, options) {
-      calls.push({ toolName, args, workspaceRoot, options });
-      if (impl) return impl(toolName, args, workspaceRoot, options);
+    getTools({ allowWrite } = {}) {
+      return allowWrite ? [...readTools, ...writeTools] : readTools;
+    },
+    buildSystemPrompt({ allowWrite } = {}) {
+      const names = this.getTools({ allowWrite }).map((tool) => tool.function.name);
+      return `Tools: ${names.join(', ')}`;
+    },
+    async execute(toolName, args, context) {
+      calls.push({ toolName, args, context });
+      if (impl) return impl(toolName, args, context);
       return JSON.stringify({ ok: true });
     },
   };
@@ -102,9 +111,7 @@ function toolCall(id, name, args) {
 function setupChatHandlers({
   provider,
   storage = makeStorage(),
-  fsService = makeFsServiceStub(),
-  workspaceTools = [{ type: 'function', function: { name: 'list_directory' } }],
-  writeWorkspaceTools,
+  toolRegistry = makeToolRegistryStub(),
   maxToolRounds = 5,
 } = {}) {
   const ipcMain = makeIpcMain();
@@ -112,12 +119,10 @@ function setupChatHandlers({
     ipcMain,
     storage,
     providers: { getProvider: () => provider },
-    fsService,
+    toolRegistry,
     path,
     defaultProviderId: 'test',
     maxToolRounds,
-    workspaceTools,
-    writeWorkspaceTools,
     REQ,
     PUSH,
   });
@@ -125,7 +130,7 @@ function setupChatHandlers({
     sendHandler: ipcMain.handlers.get(REQ.CHAT_SEND),
     explainHandler: ipcMain.handlers.get(REQ.CHAT_EXPLAIN),
     abortHandler: ipcMain.onHandlers.get(REQ.CHAT_ABORT),
-    fsService,
+    toolRegistry,
   };
 }
 
@@ -146,11 +151,10 @@ test('CHAT_SEND reports an unknown provider without calling streamChatRound', as
     ipcMain,
     storage,
     providers: { getProvider: () => null },
-    fsService: makeFsServiceStub(),
+    toolRegistry: makeToolRegistryStub(),
     path,
     defaultProviderId: 'test',
     maxToolRounds: 5,
-    workspaceTools: [],
     REQ,
     PUSH,
   });
@@ -198,15 +202,15 @@ test('CHAT_SEND returns the final assistant text when no tools are called', asyn
   assert.equal(res.rawExchanges.length, 1);
 });
 
-test('CHAT_SEND runs a full tool round-trip: tool call -> fsService -> follow-up answer', async () => {
+test('CHAT_SEND runs a full tool round-trip: tool call -> registry -> follow-up answer', async () => {
   const { provider, calls } = makeScriptedProvider([
     assistantToolCall([toolCall('call_1', 'list_directory', { relative_path: '.' })]),
     assistantText('Im Ordner liegen 3 Dateien.'),
   ]);
-  const fsService = makeFsServiceStub((toolName, args) =>
+  const toolRegistry = makeToolRegistryStub((toolName, args) =>
     JSON.stringify({ relative_path: args.relative_path, items: [] })
   );
-  const { sendHandler } = setupChatHandlers({ provider, fsService });
+  const { sendHandler } = setupChatHandlers({ provider, toolRegistry });
   const { event, sent } = makeFakeEvent();
 
   const res = await sendHandler(event, {
@@ -219,10 +223,10 @@ test('CHAT_SEND runs a full tool round-trip: tool call -> fsService -> follow-up
   assert.equal(res.toolTrace[0].tool, 'list_directory');
   assert.equal(res.rawExchanges.length, 2);
 
-  assert.equal(fsService.calls.length, 1);
-  assert.equal(fsService.calls[0].toolName, 'list_directory');
-  assert.deepEqual(fsService.calls[0].args, { relative_path: '.' });
-  assert.equal(fsService.calls[0].workspaceRoot, path.resolve('/tmp/weyouze-project'));
+  assert.equal(toolRegistry.calls.length, 1);
+  assert.equal(toolRegistry.calls[0].toolName, 'list_directory');
+  assert.deepEqual(toolRegistry.calls[0].args, { relative_path: '.' });
+  assert.equal(toolRegistry.calls[0].context.workspaceRoot, path.resolve('/tmp/weyouze-project'));
 
   // Zweite Runde muss die Tool-Antwort als 'tool'-Message an den Provider senden.
   const secondRoundMessages = calls[1].messages;
@@ -241,8 +245,8 @@ test('CHAT_SEND rejects tool calls with a synthetic error when no workspace is o
     assistantToolCall([toolCall('call_1', 'list_directory', { relative_path: '.' })]),
     assistantText('Kein Ordner offen, aber hier ist eine Antwort.'),
   ]);
-  const fsService = makeFsServiceStub();
-  const { sendHandler } = setupChatHandlers({ provider, fsService });
+  const toolRegistry = makeToolRegistryStub();
+  const { sendHandler } = setupChatHandlers({ provider, toolRegistry });
   const { event } = makeFakeEvent();
 
   const res = await sendHandler(event, {
@@ -251,7 +255,7 @@ test('CHAT_SEND rejects tool calls with a synthetic error when no workspace is o
   });
 
   assert.equal(res.content, 'Kein Ordner offen, aber hier ist eine Antwort.');
-  assert.equal(fsService.calls.length, 0, 'fsService must never be invoked without an open workspace');
+  assert.equal(toolRegistry.calls.length, 0, 'registry must never be invoked without an open workspace');
   assert.equal(res.toolTrace[0].noWorkspace, true);
 
   const toolMsg = calls[1].messages.find((m) => m.role === 'tool');
@@ -263,8 +267,8 @@ test('CHAT_SEND attaches the clamped debug_wait duration to the tool trace entry
     assistantToolCall([toolCall('call_1', 'debug_wait', { duration_seconds: 0.1 })]),
     assistantText('fertig'),
   ]);
-  const fsService = makeFsServiceStub(() => JSON.stringify({ ok: true, waited_ms: 500 }));
-  const { sendHandler } = setupChatHandlers({ provider, fsService });
+  const toolRegistry = makeToolRegistryStub(() => JSON.stringify({ ok: true, waited_ms: 500 }));
+  const { sendHandler } = setupChatHandlers({ provider, toolRegistry });
   const { event } = makeFakeEvent();
 
   const res = await sendHandler(event, {
@@ -350,11 +354,10 @@ test('CHAT_EXPLAIN returns the provider content without recording tools or a raw
     ipcMain,
     storage,
     providers: { getProvider: () => provider },
-    fsService: makeFsServiceStub(),
+    toolRegistry: makeToolRegistryStub(),
     path,
     defaultProviderId: 'test',
     maxToolRounds: 5,
-    workspaceTools: [{ type: 'function', function: { name: 'list_directory' } }],
     REQ,
     PUSH,
   });
@@ -391,7 +394,6 @@ test('CHAT_SEND omits write_file_text from tools when allowWorkspaceWrite is fal
   const { sendHandler } = setupChatHandlers({
     provider,
     storage,
-    writeWorkspaceTools: [{ type: 'function', function: { name: 'write_file_text' } }],
   });
   const { event } = makeFakeEvent();
 
@@ -416,7 +418,6 @@ test('CHAT_SEND includes write_file_text in tools when allowWorkspaceWrite is tr
   const { sendHandler } = setupChatHandlers({
     provider,
     storage,
-    writeWorkspaceTools: [{ type: 'function', function: { name: 'write_file_text' } }],
   });
   const { event } = makeFakeEvent();
 
