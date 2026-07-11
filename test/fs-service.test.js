@@ -14,6 +14,19 @@ function makeToolRegistry(fsService = makeFsService()) {
   return createWorkspaceToolRegistry({ fsService });
 }
 
+async function createSymlinkOrSkip(t, target, linkPath, type) {
+  try {
+    await fs.symlink(target, linkPath, type);
+    return true;
+  } catch (e) {
+    if (['EPERM', 'EACCES', 'ENOSYS'].includes(e.code)) {
+      t.skip(`Symlinks werden auf dieser Plattform nicht unterstützt: ${e.code}`);
+      return false;
+    }
+    throw e;
+  }
+}
+
 test('resolveWorkspacePath accepts paths inside workspace', () => {
   const svc = makeFsService();
   const root = '/tmp/project';
@@ -72,6 +85,65 @@ test('read_file_text respects workspace bounds through the registry', async () =
   assert.match(bad.error, /außerhalb/);
 
   await fs.rm(tmpRoot, { recursive: true, force: true });
+});
+
+test('read_file_text rejects a symlink to a file outside the workspace', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const workspace = path.join(tmpRoot, 'workspace');
+  const outside = path.join(tmpRoot, 'outside');
+  await fs.mkdir(workspace);
+  await fs.mkdir(outside);
+  const secret = path.join(outside, 'secret.txt');
+  await fs.writeFile(secret, 'secret', 'utf8');
+  const linked = await createSymlinkOrSkip(
+    t,
+    secret,
+    path.join(workspace, 'secret-link.txt'),
+    process.platform === 'win32' ? 'file' : undefined
+  );
+  if (!linked) return;
+
+  const result = JSON.parse(
+    await registry.execute(
+      'read_file_text',
+      { relative_path: 'secret-link.txt' },
+      { workspaceRoot: workspace }
+    )
+  );
+
+  assert.match(result.error, /außerhalb/);
+  assert.equal(result.content, undefined);
+});
+
+test('list_directory rejects a symlink to a directory outside the workspace', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const workspace = path.join(tmpRoot, 'workspace');
+  const outside = path.join(tmpRoot, 'outside');
+  await fs.mkdir(workspace);
+  await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, 'secret.txt'), 'secret', 'utf8');
+  const linked = await createSymlinkOrSkip(
+    t,
+    outside,
+    path.join(workspace, 'outside-link'),
+    process.platform === 'win32' ? 'junction' : 'dir'
+  );
+  if (!linked) return;
+
+  const result = JSON.parse(
+    await registry.execute(
+      'list_directory',
+      { relative_path: 'outside-link' },
+      { workspaceRoot: workspace }
+    )
+  );
+
+  assert.match(result.error, /außerhalb/);
+  assert.equal(result.items, undefined);
 });
 
 test('list_directory lists directories before files and hides dotfiles', async () => {
@@ -141,6 +213,63 @@ test('write_file_text creates new files and reports created:true', async () => {
   assert.equal(written, 'hello world');
 
   await fs.rm(tmpRoot, { recursive: true, force: true });
+});
+
+test('write_file_text rejects writes through a symlinked parent outside the workspace', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const workspace = path.join(tmpRoot, 'workspace');
+  const outside = path.join(tmpRoot, 'outside');
+  await fs.mkdir(workspace);
+  await fs.mkdir(outside);
+  const linked = await createSymlinkOrSkip(
+    t,
+    outside,
+    path.join(workspace, 'outside-link'),
+    process.platform === 'win32' ? 'junction' : 'dir'
+  );
+  if (!linked) return;
+
+  const result = JSON.parse(
+    await registry.execute(
+      'write_file_text',
+      { relative_path: 'outside-link/created.txt', content: 'must not escape' },
+      { workspaceRoot: workspace, allowWrite: true }
+    )
+  );
+
+  assert.match(result.error, /außerhalb/);
+  await assert.rejects(fs.access(path.join(outside, 'created.txt')));
+});
+
+test('write_file_text rejects a dangling symlink instead of following it', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const workspace = path.join(tmpRoot, 'workspace');
+  const outside = path.join(tmpRoot, 'outside');
+  await fs.mkdir(workspace);
+  await fs.mkdir(outside);
+  const missingTarget = path.join(outside, 'created.txt');
+  const linked = await createSymlinkOrSkip(
+    t,
+    missingTarget,
+    path.join(workspace, 'dangling-link.txt'),
+    process.platform === 'win32' ? 'file' : undefined
+  );
+  if (!linked) return;
+
+  const result = JSON.parse(
+    await registry.execute(
+      'write_file_text',
+      { relative_path: 'dangling-link.txt', content: 'must not escape' },
+      { workspaceRoot: workspace, allowWrite: true }
+    )
+  );
+
+  assert.ok(result.error);
+  await assert.rejects(fs.access(missingTarget));
 });
 
 test('write_file_text overwrites existing files and reports overwritten:true', async () => {

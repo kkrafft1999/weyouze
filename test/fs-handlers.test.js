@@ -8,6 +8,19 @@ const { registerFsHandlers } = require('../src/main/ipc/fs-handlers');
 const { REQUEST_CHANNELS: REQ } = require('../src/shared/ipc-channels');
 const { createMockIpcMain } = require('./helpers/mock-ipc');
 
+async function createSymlinkOrSkip(t, target, linkPath, type) {
+  try {
+    await fs.symlink(target, linkPath, type);
+    return true;
+  } catch (e) {
+    if (['EPERM', 'EACCES', 'ENOSYS'].includes(e.code)) {
+      t.skip(`Symlinks werden auf dieser Plattform nicht unterstützt: ${e.code}`);
+      return false;
+    }
+    throw e;
+  }
+}
+
 async function setup(t) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
   t.after(() => fs.rm(tmpDir, { recursive: true, force: true }));
@@ -54,6 +67,21 @@ test('readDirectory denies traversal via .. segments', async (t) => {
   assert.deepEqual(denied, []);
 });
 
+test('readDirectory denies a symlink to a directory outside the workspace', async (t) => {
+  const { ipcMain, workspace, outside } = await setup(t);
+  const linkPath = path.join(workspace, 'outside-link');
+  const linked = await createSymlinkOrSkip(
+    t,
+    outside,
+    linkPath,
+    process.platform === 'win32' ? 'junction' : 'dir'
+  );
+  if (!linked) return;
+
+  const denied = await ipcMain.invoke(REQ.FS_READ_DIRECTORY, linkPath);
+  assert.deepEqual(denied, []);
+});
+
 test('readFile denies files outside the workspace and reads files inside', async (t) => {
   const { ipcMain, workspace, outside } = await setup(t);
 
@@ -62,6 +90,22 @@ test('readFile denies files outside the workspace and reads files inside', async
 
   const denied = await ipcMain.invoke(REQ.FS_READ_FILE, path.join(outside, 'secret.txt'));
   assert.ok(denied.error, 'reading outside the workspace must fail');
+  assert.equal(denied.content, undefined);
+});
+
+test('readFile denies a symlink to a file outside the workspace', async (t) => {
+  const { ipcMain, workspace, outside } = await setup(t);
+  const linkPath = path.join(workspace, 'secret-link.txt');
+  const linked = await createSymlinkOrSkip(
+    t,
+    path.join(outside, 'secret.txt'),
+    linkPath,
+    process.platform === 'win32' ? 'file' : undefined
+  );
+  if (!linked) return;
+
+  const denied = await ipcMain.invoke(REQ.FS_READ_FILE, linkPath);
+  assert.match(denied.error, /außerhalb/);
   assert.equal(denied.content, undefined);
 });
 
@@ -116,5 +160,36 @@ test('moveItem denies source or destination outside the workspace', async (t) =>
     outside
   );
   assert.ok(toOutside.error, 'moving a file out of the workspace must fail');
+  assert.equal(await fs.readFile(path.join(workspace, 'inside.txt'), 'utf8'), 'inside');
+});
+
+test('moveItem denies symlinked sources and destinations outside the workspace', async (t) => {
+  const { ipcMain, workspace, outside } = await setup(t);
+  const sourceLink = path.join(workspace, 'secret-link.txt');
+  const destinationLink = path.join(workspace, 'outside-link');
+  const linkedSource = await createSymlinkOrSkip(
+    t,
+    path.join(outside, 'secret.txt'),
+    sourceLink,
+    process.platform === 'win32' ? 'file' : undefined
+  );
+  if (!linkedSource) return;
+  const linkedDestination = await createSymlinkOrSkip(
+    t,
+    outside,
+    destinationLink,
+    process.platform === 'win32' ? 'junction' : 'dir'
+  );
+  if (!linkedDestination) return;
+
+  const fromSymlink = await ipcMain.invoke(REQ.FS_MOVE_ITEM, sourceLink, workspace);
+  assert.match(fromSymlink.error, /außerhalb/);
+
+  const toSymlink = await ipcMain.invoke(
+    REQ.FS_MOVE_ITEM,
+    path.join(workspace, 'inside.txt'),
+    destinationLink
+  );
+  assert.match(toSymlink.error, /außerhalb/);
   assert.equal(await fs.readFile(path.join(workspace, 'inside.txt'), 'utf8'), 'inside');
 });
