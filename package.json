@@ -6,7 +6,7 @@
   "scripts": {
     "sync-vendor": "node scripts/sync-renderer-vendor.js",
     "postinstall": "node scripts/sync-renderer-vendor.js",
-    "test": "node --test test/",
+    "test": "node --test",
     "start": "npm run sync-vendor && unset ELECTRON_RUN_AS_NODE && electron .",
     "package": "npm run sync-vendor && electron-forge package --arch arm64 --platform darwin",
     "package:win": "npm run sync-vendor && electron-forge package --platform win32 --arch x64",
