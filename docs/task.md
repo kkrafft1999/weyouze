@@ -33,5 +33,23 @@ existieren — z. B. weil in der aktuellen Arbeitsumgebung nur lesender
 
 ## Offene Einträge (noch kein GitHub Issue)
 
-_Aktuell keine offenen Einträge — alle bisher hier gesammelten Aufgaben_
-_wurden als GitHub Issues übernommen._
+### Symlink-Escape bei Workspace-Dateizugriff verhindern
+
+**Problem / Use Case**
+
+Die Pfadprüfung des Datei-Services vergleicht derzeit nur lexikalisch
+aufgelöste Pfade. Ein symbolischer Link innerhalb des geöffneten
+Projektordners kann deshalb auf ein Ziel außerhalb des Projektordners zeigen.
+Die Workspace-Tools könnten darüber Dateien außerhalb des freigegebenen
+Ordners lesen oder mit aktiviertem Schreibzugriff verändern.
+
+**Vorschlag**
+
+- Vor Dateioperationen den realen Pfad des Workspace-Roots und des Ziels bzw.
+  des nächsten existierenden Elternordners auflösen.
+- Zugriffe ablehnen, wenn das reale Ziel außerhalb des realen Workspace-Roots
+  liegt.
+- Regressionstests für lesende und schreibende Zugriffe über Symlinks
+  ergänzen; plattformspezifische Symlink-Einschränkungen berücksichtigen.
+
+**Label:** `bug`

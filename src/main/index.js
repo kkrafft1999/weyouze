@@ -19,6 +19,7 @@ const { createStorageService } = require('./services/storage-service');
 const { createFsService } = require('./services/fs-service');
 const { createWhisperService } = require('./services/whisper-service');
 const { createUpdateService } = require('./services/update-service');
+const { createWorkspaceToolRegistry } = require('./tools/workspace-tool-registry');
 const { registerDialogHandlers } = require('./ipc/dialog-handlers');
 const { registerFsHandlers } = require('./ipc/fs-handlers');
 const { registerWhisperHandlers } = require('./ipc/whisper-handlers');
@@ -30,99 +31,6 @@ const workspaceState = require('./workspace-state');
 const { LIMITS } = require('../shared/limits');
 
 const DEFAULT_PROVIDER = 'openai';
-
-const WORKSPACE_TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'list_directory',
-      description:
-        'Listet Dateien und Unterordner in einem Verzeichnis relativ zum geöffneten Projektordner (ohne versteckte Einträge, die mit . beginnen).',
-      parameters: {
-        type: 'object',
-        properties: {
-          relative_path: {
-            type: 'string',
-            description:
-              'Relativer Pfad zum Ordner; leerer String oder "." für das Projektroot.',
-          },
-        },
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'read_file_text',
-      description:
-        'Liest den Textinhalt einer Datei als UTF-8 (nur innerhalb des Projektordners). ' +
-        'Maximale Dateigröße: 2 MB — größere Dateien liefern einen Fehler.',
-      parameters: {
-        type: 'object',
-        properties: {
-          relative_path: {
-            type: 'string',
-            description: 'Relativer Pfad zur Datei, z. B. "package.json" oder "src/app.js".',
-          },
-          max_characters: {
-            type: 'integer',
-            description:
-              'Maximale Zeichenanzahl des zurückgegebenen Texts (Standard 32000, Obergrenze 200000).',
-          },
-        },
-        required: ['relative_path'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'debug_wait',
-      description:
-        'Nur zum UI-Test: wartet eine konfigurierbare Zeit und liefert danach OK zurück. Kein Dateizugriff.',
-      parameters: {
-        type: 'object',
-        properties: {
-          duration_seconds: {
-            type: 'number',
-            description:
-              'Wartezeit in Sekunden (Standard 5, Minimum 0,5, Maximum 20).',
-          },
-        },
-      },
-    },
-  },
-];
-
-// Nur aktiv, wenn ui-preferences.json → allowWorkspaceWrite === true (Default: aus).
-// Getrennt von WORKSPACE_TOOLS, damit chat-handlers.js die Tool-Liste je Anfrage
-// abhaengig von dieser Einstellung zusammenstellen kann (Einstellungen › Tools).
-const WRITE_WORKSPACE_TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'write_file_text',
-      description:
-        'Erstellt oder überschreibt eine Textdatei (UTF-8) innerhalb des geöffneten Projektordners. ' +
-        'Fehlende Zwischenordner werden automatisch angelegt. Überschreibt vorhandenen Inhalt vollständig. ' +
-        'Maximale Inhaltsgröße: 2 MB.',
-      parameters: {
-        type: 'object',
-        properties: {
-          relative_path: {
-            type: 'string',
-            description: 'Relativer Pfad zur Zieldatei, z. B. "src/notes.md" oder "docs/neu.md".',
-          },
-          content: {
-            type: 'string',
-            description: 'Vollständiger neuer Textinhalt der Datei.',
-          },
-        },
-        required: ['relative_path', 'content'],
-      },
-    },
-  },
-];
 
 const storage = createStorageService({
   app,
@@ -141,6 +49,7 @@ const fsService = createFsService({
   maxReadFileBytes: LIMITS.MAX_READ_FILE_BYTES,
   maxWriteFileBytes: LIMITS.MAX_WRITE_FILE_BYTES,
 });
+const toolRegistry = createWorkspaceToolRegistry({ fsService });
 
 const whisperService = createWhisperService({
   fetchImpl: fetch,
@@ -176,12 +85,10 @@ registerChatHandlers({
   ipcMain,
   storage,
   providers,
-  fsService,
+  toolRegistry,
   path,
   defaultProviderId: DEFAULT_PROVIDER,
   maxToolRounds: LIMITS.MAX_TOOL_ROUNDS,
-  workspaceTools: WORKSPACE_TOOLS,
-  writeWorkspaceTools: WRITE_WORKSPACE_TOOLS,
   REQ,
   PUSH,
 });
