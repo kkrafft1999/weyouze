@@ -9,6 +9,9 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
   }
 
   function resolveWorkspacePath(workspaceRoot, relativePath) {
+    if (typeof workspaceRoot !== 'string' || !workspaceRoot.trim()) {
+      return { error: 'Kein Arbeitsordner geöffnet.' };
+    }
     const root = path.resolve(workspaceRoot);
     const raw = typeof relativePath === 'string' ? relativePath.trim() : '';
     const joined = path.resolve(root, raw.length ? raw : '.');

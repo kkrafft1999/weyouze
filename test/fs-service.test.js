@@ -32,6 +32,12 @@ test('resolveWorkspacePath rejects path traversal', () => {
   assert.match(svc.resolveWorkspacePath(root, 'src/../../etc/passwd').error, /außerhalb/);
 });
 
+test('resolveWorkspacePath requires an open workspace', () => {
+  const svc = makeFsService();
+  assert.match(svc.resolveWorkspacePath(null, 'note.txt').error, /Arbeitsordner/);
+  assert.match(svc.resolveWorkspacePath('', 'note.txt').error, /Arbeitsordner/);
+});
+
 test('assertAbsolutePathInWorkspace requires open workspace', () => {
   const svc = makeFsService();
   assert.match(svc.assertAbsolutePathInWorkspace(null, '/tmp/x').error, /Arbeitsordner/);
@@ -64,6 +70,25 @@ test('read_file_text respects workspace bounds through the registry', async () =
     await registry.execute('read_file_text', { relative_path: '../outside.txt' }, { workspaceRoot: tmpRoot })
   );
   assert.match(bad.error, /außerhalb/);
+
+  await fs.rm(tmpRoot, { recursive: true, force: true });
+});
+
+test('list_directory lists directories before files and hides dotfiles', async () => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  await fs.mkdir(path.join(tmpRoot, 'docs'));
+  await fs.writeFile(path.join(tmpRoot, 'readme.md'), 'hello', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, '.secret'), 'hidden', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute('list_directory', { relative_path: '.' }, { workspaceRoot: tmpRoot })
+  );
+
+  assert.deepEqual(out.items, [
+    { name: 'docs', kind: 'directory' },
+    { name: 'readme.md', kind: 'file' },
+  ]);
 
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
@@ -160,6 +185,15 @@ test('write_file_text respects workspace bounds and rejects directory targets', 
     )
   );
   assert.match(isDir.error, /Ordner/);
+
+  const workspaceRoot = JSON.parse(
+    await registry.execute(
+      'write_file_text',
+      { relative_path: '.', content: 'x' },
+      { workspaceRoot: tmpRoot, allowWrite: true }
+    )
+  );
+  assert.match(workspaceRoot.error, /Projektordner/);
 
   const missingContent = JSON.parse(
     await registry.execute(

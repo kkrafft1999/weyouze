@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createToolRegistry } = require('../src/main/tools/workspace-tool-registry');
+const {
+  createToolRegistry,
+  createWorkspaceToolRegistry,
+} = require('../src/main/tools/workspace-tool-registry');
 
 function definition(name, { requiresWrite = false } = {}) {
   return {
@@ -100,4 +103,28 @@ test('registry rejects unavailable, unknown and duplicate tools', async () => {
   );
   assert.match(JSON.parse(await registry.execute('missing', {})).error, /Unbekanntes Tool/);
   assert.throws(() => registry.register(definition('read')), /bereits registriert/);
+});
+
+test('workspace registry declares all built-in tools and filters write consistently', () => {
+  const fsService = {
+    runListDirectoryTool() {},
+    runReadFileTextTool() {},
+    runWriteFileTextTool() {},
+  };
+  const registry = createWorkspaceToolRegistry({ fsService });
+
+  const readOnlyNames = registry.getTools().map((tool) => tool.function.name);
+  assert.deepEqual(readOnlyNames, ['list_directory', 'read_file_text', 'debug_wait']);
+  assert.doesNotMatch(registry.buildSystemPrompt(), /write_file_text/);
+
+  const writableNames = registry
+    .getTools({ allowWrite: true })
+    .map((tool) => tool.function.name);
+  assert.deepEqual(writableNames, [
+    'list_directory',
+    'read_file_text',
+    'debug_wait',
+    'write_file_text',
+  ]);
+  assert.match(registry.buildSystemPrompt({ allowWrite: true }), /write_file_text/);
 });
