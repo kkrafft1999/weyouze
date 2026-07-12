@@ -163,30 +163,6 @@ function formatRoundClipboard(ex, roundNo) {
   return parts.join('\n');
 }
 
-function toolsPrettyFromExchange(ex) {
-  const req = ex?.request || {};
-  if (typeof req.body !== 'string' || !req.body) return '';
-  try {
-    const body = JSON.parse(req.body);
-    if (Array.isArray(body?.tools) && body.tools.length) {
-      return JSON.stringify(body.tools, null, 2);
-    }
-  } catch {
-    /* kein JSON */
-  }
-  return '';
-}
-
-function findToolResult(exchanges, callId, fromIndex) {
-  if (!callId) return null;
-  for (let j = fromIndex + 1; j < exchanges.length; j += 1) {
-    const msgs = Array.isArray(exchanges[j]?.messages) ? exchanges[j].messages : [];
-    const hit = msgs.find((m) => m && m.role === 'tool' && m.tool_call_id === callId);
-    if (hit) return normalizeMessageContent(hit.content);
-  }
-  return null;
-}
-
 function buildAnswerCopyText(ex) {
   const ansText = ex?.response?.text || '';
   const ansCalls = ex?.response?.toolCalls || [];
@@ -470,7 +446,7 @@ export function initRawLogModal({ api, appStore }) {
         tLayer.appendChild(tSnip);
         const tFull = document.createElement('div');
         tFull.className = 'cstack-layer-full hidden';
-        tFull.appendChild(buildPre(ex ? toolsPrettyFromExchange(ex) : ''));
+        tFull.appendChild(buildPre(tl.schemasPretty || ''));
         tLayer.appendChild(tFull);
         wireLayer(tLayer, tFull, wrap, 'tools');
         layers.appendChild(tLayer);
@@ -604,9 +580,9 @@ export function initRawLogModal({ api, appStore }) {
         body.appendChild(resultLabel);
         const pre = document.createElement('pre');
         pre.className = 'cstack-exec-result';
-        const result = findToolResult(exchanges, strip.callId, round.exchangeIndex ?? round.roundNo - 1);
-        pre.textContent =
-          result == null ? '(nicht protokolliert)' : truncate(prettyMaybeJson(result), 600);
+        pre.textContent = strip.resultRecorded
+          ? strip.resultText || '(leer)'
+          : '(nicht protokolliert)';
         body.appendChild(pre);
         const note = document.createElement('div');
         note.className = 'cstack-exec-note';

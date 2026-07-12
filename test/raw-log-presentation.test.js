@@ -178,12 +178,75 @@ test('buildContextStackVm tracks growth with slim layer references', () => {
   const stack = svc.buildContextStackVm(exchanges);
   assert.match(stack.metaStat, /Kontext wächst/);
   assert.equal(stack.rounds[0].toolLayer.count, 1);
-  assert.equal(stack.rounds[0].toolLayer.schemasPretty, undefined);
+  assert.match(stack.rounds[0].toolLayer.schemasPretty, /list_directory/);
   assert.equal(stack.rounds[0].clipboardRaw, undefined);
   assert.equal(stack.rounds[0].layers[0].fullMessage, undefined);
   assert.equal(stack.rounds[0].layers[0].exchangeIndex, 0);
-  assert.equal(stack.rounds[0].execStrips[0].callId, 'call_1');
-  assert.equal(stack.rounds[0].execStrips[0].resultText, undefined);
+  assert.equal(stack.rounds[0].execStrips[0].resultRecorded, true);
+  assert.match(stack.rounds[0].execStrips[0].resultText, /items/);
+  assert.equal(stack.rounds[0].execStrips[0].callId, undefined);
+});
+
+test('buildContextStackVm bounds tool schema pretty text size', () => {
+  const hugeSchema = { name: 'big', schema: { x: 'y'.repeat(20_000) } };
+  const pretty = svc.buildToolSchemasPretty([hugeSchema, { name: 'small', schema: { a: 1 } }]);
+  assert.ok(pretty.length <= 8_000);
+  assert.match(pretty, /small/);
+});
+
+test('buildContextStackVm marks unrecorded exec results', () => {
+  const exchanges = [
+    makeExchange({
+      response: {
+        text: '',
+        toolCalls: [{ id: 'orphan', name: 'list_directory', arguments: '{}' }],
+      },
+      finishReason: 'tool_calls',
+    }),
+  ];
+  const stack = svc.buildContextStackVm(exchanges);
+  assert.equal(stack.rounds[0].execStrips[0].resultRecorded, false);
+  assert.equal(stack.rounds[0].execStrips[0].resultText, '');
+});
+
+test('payload budget: rawLogTurn includes bounded tool schemas but not full request bodies', () => {
+  const toolBody = JSON.stringify({
+    model: 'm',
+    messages: [{ role: 'user', content: 'x'.repeat(15_000) }],
+    tools: [{ type: 'function', function: { name: 'list_directory', parameters: { type: 'object' } } }],
+  });
+  const exchanges = [
+    makeExchange({
+      request: { method: 'POST', url: 'https://api.example.com', body: toolBody },
+      response: {
+        text: '',
+        toolCalls: [{ id: 'c1', name: 'list_directory', arguments: '{"relative_path":"."}' }],
+      },
+      finishReason: 'tool_calls',
+    }),
+    makeExchange({
+      messages: [
+        { role: 'user', content: 'Hi' },
+        { role: 'tool', tool_call_id: 'c1', content: '{"ok":true}' },
+      ],
+      response: { text: 'done', toolCalls: [] },
+    }),
+  ];
+  const turn = svc.buildRawLogTurnView({ userText: 'Hi', exchanges });
+  const turnJson = JSON.stringify(turn);
+  assert.match(turnJson, /list_directory/);
+  assert.ok(!turnJson.includes('x'.repeat(500)));
+  assert.ok(turn.contextStack.rounds[0].toolLayer.schemasPretty.length < toolBody.length);
+});
+
+test('RawLogModal renderer has no request-body tool parsing or cross-exchange correlation helpers', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '../src/renderer/components/RawLogModal.js'), 'utf8');
+  assert.doesNotMatch(src, /toolsPrettyFromExchange/);
+  assert.doesNotMatch(src, /findToolResult/);
+  assert.doesNotMatch(src, /body\.tools/);
+  assert.doesNotMatch(src, /tool_call_id/);
 });
 
 test('buildRawLogTurnView produces a slim serializable turn view model', () => {

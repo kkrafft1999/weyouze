@@ -44,6 +44,7 @@
  * @typedef {Object} RawLogStackToolLayerVm
  * @property {number} count
  * @property {string} namesSnippet
+ * @property {string} schemasPretty
  * @property {string} title
  * @property {string} ariaLabel
  */
@@ -82,10 +83,11 @@
 
 /**
  * @typedef {Object} RawLogExecStripVm
- * @property {string} [callId]
  * @property {string} summaryCall
  * @property {string} bodyCall
  * @property {string} resultLabel
+ * @property {boolean} resultRecorded
+ * @property {string} resultText
  * @property {string} noteText
  */
 
