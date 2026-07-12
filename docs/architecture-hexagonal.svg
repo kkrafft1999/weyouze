@@ -1,0 +1,193 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1050" width="1440" height="1050" role="img" aria-labelledby="title desc" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="title">Weyouze Anything — Hexagonale Architektur (Ports &amp; Adapters)</title>
+  <desc id="desc">Hexagonales Architekturdiagramm: Anwendungs-Kern in der Mitte, treibende (primäre) Adapter links, getriebene (sekundäre) Adapter rechts, Ports als Verträge auf dem Hexagon-Rand, externe Systeme außen.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 8 6" markerWidth="9" markerHeight="7" refX="7" refY="3" orient="auto-start-reverse">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#5a6a78"/>
+    </marker>
+    <style>
+      text{fill:#1b2733}
+      .t-title{font-size:26px;font-weight:700}
+      .t-sub{font-size:13px;fill:#5b6b7a}
+      .zlabel{font-size:13px;font-weight:700;letter-spacing:1px}
+      .btitle{font-size:13px;font-weight:700}
+      .bsub{font-size:10px;fill:#5b6b7a}
+      .chip{font-size:12px;font-weight:600;text-anchor:middle}
+      .chipsub{font-size:9.5px;fill:#5b6b7a;text-anchor:middle}
+      .note{font-size:11px;fill:#5b6b7a}
+      .arrlbl{font-size:10px;fill:#47535f;font-weight:600;text-anchor:middle}
+      .portlbl{font-size:9.5px;font-weight:700;fill:#8a5a12;text-anchor:middle}
+      .legend{font-size:12px;fill:#33414f}
+      .tt-ui{fill:#1c4b82}.tt-hand{fill:#1f6b47}.tt-prov{fill:#4b2e8a}
+      .tt-tool{fill:#922456}.tt-svc{fill:#333f78}.tt-ext{fill:#47535f}
+      .tt-core{fill:#0b5b44}.tt-contract{fill:#8a5a12}
+      rect.ui{fill:#e8f1fc;stroke:#2f6db3;stroke-width:1.3}
+      rect.hand{fill:#e3f3e9;stroke:#3e9266;stroke-width:1.3}
+      rect.prov{fill:#ede7f8;stroke:#7c4dd1;stroke-width:1.4}
+      rect.tool{fill:#fbe4ee;stroke:#d5478a;stroke-width:1.4}
+      rect.svc{fill:#e6eaf6;stroke:#5566b5;stroke-width:1.4}
+      rect.ext{fill:#eef1f4;stroke:#8a97a6;stroke-width:1.3;stroke-dasharray:5 4}
+      rect.core{fill:#cfe9df;stroke:#0e7a5b;stroke-width:2.4}
+      rect.contract{fill:#fcefd2;stroke:#c68a2e;stroke-width:1.3}
+      rect.preload{fill:#dde5f0;stroke:#8a9bb5;stroke-width:1.3}
+      rect.port{fill:#fcefd2;stroke:#c68a2e;stroke-width:1.4}
+      .flow{stroke:#5a6a78;stroke-width:1.7;fill:none}
+      .flow-d{stroke:#5a6a78;stroke-width:1.5;fill:none;stroke-dasharray:5 4}
+      .hex{fill:#eaf7f0;stroke:#0e7a5b;stroke-width:3}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1440" height="1050" fill="#f7f9fb"/>
+
+  <text class="t-title" x="30" y="44">Weyouze Anything — Hexagonale Architektur (Ports &amp; Adapters)</text>
+  <text class="t-sub" x="31" y="70">Anwendungs-Kern in der Mitte · treibende Adapter (Primary/Inbound) links · getriebene Adapter (Secondary/Outbound) rechts · Ports = Contracts</text>
+
+  <!-- Legend -->
+  <g>
+    <rect class="core"     x="985"  y="34" width="13" height="13" rx="2"/><text class="legend" x="1003" y="45">Kern</text>
+    <rect class="contract" x="1055" y="34" width="13" height="13" rx="2"/><text class="legend" x="1073" y="45">Port</text>
+    <rect class="hand"     x="1120" y="34" width="13" height="13" rx="2"/><text class="legend" x="1138" y="45">Primär</text>
+    <rect class="svc"      x="1210" y="34" width="13" height="13" rx="2"/><text class="legend" x="1228" y="45">Sekundär</text>
+    <rect class="ext"      x="1320" y="34" width="13" height="13" rx="2"/><text class="legend" x="1338" y="45">Extern</text>
+  </g>
+
+  <!-- Side banners -->
+  <text class="zlabel tt-hand" x="40"   y="238">PRIMÄRE / TREIBENDE SEITE (Inbound)</text>
+  <text class="zlabel tt-svc"  x="985"  y="296">GETRIEBENE ADAPTER (Outbound)</text>
+  <text class="zlabel tt-ext"  x="1410" y="296" text-anchor="end">EXTERNE SYSTEME</text>
+
+  <!-- ============ DRIVEN CONNECTORS (core -> adapter), drawn first ============ -->
+  <line class="flow" x1="767" y1="342" x2="983" y2="342" marker-end="url(#ah)"/>
+  <line class="flow" x1="858" y1="395" x2="983" y2="426" marker-end="url(#ah)"/>
+  <line class="flow" x1="910" y1="510" x2="983" y2="528" marker-end="url(#ah)"/>
+  <line class="flow" x1="910" y1="640" x2="983" y2="632" marker-end="url(#ah)"/>
+  <line class="flow" x1="832" y1="770" x2="983" y2="736" marker-end="url(#ah)"/>
+  <line class="flow" x1="741" y1="822" x2="983" y2="828" marker-end="url(#ah)"/>
+
+  <!-- ============ DRIVING ARROWS (adapter -> port -> core) ============ -->
+  <line class="flow" x1="320" y1="470" x2="442" y2="470" marker-end="url(#ah)"/>
+  <line class="flow" x1="320" y1="560" x2="442" y2="560" marker-end="url(#ah)"/>
+  <line class="flow" x1="320" y1="650" x2="442" y2="650" marker-end="url(#ah)"/>
+
+  <!-- ============ HEXAGON CORE ============ -->
+  <polygon class="hex" points="650,275 910,425 910,725 650,875 390,725 390,425"/>
+  <text x="650" y="460" text-anchor="middle" class="zlabel tt-core">ANWENDUNGS-KERN · DOMÄNE / USE CASES</text>
+  <text x="650" y="490" text-anchor="middle" font-size="17" font-weight="700" class="tt-core">Chat-Orchestrierung &amp; Tool-Loop</text>
+  <text class="note" x="470" y="518" fill="#204b3d">• Runden- &amp; Tool-Schleife, System-Prompt</text>
+  <text class="note" x="470" y="538" fill="#204b3d">• Kontextfenster (Trim), RAW-Protokoll</text>
+  <text class="note" x="470" y="558" fill="#204b3d">• Usage-Aggregation, Abbruch-Handling</text>
+  <text class="note" x="470" y="578" fill="#204b3d">• Provider-/Tool-/Electron-unabhängig</text>
+  <rect x="452" y="596" width="396" height="110" rx="8" fill="#f4fbf8" stroke="#0e7a5b" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="464" y="618" font-size="11" font-weight="700" fill="#0b5b44">Regel der Hexagonal-Architektur</text>
+  <text x="464" y="637" font-size="10.5" fill="#356b58">Der Kern kennt keine Adapter — er spricht mit</text>
+  <text x="464" y="653" font-size="10.5" fill="#356b58">der Außenwelt ausschließlich über Ports (Verträge).</text>
+  <text x="464" y="676" font-size="10.5" font-style="italic" fill="#8a5a12">Zielbild — aktuell noch in chat-handlers.js (IPC-Schicht);</text>
+  <text x="464" y="692" font-size="10.5" font-style="italic" fill="#8a5a12">Extraktion = Roadmap-Etappe 2/3.</text>
+
+  <!-- ============ PORTS (on hexagon boundary) ============ -->
+  <!-- driving ports (left edge) -->
+  <rect class="port" x="346" y="457" width="88" height="26" rx="6"/><text class="portlbl" x="390" y="474">Chat-Port</text>
+  <rect class="port" x="346" y="547" width="88" height="26" rx="6"/><text class="portlbl" x="390" y="564">Workspace-Port</text>
+  <rect class="port" x="346" y="637" width="88" height="26" rx="6"/><text class="portlbl" x="390" y="654">Config/Verlauf</text>
+  <!-- driven port nodes -->
+  <rect class="port" x="756" y="334" width="22" height="16" rx="4"/>
+  <rect class="port" x="847" y="387" width="22" height="16" rx="4"/>
+  <rect class="port" x="899" y="502" width="22" height="16" rx="4"/>
+  <rect class="port" x="899" y="632" width="22" height="16" rx="4"/>
+  <rect class="port" x="821" y="762" width="22" height="16" rx="4"/>
+  <rect class="port" x="730" y="814" width="22" height="16" rx="4"/>
+  <!-- driven port labels -->
+  <g>
+    <rect x="828" y="326" width="96" height="15" rx="3" fill="#f7f9fb"/><text class="portlbl" x="876" y="337">Update-Port</text>
+    <rect x="876" y="404" width="96" height="15" rx="3" fill="#f7f9fb"/><text class="portlbl" x="924" y="415">Sprache-Port</text>
+    <rect x="920" y="500" width="70" height="15" rx="3" fill="#f7f9fb"/><text class="portlbl" x="955" y="511">LLM-Port</text>
+    <rect x="920" y="646" width="70" height="15" rx="3" fill="#f7f9fb"/><text class="portlbl" x="955" y="657">Tool-Port</text>
+    <rect x="855" y="742" width="108" height="15" rx="3" fill="#f7f9fb"/><text class="portlbl" x="909" y="753">Persistenz-Port</text>
+    <rect x="800" y="832" width="86" height="15" rx="3" fill="#f7f9fb"/><text class="portlbl" x="843" y="843">Datei-Port</text>
+  </g>
+
+  <!-- ============ PRIMARY (DRIVING) SIDE ============ -->
+  <rect class="ui" x="40" y="252" width="280" height="62" rx="10"/>
+  <text class="btitle tt-ui" x="180" y="280" text-anchor="middle">Renderer-UI</text>
+  <text class="chipsub" x="180" y="298">Primärer Akteur · treibt Use Cases</text>
+
+  <rect class="preload" x="40" y="326" width="280" height="30" rx="8"/>
+  <text x="180" y="345" text-anchor="middle" font-size="11" font-weight="600" fill="#1e2b3d">Preload-Bridge · IPC (window.electronAPI)</text>
+
+  <rect class="hand" x="40" y="372" width="280" height="300" rx="10" fill="#eef7f1"/>
+  <text class="btitle tt-hand" x="52" y="396">IPC-Handler — treibende Adapter</text>
+  <g>
+    <rect class="hand" x="52"  y="410" width="120" height="32" rx="7"/><text class="chip tt-hand" x="112" y="431">chat</text>
+    <rect class="hand" x="188" y="410" width="120" height="32" rx="7"/><text class="chip tt-hand" x="248" y="431">chat-history</text>
+    <rect class="hand" x="52"  y="450" width="120" height="32" rx="7"/><text class="chip tt-hand" x="112" y="471">fs</text>
+    <rect class="hand" x="188" y="450" width="120" height="32" rx="7"/><text class="chip tt-hand" x="248" y="471">dialog</text>
+    <rect class="hand" x="52"  y="490" width="120" height="32" rx="7"/><text class="chip tt-hand" x="112" y="511">settings</text>
+    <rect class="hand" x="188" y="490" width="120" height="32" rx="7"/><text class="chip tt-hand" x="248" y="511">whisper</text>
+    <rect class="hand" x="52"  y="530" width="120" height="32" rx="7"/><text class="chip tt-hand" x="112" y="551">update</text>
+  </g>
+  <text class="note" x="52" y="588">übersetzen IPC-Anfragen (inbound) in</text>
+  <text class="note" x="52" y="604">Use-Case-Aufrufe des Kerns über die Ports.</text>
+
+  <!-- UI -> Preload -> IPC -->
+  <line class="flow" x1="180" y1="314" x2="180" y2="325" marker-end="url(#ah)"/>
+  <line class="flow" x1="180" y1="356" x2="180" y2="371" marker-end="url(#ah)"/>
+
+  <!-- ============ SECONDARY (DRIVEN) ADAPTERS ============ -->
+  <rect class="svc" x="985" y="306" width="210" height="72" rx="9"/>
+  <text class="btitle tt-svc" x="997" y="331">update-service</text>
+  <text class="bsub" x="997" y="348">Sekundäradapter (outbound)</text>
+  <text class="bsub" x="997" y="366">Release-Check über GitHub</text>
+
+  <rect class="svc" x="985" y="390" width="210" height="72" rx="9"/>
+  <text class="btitle tt-svc" x="997" y="415">whisper-service</text>
+  <text class="bsub" x="997" y="432">Sekundäradapter (outbound)</text>
+  <text class="bsub" x="997" y="450">Speech-to-Text</text>
+
+  <rect class="prov" x="985" y="486" width="210" height="84" rx="9"/>
+  <text class="btitle tt-prov" x="997" y="510">Provider-Registry</text>
+  <text class="bsub" x="997" y="527">Sekundäradapter · Ports/Adapter</text>
+  <text class="bsub" x="997" y="544">openai · anthropic · google</text>
+  <text class="bsub" x="997" y="560">ollama · mlx-lm</text>
+
+  <rect class="tool" x="985" y="596" width="210" height="72" rx="9"/>
+  <text class="btitle tt-tool" x="997" y="621">Tool-Registry</text>
+  <text class="bsub" x="997" y="638">Sekundäradapter · erweiterbar</text>
+  <text class="bsub" x="997" y="656">list/read/write/debug · via fs-service</text>
+
+  <rect class="svc" x="985" y="700" width="210" height="72" rx="9"/>
+  <text class="btitle tt-svc" x="997" y="725">storage-service</text>
+  <text class="bsub" x="997" y="742">Sekundäradapter (outbound)</text>
+  <text class="bsub" x="997" y="760">Config · Verlauf · Prefs</text>
+
+  <rect class="svc" x="985" y="792" width="210" height="72" rx="9"/>
+  <text class="btitle tt-svc" x="997" y="817">fs-service</text>
+  <text class="bsub" x="997" y="834">Sekundäradapter (outbound)</text>
+  <text class="bsub" x="997" y="852">workspace-sichere Datei-IO</text>
+
+  <!-- Tool-Registry delegates file IO to fs-service -->
+  <path class="flow-d" d="M1195,632 C1224,662 1224,800 1197,826" marker-end="url(#ah)"/>
+
+  <!-- ============ EXTERNAL SYSTEMS ============ -->
+  <rect class="ext" x="1250" y="312" width="160" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1330" y="338">GitHub</text><text class="chipsub" x="1330" y="356">Releases-API</text>
+  <rect class="ext" x="1250" y="396" width="160" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1330" y="422">Whisper-API</text><text class="chipsub" x="1330" y="440">OpenAI Speech-to-Text</text>
+  <rect class="ext" x="1250" y="498" width="160" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1330" y="524">LLM-APIs</text><text class="chipsub" x="1330" y="542">OpenAI · Anthropic · Google · …</text>
+  <rect class="ext" x="1250" y="706" width="160" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1330" y="732">App-Storage</text><text class="chipsub" x="1330" y="750">safeStorage · JSON auf Disk</text>
+  <rect class="ext" x="1250" y="800" width="160" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1330" y="826">Dateisystem</text><text class="chipsub" x="1330" y="844">Workspace-Ordner</text>
+
+  <!-- adapter -> external -->
+  <line class="flow" x1="1195" y1="342" x2="1248" y2="342" marker-end="url(#ah)"/>
+  <line class="flow" x1="1195" y1="426" x2="1248" y2="426" marker-end="url(#ah)"/>
+  <line class="flow" x1="1195" y1="528" x2="1248" y2="528" marker-end="url(#ah)"/>
+  <line class="flow" x1="1195" y1="736" x2="1248" y2="736" marker-end="url(#ah)"/>
+  <line class="flow" x1="1195" y1="828" x2="1248" y2="830" marker-end="url(#ah)"/>
+
+  <!-- ============ BOTTOM NOTE + STAMP ============ -->
+  <text x="650" y="925" text-anchor="middle" font-size="11.5" fill="#8a5a12">Ports sind Verträge: <tspan font-weight="700">src/shared/contracts</tspan> (DTOs · Events · Enums · Validatoren) — der Kern hängt nur von Ports ab, nie von Adaptern.</text>
+  <text x="30" y="1030" font-size="11" fill="#8a97a6">docs/architecture-hexagonal.svg</text>
+  <text x="1410" y="1030" text-anchor="end" font-size="11" fill="#8a97a6">Erstellt 2026-07-12 · Claude Opus 4.8 · Reasoning-Effort: high</text>
+</svg>
