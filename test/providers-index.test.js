@@ -27,3 +27,11 @@ test('ollama exposes dispose as alias for destroyInsecureDispatcher', () => {
   assert.equal(typeof ollama.dispose, 'function');
   assert.equal(ollama.dispose, ollama.destroyInsecureDispatcher);
 });
+
+test('openai presetFields declare identity-affecting reasoning options', () => {
+  const openai = providers.getProvider('openai');
+  const field = openai.presentation.presetFields[0];
+  assert.equal(field.key, 'reasoningEffort');
+  assert.equal(field.affectsPresetIdentity, true);
+  assert.equal(field.detailPrefix, 'reasoning_effort: ');
+});

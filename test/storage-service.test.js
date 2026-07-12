@@ -8,10 +8,19 @@ const { createStorageService } = require('../src/main/services/storage-service')
 const mockProviders = {
   getProvider(id) {
     if (id === 'openai') {
-      return { defaultModel: 'gpt-4o', fields: { apiKey: true } };
+      return {
+        defaultModel: 'gpt-4o',
+        fields: { apiKey: true },
+        presentation: {
+          presetFields: [{
+            key: 'reasoningEffort',
+            options: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }],
+          }],
+        },
+      };
     }
     if (id === 'anthropic') {
-      return { defaultModel: 'claude-test', fields: { apiKey: true } };
+      return { defaultModel: 'claude-test', fields: { apiKey: true }, presentation: {} };
     }
     return null;
   },

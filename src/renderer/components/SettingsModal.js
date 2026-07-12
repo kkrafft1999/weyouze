@@ -1,8 +1,12 @@
+import contracts from '../generated/contracts.js';
+
 const SETTINGS_NAV_LABELS = { models: 'Modelle', tools: 'Tools', general: 'Allgemein' };
+const { formatPresetSublabelFromView, presetIdentityKey, PRESET_DETAIL_STYLES } = contracts;
 
 let settingsDraftPresets = [];
 let settingsDraftActivePresetId = null;
 let settingsCredentialDraft = {};
+let popupPresetFieldValues = {};
 
 export function initSettingsModal(deps) {
   const {
@@ -34,8 +38,7 @@ export function initSettingsModal(deps) {
   const inputBaseUrl = document.getElementById('input-base-url');
   const providerInsecureRow = document.getElementById('provider-insecure-row');
   const inputInsecureTls = document.getElementById('input-insecure-tls');
-  const openaiReasoningSection = document.getElementById('openai-reasoning-section');
-  const selectPopupReasoning = document.getElementById('select-popup-reasoning');
+  const presetFieldsPopup = document.getElementById('preset-fields-popup');
   const selectModel = document.getElementById('select-model');
   const btnLoadModels = document.getElementById('btn-load-models');
   const modelLoadProviderLabel = document.getElementById('model-load-provider-label');
@@ -56,20 +59,57 @@ export function initSettingsModal(deps) {
   const settingsVersionLabel = document.getElementById('settings-version-label');
   const btnCheckUpdates = document.getElementById('btn-check-updates');
 
-  function presetDetailRowForDraft(pr) {
-    const meta = findProviderMeta(pr.providerId);
-    if (!meta) return '';
-    const d = settingsCredentialDraft[pr.providerId] || {};
-    if (pr.providerId === 'openai' && pr.reasoningEffort) {
-      return `reasoning_effort: ${pr.reasoningEffort}`;
+  function findProviderView(providerId) {
+    return findProviderMeta(providerId);
+  }
+
+  function draftConnectionFor(providerId) {
+    const pv = findProviderView(providerId);
+    const draft = settingsCredentialDraft[providerId];
+    if (!pv || !draft) return undefined;
+    return {
+      baseUrl: (draft.baseUrl || pv.baseUrl || pv.defaultBaseUrl || '').trim(),
+      insecureTls: typeof draft.insecureTls === 'boolean' ? draft.insecureTls : !!pv.insecureTls,
+    };
+  }
+
+  function presetSublabelForDraft(pr) {
+    const pv = findProviderView(pr.providerId);
+    if (!pv) return pr.sublabel || '';
+    const connection = settingsCredentialDraft[pr.providerId] ? draftConnectionFor(pr.providerId) : undefined;
+    const formatted = formatPresetSublabelFromView(pr, pv, connection);
+    return formatted.text || pr.sublabel || '';
+  }
+
+  function presetDetailClassForDraft(pr) {
+    const pv = findProviderView(pr.providerId);
+    if (!pv) {
+      return pr.sublabelStyle === PRESET_DETAIL_STYLES.MONO
+        ? 'settings-pref-detail settings-pref-detail--mono'
+        : 'settings-pref-detail';
     }
-    if (meta.fields?.baseUrl) {
-      const url = (d.baseUrl || meta.baseUrl || meta.defaultBaseUrl || '').trim();
-      const host = url ? url.replace(/^https?:\/\//, '') : 'Server';
-      const tls = typeof d.insecureTls === 'boolean' ? d.insecureTls : !!meta.insecureTls;
-      return `Server: ${host} · TLS ${tls ? 'insecure' : 'geprüft'}`;
+    const connection = settingsCredentialDraft[pr.providerId] ? draftConnectionFor(pr.providerId) : undefined;
+    const formatted = formatPresetSublabelFromView(pr, pv, connection);
+    const style = formatted.text ? formatted.style : pr.sublabelStyle;
+    return style === PRESET_DETAIL_STYLES.MONO
+      ? 'settings-pref-detail settings-pref-detail--mono'
+      : 'settings-pref-detail';
+  }
+
+  function presetToWireRow(pr) {
+    const row = {
+      id: pr.id,
+      providerId: pr.providerId,
+      model: pr.model,
+      menuVisible: pr.menuVisible !== false,
+    };
+    const pv = findProviderView(pr.providerId);
+    for (const field of pv?.presetFields || []) {
+      if (field.key && pr[field.key]) {
+        row[field.key] = pr[field.key];
+      }
     }
-    return meta.apiBase || '';
+    return row;
   }
 
   function setModalError(text) {
@@ -113,6 +153,72 @@ export function initSettingsModal(deps) {
     }
     settingsCredentialDraft[id].baseUrl = (inputBaseUrl.value || '').trim();
     settingsCredentialDraft[id].insecureTls = !!inputInsecureTls.checked;
+    stashPopupPresetFieldValues(id);
+  }
+
+  function stashPopupPresetFieldValues(providerId) {
+    const pv = findProviderView(providerId);
+    if (!pv) return;
+    if (!popupPresetFieldValues[providerId]) popupPresetFieldValues[providerId] = {};
+    for (const field of pv.presetFields || []) {
+      const el = document.getElementById(`preset-field-${field.key}`);
+      if (el) popupPresetFieldValues[providerId][field.key] = el.value;
+    }
+  }
+
+  function renderPresetFieldsPopup(providerView) {
+    if (!presetFieldsPopup) return;
+    presetFieldsPopup.innerHTML = '';
+    const fields = providerView?.presetFields || [];
+    if (fields.length === 0) {
+      presetFieldsPopup.classList.add('hidden');
+      return;
+    }
+    presetFieldsPopup.classList.remove('hidden');
+    const providerId = providerView.id;
+    if (!popupPresetFieldValues[providerId]) popupPresetFieldValues[providerId] = {};
+
+    for (const field of fields) {
+      const section = document.createElement('div');
+      const head = document.createElement('div');
+      head.className = 'popup-flow-subhead';
+      head.textContent = field.label;
+      section.appendChild(head);
+
+      const label = document.createElement('label');
+      label.className = 'visually-hidden';
+      label.setAttribute('for', `preset-field-${field.key}`);
+      label.textContent = field.label;
+      section.appendChild(label);
+
+      const select = document.createElement('select');
+      select.id = `preset-field-${field.key}`;
+      select.className = 'modal-input';
+      select.dataset.presetFieldKey = field.key;
+      for (const opt of field.options || []) {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.label || opt.value;
+        select.appendChild(option);
+      }
+      const current = popupPresetFieldValues[providerId][field.key] || field.defaultValue;
+      select.value = current;
+      popupPresetFieldValues[providerId][field.key] = select.value;
+      section.appendChild(select);
+
+      if (field.hint) {
+        const hint = document.createElement('p');
+        hint.className = 'modal-hint';
+        hint.textContent = field.hint;
+        section.appendChild(hint);
+      }
+
+      select.addEventListener('change', () => {
+        popupPresetFieldValues[providerId][field.key] = select.value;
+      });
+
+      presetFieldsPopup.appendChild(section);
+    }
   }
 
   function renderProviderSelect() {
@@ -122,7 +228,7 @@ export function initSettingsModal(deps) {
       opt.value = p.id;
       opt.setAttribute('lang', 'en');
       const tags = [];
-      if (p.id === appStore.llmState.activeProvider) tags.push('aktiv');
+      if (p.isActiveChatProvider) tags.push('aktiv');
       if (p.configured) tags.push('konfiguriert');
       opt.textContent = tags.length ? `${p.name} – ${tags.join(', ')}` : p.name;
       selectProvider.appendChild(opt);
@@ -162,8 +268,8 @@ export function initSettingsModal(deps) {
   }
 
   function syncPopupProviderUI(providerId, skipStash) {
-    const meta = findProviderMeta(providerId);
-    if (!meta) return;
+    const pv = findProviderView(providerId);
+    if (!pv) return;
     if (!skipStash) stashPopupCredentialInputs();
 
     selectProvider.value = providerId;
@@ -172,30 +278,25 @@ export function initSettingsModal(deps) {
       settingsCredentialDraft[providerId] = {
         apiKey: '',
         removeApiKey: false,
-        baseUrl: (meta.baseUrl || meta.defaultBaseUrl || '').trim(),
-        insecureTls: !!meta.insecureTls,
+        baseUrl: (pv.baseUrl || pv.defaultBaseUrl || '').trim(),
+        insecureTls: !!pv.insecureTls,
       };
     }
     const draft = settingsCredentialDraft[providerId];
+    const form = pv.form || {};
 
-    if (meta.fields?.apiKey) {
+    if (form.showApiKey) {
       providerKeyRow.classList.remove('hidden');
       inputApiKey.value = draft.apiKey || '';
-      if (draft.removeApiKey && meta.hasKey) {
+      if (draft.removeApiKey && pv.hasKey) {
         inputApiKey.placeholder = 'Key wird beim Speichern entfernt';
-      } else if (meta.hasKey) {
+      } else if (pv.hasKey) {
         inputApiKey.placeholder = 'Gespeicherter Key bleibt erhalten';
-      } else if (meta.id === 'openai') {
-        inputApiKey.placeholder = 'sk-…';
-      } else if (meta.id === 'anthropic') {
-        inputApiKey.placeholder = 'sk-ant-…';
-      } else if (meta.id === 'google') {
-        inputApiKey.placeholder = 'AIza…';
       } else {
-        inputApiKey.placeholder = '••••••';
+        inputApiKey.placeholder = form.apiKeyPlaceholder || '••••••';
       }
       const showTrash =
-        meta.hasKey || !!(draft.apiKey || '').trim() || draft.removeApiKey;
+        pv.hasKey || !!(draft.apiKey || '').trim() || draft.removeApiKey;
       btnRemoveApiKey?.classList.toggle('hidden', !showTrash);
     } else {
       providerKeyRow.classList.add('hidden');
@@ -203,16 +304,16 @@ export function initSettingsModal(deps) {
       btnRemoveApiKey?.classList.add('hidden');
     }
 
-    if (meta.fields?.baseUrl) {
+    if (form.showBaseUrl) {
       providerBaseUrlRow.classList.remove('hidden');
-      inputBaseUrl.value = draft.baseUrl || meta.baseUrl || meta.defaultBaseUrl || '';
-      inputBaseUrl.placeholder = meta.defaultBaseUrl || 'http://localhost:11434';
+      inputBaseUrl.value = draft.baseUrl || pv.baseUrl || pv.defaultBaseUrl || '';
+      inputBaseUrl.placeholder = form.baseUrlPlaceholder || '';
     } else {
       providerBaseUrlRow.classList.add('hidden');
       inputBaseUrl.value = '';
     }
 
-    if (meta.fields?.insecureTls) {
+    if (form.showInsecureTls) {
       providerInsecureRow.classList.remove('hidden');
       inputInsecureTls.checked = !!draft.insecureTls;
     } else {
@@ -220,30 +321,26 @@ export function initSettingsModal(deps) {
       inputInsecureTls.checked = false;
     }
 
-    if (providerId === 'openai') {
-      openaiReasoningSection.classList.remove('hidden');
-    } else {
-      openaiReasoningSection.classList.add('hidden');
-    }
+    renderPresetFieldsPopup(pv);
 
     if (modelLoadProviderLabel) {
-      modelLoadProviderLabel.textContent = meta.name;
+      modelLoadProviderLabel.textContent = pv.name;
     }
 
-    renderModelSelect(meta.model || meta.defaultModel || '', null);
+    renderModelSelect(pv.model || pv.defaultModel || '', null);
 
     const lines = [];
-    if (meta.apiBase) lines.push(`API: ${meta.apiBase}`);
-    if (meta.id === appStore.llmState.activeProvider) lines.push('Aktueller Chat-Anbieter');
-    if (meta.fields?.apiKey) {
-      if (draft.removeApiKey && meta.hasKey) {
+    if (pv.apiBase) lines.push(`API: ${pv.apiBase}`);
+    if (pv.isActiveChatProvider) lines.push('Aktueller Chat-Anbieter');
+    if (form.showApiKey) {
+      if (draft.removeApiKey && pv.hasKey) {
         lines.push('Key wird beim Speichern entfernt');
-      } else if (meta.hasKey && !draft.apiKey) {
+      } else if (pv.hasKey && !draft.apiKey) {
         lines.push('Key gespeichert');
       } else if (draft.apiKey) {
         lines.push('Neuer Key wird beim Speichern gesetzt');
       }
-    } else if (meta.configured) {
+    } else if (pv.configured) {
       lines.push('Konfiguriert');
     }
     setProviderStatus(lines.join(' · '), false);
@@ -260,8 +357,8 @@ export function initSettingsModal(deps) {
       '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
     for (const pr of settingsDraftPresets) {
-      const meta = findProviderMeta(pr.providerId);
-      if (!meta) continue;
+      const pv = findProviderView(pr.providerId);
+      if (!pv) continue;
       const li = document.createElement('li');
 
       const row = document.createElement('div');
@@ -274,10 +371,10 @@ export function initSettingsModal(deps) {
       main.className = 'settings-pref-main';
       const title = document.createElement('strong');
       title.lang = 'en';
-      title.textContent = `${meta.name} · ${pr.model || meta.defaultModel}`;
+      title.textContent = pr.label || `${pv.name} · ${pr.model || pv.defaultModel}`;
       const detail = document.createElement('span');
-      detail.className = pr.providerId === 'openai' && pr.reasoningEffort ? 'settings-pref-detail settings-pref-detail--mono' : 'settings-pref-detail';
-      detail.textContent = presetDetailRowForDraft(pr);
+      detail.className = presetDetailClassForDraft(pr);
+      detail.textContent = presetSublabelForDraft(pr);
       main.appendChild(title);
       main.appendChild(detail);
 
@@ -291,7 +388,7 @@ export function initSettingsModal(deps) {
       sw.setAttribute('aria-checked', pr.menuVisible !== false ? 'true' : 'false');
       sw.setAttribute(
         'aria-label',
-        `${meta.name} · ${pr.model} — ${pr.menuVisible !== false ? 'im Chat-Modellmenü sichtbar' : 'im Chat ausgeblendet'}`
+        `${pr.label || pv.name} — ${pr.menuVisible !== false ? 'im Chat-Modellmenü sichtbar' : 'im Chat ausgeblendet'}`
       );
       sw.dataset.presetId = pr.id;
       const track = document.createElement('span');
@@ -307,7 +404,7 @@ export function initSettingsModal(deps) {
       rm.className = 'settings-icon-trash';
       rm.setAttribute(
         'aria-label',
-        `${meta.name} ${pr.model} aus der Liste entfernen`
+        `${pr.label || pv.name} aus der Liste entfernen`
       );
       rm.dataset.presetId = pr.id;
       rm.innerHTML = trashSvg;
@@ -347,6 +444,7 @@ export function initSettingsModal(deps) {
     settingsDraftActivePresetId =
       appStore.llmState.activePresetId || settingsDraftPresets[0]?.id || null;
     hydrateCredentialDraftFromLlmState();
+    popupPresetFieldValues = {};
   }
 
   function applyShellLocale(lc) {
@@ -480,20 +578,21 @@ export function initSettingsModal(deps) {
 
   async function loadModelsForPopup() {
     const providerId = selectProvider.value;
-    const meta = findProviderMeta(providerId);
-    if (!meta) return;
+    const pv = findProviderView(providerId);
+    if (!pv) return;
     stashPopupCredentialInputs();
 
     const d = settingsCredentialDraft[providerId] || {};
+    const form = pv.form || {};
     const apiKey = d.apiKey;
     const baseUrl = (d.baseUrl || '').trim();
-    const insecureTls = meta.fields?.insecureTls ? !!d.insecureTls : undefined;
+    const insecureTls = form.showInsecureTls ? !!d.insecureTls : undefined;
 
-    if (meta.fields?.apiKey && !apiKey && (!meta.hasKey || d.removeApiKey)) {
+    if (form.showApiKey && !apiKey && (!pv.hasKey || d.removeApiKey)) {
       setModelStatus('Bitte zuerst einen API-Key eingeben.', true);
       return;
     }
-    if (meta.fields?.baseUrl && !baseUrl && !meta.baseUrl) {
+    if (form.showBaseUrl && !baseUrl && !pv.baseUrl) {
       setModelStatus('Bitte eine Server-URL angeben.', true);
       return;
     }
@@ -514,10 +613,10 @@ export function initSettingsModal(deps) {
       const models = Array.isArray(result?.models) ? result.models : [];
       if (models.length === 0) {
         setModelStatus('Keine Modelle gefunden.', true);
-        renderModelSelect(meta.model || meta.defaultModel || '', null);
+        renderModelSelect(pv.model || pv.defaultModel || '', null);
         return;
       }
-      const current = selectModel.value || meta.model || meta.defaultModel || models[0].id;
+      const current = selectModel.value || pv.model || pv.defaultModel || models[0].id;
       renderModelSelect(current, models);
       if ([...selectModel.options].some((o) => o.value === current)) {
         selectModel.value = current;
@@ -532,21 +631,37 @@ export function initSettingsModal(deps) {
     }
   }
 
+  function buildDraftPresetCandidate(providerId) {
+    const pv = findProviderView(providerId);
+    if (!pv) return null;
+    const model = (selectModel.value || '').trim() || pv.defaultModel || '';
+    const row = {
+      id: 'draft',
+      providerId,
+      model,
+      menuVisible: true,
+      label: `${pv.name} · ${model}`,
+    };
+    for (const field of pv.presetFields || []) {
+      const value = popupPresetFieldValues[providerId]?.[field.key] || field.defaultValue;
+      if (value) row[field.key] = value;
+    }
+    return row;
+  }
+
   function addPresetDraftFromPopup() {
     stashPopupCredentialInputs();
     const pv = selectProvider.value;
-    const meta = findProviderMeta(pv);
-    if (!meta) return false;
-    const model = (selectModel.value || '').trim() || meta.defaultModel || '';
-    const reasoning =
-      pv === 'openai' && selectPopupReasoning ? selectPopupReasoning.value : null;
+    const providerView = findProviderView(pv);
+    if (!providerView) return false;
+    const candidate = buildDraftPresetCandidate(pv);
+    if (!candidate) return false;
 
-    const dup = settingsDraftPresets.some(
-      (row) =>
-        row.providerId === pv &&
-        row.model === model &&
-        (pv !== 'openai' || row.reasoningEffort === reasoning)
-    );
+    const dup = settingsDraftPresets.some((row) => {
+      const rowProvider = findProviderView(row.providerId);
+      if (!rowProvider) return false;
+      return presetIdentityKey(presetToWireRow(row), rowProvider) === presetIdentityKey(candidate, providerView);
+    });
     if (dup) {
       setModalError('Diese Kombination gibt es bereits in der Liste.');
       return false;
@@ -556,13 +671,24 @@ export function initSettingsModal(deps) {
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID()
         : `p-${Date.now()}`;
-    settingsDraftPresets.push({
+    const model = candidate.model;
+    const formatted = formatPresetSublabelFromView(candidate, providerView, draftConnectionFor(pv));
+    const newPreset = {
       id,
       providerId: pv,
       model,
-      reasoningEffort: reasoning,
       menuVisible: true,
-    });
+      label: `${providerView.name} · ${model}`,
+      sublabel: formatted.text,
+      sublabelStyle: formatted.style,
+    };
+    for (const field of providerView.presetFields || []) {
+      if (candidate[field.key]) {
+        newPreset[field.key] = candidate[field.key];
+      }
+    }
+
+    settingsDraftPresets.push(newPreset);
     if (!settingsDraftActivePresetId) settingsDraftActivePresetId = id;
     renderDraftPresetList();
     return true;
@@ -584,21 +710,21 @@ export function initSettingsModal(deps) {
     const ids = new Set(settingsDraftPresets.map((p) => p.providerId));
     for (const pid of ids) {
       const d = settingsCredentialDraft[pid];
-      const meta = findProviderMeta(pid);
-      if (!meta || !d) continue;
+      const pv = findProviderView(pid);
+      if (!pv || !d) continue;
       const patch = {};
       if (d.removeApiKey) patch.removeApiKey = true;
       if (typeof d.apiKey === 'string' && d.apiKey.trim()) patch.apiKey = d.apiKey.trim();
       const bu = typeof d.baseUrl === 'string' ? d.baseUrl.trim() : '';
-      if (bu && meta.fields?.baseUrl) patch.baseUrl = bu;
-      if (meta.fields?.insecureTls) patch.insecureTls = !!d.insecureTls;
+      if (bu && pv.form?.showBaseUrl) patch.baseUrl = bu;
+      if (pv.form?.showInsecureTls) patch.insecureTls = !!d.insecureTls;
       providerPatches[pid] = patch;
     }
 
     btnSettingsSave.disabled = true;
     try {
       const res = await api.commitSettings({
-        presets: settingsDraftPresets,
+        presets: settingsDraftPresets.map(presetToWireRow),
         activePresetId,
         providerPatches,
         uiPrefs: {
@@ -638,7 +764,6 @@ export function initSettingsModal(deps) {
   }
 
   btnCheckUpdates?.addEventListener('click', () => {
-    // Modal schliessen, damit das Banner (Overlay unter der Titlebar) sichtbar ist.
     closeSettingsModal();
     if (typeof onCheckUpdates === 'function') onCheckUpdates();
   });

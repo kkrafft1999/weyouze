@@ -44,10 +44,30 @@ const CHAT_PROGRESS_TYPES = Object.freeze({
   REASONING: 'reasoning',
 });
 
+// App-Sprache (ui-preferences.json, Einstellungen).
+const APP_LOCALES = Object.freeze({
+  DE: 'de',
+  EN: 'en',
+});
+
+// CSS-Klasse für Preset-Sublabels in der UI.
+const PRESET_DETAIL_STYLES = Object.freeze({
+  DEFAULT: 'default',
+  MONO: 'mono',
+});
+
+// Typ eines dynamischen Preset-Felds im Add-Model-Dialog.
+const PRESET_FIELD_TYPES = Object.freeze({
+  SELECT: 'select',
+});
+
 module.exports = {
   CONTRACT_VERSION,
   CHAT_ERROR_CODES,
   CHAT_PHASES,
   TOOL_LINE_PHASES,
   CHAT_PROGRESS_TYPES,
+  APP_LOCALES,
+  PRESET_DETAIL_STYLES,
+  PRESET_FIELD_TYPES,
 };

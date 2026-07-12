@@ -10,7 +10,37 @@
  */
 'use strict';
 
-const { CONTRACT_VERSION, CHAT_ERROR_CODES, CHAT_PHASES, TOOL_LINE_PHASES, CHAT_PROGRESS_TYPES } = require('./enums');
+const {
+  CONTRACT_VERSION,
+  CHAT_ERROR_CODES,
+  CHAT_PHASES,
+  TOOL_LINE_PHASES,
+  CHAT_PROGRESS_TYPES,
+  APP_LOCALES,
+  PRESET_DETAIL_STYLES,
+  PRESET_FIELD_TYPES,
+} = require('./enums');
+const {
+  clampMaxToolRounds,
+  clampSidebarWidth,
+  clampChatPanelWidth,
+  clampHistoryCharLimit,
+  isAppLocale,
+  createSettingsOk,
+  createSettingsError,
+  createListModelsResult,
+  normalizePresetWire,
+  presetIdentityKey,
+  normalizeProviderPatch,
+  normalizeUiPrefs,
+  normalizeUiPrefsPatch,
+  normalizeListModelsRequest,
+  formatConnectionDetail,
+  formatPresetSublabel,
+  formatPresetSublabelFromView,
+  buildPresetFieldViews,
+  buildProviderFormView,
+} = require('./settings');
 const { toUsageNumber, createEmptyUsage, normalizeUsage, coerceUsage, mergeUsage } = require('./usage');
 const { DEBUG_WAIT, resolveDebugWaitMs } = require('./debug-wait');
 const {
@@ -32,6 +62,28 @@ module.exports = {
   CHAT_PHASES,
   TOOL_LINE_PHASES,
   CHAT_PROGRESS_TYPES,
+  APP_LOCALES,
+  PRESET_DETAIL_STYLES,
+  PRESET_FIELD_TYPES,
+  clampMaxToolRounds,
+  clampSidebarWidth,
+  clampChatPanelWidth,
+  clampHistoryCharLimit,
+  isAppLocale,
+  createSettingsOk,
+  createSettingsError,
+  createListModelsResult,
+  normalizePresetWire,
+  presetIdentityKey,
+  normalizeProviderPatch,
+  normalizeUiPrefs,
+  normalizeUiPrefsPatch,
+  normalizeListModelsRequest,
+  formatConnectionDetail,
+  formatPresetSublabel,
+  formatPresetSublabelFromView,
+  buildPresetFieldViews,
+  buildProviderFormView,
   toUsageNumber,
   createEmptyUsage,
   normalizeUsage,

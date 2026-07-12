@@ -207,6 +207,10 @@ module.exports = {
   defaultModel: '',
   defaultBaseUrl: DEFAULT_BASE,
   apiBase: DEFAULT_BASE,
+  presentation: {
+    baseUrlPlaceholder: DEFAULT_BASE,
+    connectionDetail: true,
+  },
   listModels,
   streamChatRound,
 };

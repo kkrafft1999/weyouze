@@ -2374,10 +2374,6 @@ select.modal-input {
   grid-column: auto;
 }
 
-#openai-reasoning-section {
-  grid-column: 1 / -1;
-}
-
 .add-model-dialog__bottom {
   flex-shrink: 0;
   padding: 14px 20px;

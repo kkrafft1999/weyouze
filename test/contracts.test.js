@@ -114,6 +114,11 @@ test('event factories match the push payload shapes', () => {
   );
 });
 
+test('contracts aggregate exports settings helpers', () => {
+  assert.equal(typeof contracts.normalizePresetWire, 'function');
+  assert.equal(typeof contracts.formatPresetSublabelFromView, 'function');
+});
+
 test('validators accept known values and reject unknown ones', () => {
   assert.equal(isChatErrorCode('NO_API_KEY'), true);
   assert.equal(isChatErrorCode('NOPE'), false);

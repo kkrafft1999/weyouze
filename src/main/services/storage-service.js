@@ -1,5 +1,11 @@
 const { randomUUID } = require('crypto');
 const { clampHistoryCharLimit } = require('../chat-history-trim');
+const {
+  clampSidebarWidth,
+  clampChatPanelWidth,
+  normalizePresetWire,
+  normalizeUiPrefs,
+} = require('../../shared/contracts/settings');
 
 function createStorageService({
   app,
@@ -68,26 +74,7 @@ function createStorageService({
   }
 
   function normalizePresetEntry(raw) {
-    if (!raw || typeof raw !== 'object') return null;
-    const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : null;
-    const providerId = typeof raw.providerId === 'string' && raw.providerId.trim()
-      ? raw.providerId.trim()
-      : null;
-    if (!id || !providerId || !providers.getProvider(providerId)) return null;
-    let model =
-      typeof raw.model === 'string' && raw.model.trim()
-        ? raw.model.trim()
-        : providers.getProvider(providerId).defaultModel;
-    const menuVisible = raw.menuVisible !== false;
-    let reasoningEffort = null;
-    if (
-      providerId === 'openai'
-      && typeof raw.reasoningEffort === 'string'
-      && raw.reasoningEffort.trim()
-    ) {
-      reasoningEffort = raw.reasoningEffort.trim();
-    }
-    return { id, providerId, model, reasoningEffort, menuVisible };
+    return normalizePresetWire(raw, (id) => providers.getProvider(id));
   }
 
   /** Chat-Ziel aus LLM-Konfiguration (Preset-first, Fallback aktiv/Provider-Modell). */
@@ -313,14 +300,12 @@ function createStorageService({
   const CHAT_PANEL_WIDTH_MIN = 260;
   const CHAT_PANEL_WIDTH_MAX = 2000;
 
-  function clampSidebarWidth(raw) {
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
-    return Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(raw)));
+  function clampSidebarWidthLocal(raw) {
+    return clampSidebarWidth(raw);
   }
 
-  function clampChatPanelWidth(raw) {
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
-    return Math.min(CHAT_PANEL_WIDTH_MAX, Math.max(CHAT_PANEL_WIDTH_MIN, Math.round(raw)));
+  function clampChatPanelWidthLocal(raw) {
+    return clampChatPanelWidth(raw);
   }
 
   function getUIPrefsPath() {
@@ -331,41 +316,9 @@ function createStorageService({
     try {
       const raw = await fs.readFile(getUIPrefsPath(), 'utf8');
       const data = JSON.parse(raw);
-      let baseSystemPrompt = '';
-      if (typeof data.baseSystemPrompt === 'string') {
-        baseSystemPrompt = data.baseSystemPrompt;
-      }
-      const appLocale = data.appLocale === 'en' ? 'en' : 'de';
-      let maxToolRounds;
-      if (typeof data.maxToolRounds === 'number' && Number.isFinite(data.maxToolRounds)) {
-        maxToolRounds = Math.round(data.maxToolRounds);
-      }
-      const sidebarWidth = clampSidebarWidth(data.sidebarWidth);
-      const chatPanelWidth = clampChatPanelWidth(data.chatPanelWidth);
-      const historyCharLimit = clampHistoryCharLimit(data.historyCharLimit);
-      const ignoredUpdateVersion = typeof data.ignoredUpdateVersion === 'string'
-        ? data.ignoredUpdateVersion
-        : undefined;
-      return {
-        contentPaneVisible: data.contentPaneVisible !== false,
-        baseSystemPrompt,
-        appLocale,
-        // Default AUS: das Modell darf ohne explizite Zustimmung keine Dateien
-        // schreiben (Einstellungen › Tools).
-        allowWorkspaceWrite: data.allowWorkspaceWrite === true,
-        ...(typeof maxToolRounds === 'number' ? { maxToolRounds } : {}),
-        ...(typeof sidebarWidth === 'number' ? { sidebarWidth } : {}),
-        ...(typeof chatPanelWidth === 'number' ? { chatPanelWidth } : {}),
-        ...(typeof historyCharLimit === 'number' ? { historyCharLimit } : {}),
-        ...(typeof ignoredUpdateVersion === 'string' ? { ignoredUpdateVersion } : {}),
-      };
+      return normalizeUiPrefs(data);
     } catch {
-      return {
-        contentPaneVisible: true,
-        baseSystemPrompt: '',
-        appLocale: 'de',
-        allowWorkspaceWrite: false,
-      };
+      return normalizeUiPrefs({});
     }
   }
 
@@ -377,8 +330,9 @@ function createStorageService({
     return withFileLock(getUIPrefsPath(), async () => {
       const current = await readUIPrefs();
       const updated = await updater({ ...current });
-      await writeJsonAtomic(getUIPrefsPath(), updated);
-      return updated;
+      const normalized = normalizeUiPrefs(updated);
+      await writeJsonAtomic(getUIPrefsPath(), normalized);
+      return normalized;
     });
   }
 
@@ -613,8 +567,8 @@ function createStorageService({
     getEffectiveProviderConfig,
     getOpenAIApiKey,
     getValidatedLastFolder,
-    clampSidebarWidth,
-    clampChatPanelWidth,
+    clampSidebarWidth: clampSidebarWidthLocal,
+    clampChatPanelWidth: clampChatPanelWidthLocal,
     clampHistoryCharLimit,
     readUIPrefs,
     writeUIPrefs,

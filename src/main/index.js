@@ -24,6 +24,7 @@ const { registerDialogHandlers } = require('./ipc/dialog-handlers');
 const { registerFsHandlers } = require('./ipc/fs-handlers');
 const { registerWhisperHandlers } = require('./ipc/whisper-handlers');
 const { registerSettingsHandlers } = require('./ipc/settings-handlers');
+const { createSettingsPresentationService } = require('./services/settings-presentation-service');
 const { registerChatHistoryHandlers } = require('./ipc/chat-history-handlers');
 const { registerChatHandlers } = require('./ipc/chat-handlers');
 const { registerUpdateHandlers } = require('./ipc/update-handlers');
@@ -70,6 +71,11 @@ registerFsHandlers({
   getActiveWorkspaceRoot: workspaceState.getActiveWorkspaceRoot,
 });
 registerWhisperHandlers({ ipcMain, whisperService, storage, REQ });
+const settingsPresentation = createSettingsPresentationService({
+  providers,
+  defaultProviderId: DEFAULT_PROVIDER,
+});
+
 registerSettingsHandlers({
   ipcMain,
   safeStorage,
@@ -78,6 +84,7 @@ registerSettingsHandlers({
   defaultProviderId: DEFAULT_PROVIDER,
   REQ,
   setActiveWorkspaceRoot: workspaceState.setActiveWorkspaceRoot,
+  presentation: settingsPresentation,
 });
 registerChatHistoryHandlers({ ipcMain, storage, REQ });
 registerUpdateHandlers({ ipcMain, updateService, REQ });

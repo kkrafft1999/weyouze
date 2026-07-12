@@ -309,6 +309,9 @@ module.exports = {
   fields: { apiKey: true },
   defaultModel: 'claude-sonnet-4-6',
   apiBase: API_BASE,
+  presentation: {
+    apiKeyPlaceholder: 'sk-ant-…',
+  },
   listModels,
   streamChatRound,
   translateMessagesToAnthropic,
