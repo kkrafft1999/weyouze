@@ -1,9 +1,4 @@
 import { markdownToSafeHtml } from '../utils/helpers.js';
-import {
-  inferChatTitle,
-  serializeChatMessagesForStorage,
-  normalizeLoadedMessages,
-} from '../chat/messageUtils.js';
 // Token-Usage-Normalisierung/-Summierung aus der gemeinsamen Contract-Schicht,
 // damit Anzeige (Renderer) und Provider-Seite (Main) nicht auseinanderlaufen.
 import contracts from '../generated/contracts.js';
@@ -357,16 +352,12 @@ export function initChatStream({
 
   async function persistCurrentChat() {
     if (!appStore.currentChatId || appStore.chatMessages.length === 0) return;
-    const messages = serializeChatMessagesForStorage(appStore.chatMessages);
-    if (messages.length === 0) return;
-    const title = inferChatTitle(appStore.chatMessages);
     await api.upsertChatSession({
       id: appStore.currentChatId,
       workspaceRoot: appStore.currentChatWorkspace,
-      title,
       updatedAt: Date.now(),
-      messages,
-      tokenUsage: { ...appStore.chatTokenUsage },
+      messages: appStore.chatMessages,
+      tokenUsage: appStore.chatTokenUsage,
     });
     await api.setActiveChatId(appStore.currentChatWorkspace, appStore.currentChatId);
   }
@@ -384,7 +375,7 @@ export function initChatStream({
       if (s && Array.isArray(s.messages)) {
         appStore.currentChatId = s.id;
         appStore.currentChatWorkspace = workspaceRoot || null;
-        appStore.chatMessages = normalizeLoadedMessages(s.messages);
+        appStore.chatMessages = s.messages;
         setChatTokenUsage(s.tokenUsage);
         chatInput.value = '';
         onInputChanged();

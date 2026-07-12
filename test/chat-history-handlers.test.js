@@ -153,3 +153,108 @@ test('repeated upserts of the same id serialize through the lock (last write win
   assert.equal(after.sessions.length, 1, 'concurrent upserts of one id must not duplicate it');
   assert.equal(after.sessions[0].title, 'v9');
 });
+
+test('upsert accepts semantic live messages and GET returns normalized loaded shape', async (t) => {
+  const { ipcMain, tmpDir } = await setup(t);
+  const ws = tmpDir;
+
+  const upsertRes = await ipcMain.invoke(REQ.CHAT_HISTORY_UPSERT, {
+    id: 'rich',
+    workspaceRoot: ws,
+    updatedAt: 5000,
+    messages: [
+      { role: 'user', content: 'Was steht in der Datei?' },
+      {
+        role: 'assistant',
+        content: 'Hier ist die Antwort.',
+        streaming: true,
+        phase: 'generating',
+        toolTrace: [{ line: 'Datei wird gelesen …' }, 'Datei gelesen'],
+        reasoningText: '  Zwischenschritt  ',
+        isError: false,
+      },
+      { role: 'system', content: 'drop me' },
+    ],
+    tokenUsage: { prompt: 12.4, completion: '7', total: null },
+  });
+  assert.equal(upsertRes.ok, true);
+
+  const got = await ipcMain.invoke(REQ.CHAT_HISTORY_GET, ws);
+  assert.equal(got.sessions.length, 1);
+  const session = got.sessions[0];
+  assert.equal(session.title, 'Was steht in der Datei?');
+  assert.equal(session.messages.length, 2);
+  assert.equal(session.messages[0].streaming, undefined);
+  assert.equal(session.messages[1].streaming, false);
+  assert.deepEqual(session.messages[1].toolTrace, ['Datei wird gelesen …', 'Datei gelesen']);
+  assert.equal(session.messages[1].reasoningText, 'Zwischenschritt');
+  assert.deepEqual(session.tokenUsage, { prompt: 12, completion: 7, total: 19 });
+});
+
+test('GET normalizes legacy on-disk session rows', async (t) => {
+  const { ipcMain, storage, tmpDir } = await setup(t);
+  const ws = tmpDir;
+
+  await storage.withChatHistoryLock(async () => {
+    const store = await storage.readChatHistoryStore({ skipMigration: true });
+    store.sessions.push({
+      id: 'legacy',
+      workspaceRoot: ws,
+      title: 'Alter Titel',
+      updatedAt: 100,
+      messages: [{ role: 'assistant', content: 'gespeichert', toolTrace: ['ok'], isError: true }],
+    });
+    await storage.writeChatHistoryStore(store);
+  });
+
+  const got = await ipcMain.invoke(REQ.CHAT_HISTORY_GET, ws);
+  const legacy = got.sessions.find((s) => s.id === 'legacy');
+  assert.ok(legacy);
+  assert.equal(legacy.title, 'Alter Titel');
+  assert.deepEqual(legacy.tokenUsage, { prompt: 0, completion: 0, total: 0 });
+  assert.equal(legacy.messages[0].streaming, false);
+  assert.equal(legacy.messages[0].isError, true);
+  assert.deepEqual(legacy.messages[0].toolTrace, ['ok']);
+});
+
+test('upsert preserves an existing stored title when the semantic payload omits title', async (t) => {
+  const { ipcMain, tmpDir } = await setup(t);
+  const ws = tmpDir;
+
+  await ipcMain.invoke(
+    REQ.CHAT_HISTORY_UPSERT,
+    sessionRow('keep-title', { workspaceRoot: ws, title: 'Mein gespeicherter Titel', updatedAt: 1000 })
+  );
+
+  const upsertRes = await ipcMain.invoke(REQ.CHAT_HISTORY_UPSERT, {
+    id: 'keep-title',
+    workspaceRoot: ws,
+    updatedAt: 2000,
+    messages: [{ role: 'user', content: 'Späterer Verlauf ohne Titel im Payload' }],
+  });
+  assert.equal(upsertRes.ok, true);
+
+  const got = await ipcMain.invoke(REQ.CHAT_HISTORY_GET, ws);
+  const session = got.sessions.find((s) => s.id === 'keep-title');
+  assert.equal(session.title, 'Mein gespeicherter Titel');
+});
+
+test('upsert rejects a session whose sanitized messages become empty', async (t) => {
+  const { ipcMain, tmpDir } = await setup(t);
+  const ws = tmpDir;
+
+  const res = await ipcMain.invoke(REQ.CHAT_HISTORY_UPSERT, {
+    id: 'empty',
+    workspaceRoot: ws,
+    updatedAt: 1000,
+    messages: [
+      { role: 'user', content: '   ' },
+      { role: 'assistant', content: '   ' },
+      { role: 'system', content: 'ignored' },
+    ],
+  });
+  assert.deepEqual(res, { ok: false });
+
+  const got = await ipcMain.invoke(REQ.CHAT_HISTORY_GET, ws);
+  assert.equal(got.sessions.length, 0);
+});

@@ -122,6 +122,17 @@ test('resolveChatModelTarget emits providerOptions from declared preset fields',
   assert.equal(target.reasoningEffort, 'high');
 });
 
+test('normalizeSessionForStore infers title from first user message when title omitted', () => {
+  const storage = makeStorage('/tmp/unused');
+  const session = storage.normalizeSessionForStore({
+    id: 's1',
+    updatedAt: 42,
+    workspaceRoot: '/tmp/ws',
+    messages: [{ role: 'user', content: 'Mein Chat-Titel' }],
+  });
+  assert.equal(session.title, 'Mein Chat-Titel');
+});
+
 test('normalizeSessionForStore strips invalid roles and caps title', () => {
   const storage = makeStorage('/tmp/unused');
   const session = storage.normalizeSessionForStore({

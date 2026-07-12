@@ -7,6 +7,14 @@ const {
   normalizeUiPrefs,
   extractPresetOptions,
 } = require('../../shared/contracts/settings');
+const {
+  inferChatTitle,
+  sanitizeChatMessagesForStore,
+  normalizeTokenUsageForStore,
+  normalizeLoadedMessages,
+  normalizeSessionForStore: buildNormalizedSessionForStore,
+  normalizeSessionForLoad,
+} = require('./chat-history-normalization');
 
 function createStorageService({
   app,
@@ -371,53 +379,16 @@ function createStorageService({
     return workspaceRoot ? workspaceRoot : NO_WORKSPACE_KEY;
   }
 
-  function sanitizeChatMessagesForStore(raw) {
-    if (!Array.isArray(raw)) return [];
-    const out = [];
-    for (const m of raw) {
-      if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue;
-      const content = typeof m.content === 'string' ? m.content : '';
-      if (m.role === 'user') {
-        out.push({ role: 'user', content });
-        continue;
-      }
-      const row = { role: 'assistant', content };
-      if (m.isError === true) row.isError = true;
-      if (Array.isArray(m.toolTrace) && m.toolTrace.length) row.toolTrace = m.toolTrace;
-      if (typeof m.reasoningText === 'string' && m.reasoningText.trim()) {
-        row.reasoningText = m.reasoningText;
-      }
-      out.push(row);
-    }
-    return out;
+  function sanitizeChatMessagesForStoreLocal(raw) {
+    return sanitizeChatMessagesForStore(raw);
   }
 
-  function normalizeTokenUsageForStore(raw) {
-    if (!raw || typeof raw !== 'object') {
-      return { prompt: 0, completion: 0, total: 0 };
-    }
-    const prompt = Math.max(0, Math.round(Number(raw.prompt) || 0));
-    const completion = Math.max(0, Math.round(Number(raw.completion) || 0));
-    let total = Math.max(0, Math.round(Number(raw.total) || 0));
-    if (total === 0 && (prompt > 0 || completion > 0)) {
-      total = prompt + completion;
-    }
-    return { prompt, completion, total };
+  function normalizeTokenUsageForStoreLocal(raw) {
+    return normalizeTokenUsageForStore(raw);
   }
 
-  function normalizeSessionForStore(s) {
-    if (!s || typeof s.id !== 'string' || !s.id.trim()) return null;
-    const messages = sanitizeChatMessagesForStore(s.messages);
-    const titleRaw = typeof s.title === 'string' ? s.title.trim() : '';
-    const workspaceRoot = normalizeWorkspaceRoot(s.workspaceRoot);
-    return {
-      id: s.id.trim(),
-      workspaceRoot,
-      title: titleRaw ? titleRaw.slice(0, 200) : 'Chat',
-      updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : Date.now(),
-      messages,
-      tokenUsage: normalizeTokenUsageForStore(s.tokenUsage),
-    };
+  function normalizeSessionForStore(s, options = {}) {
+    return buildNormalizedSessionForStore(s, { normalizeWorkspaceRoot, ...options });
   }
 
   function parseChatHistoryStoreData(data) {
@@ -591,6 +562,11 @@ function createStorageService({
     updateUIPrefs,
     normalizeWorkspaceRoot,
     workspaceBucketKey,
+    inferChatTitle,
+    sanitizeChatMessagesForStore: sanitizeChatMessagesForStoreLocal,
+    normalizeTokenUsageForStore: normalizeTokenUsageForStoreLocal,
+    normalizeLoadedMessages,
+    normalizeSessionForLoad,
     normalizeSessionForStore,
     readChatHistoryStore,
     writeChatHistoryStore,

@@ -1,4 +1,4 @@
-import { formatHistoryTime, normalizeLoadedMessages } from '../chat/messageUtils.js';
+import { formatHistoryTime } from '../chat/messageUtils.js';
 import { dismissOnOutsideClick } from '../utils/helpers.js';
 
 export function initChatHistoryDrawer({
@@ -95,7 +95,7 @@ export function initChatHistoryDrawer({
     }
     appStore.currentChatId = id;
     appStore.currentChatWorkspace = s.workspaceRoot || null;
-    appStore.chatMessages = normalizeLoadedMessages(s.messages);
+    appStore.chatMessages = s.messages;
     setChatTokenUsage?.(s.tokenUsage);
     onInputChanged();
     await api.setActiveChatId(appStore.currentChatWorkspace, id);
