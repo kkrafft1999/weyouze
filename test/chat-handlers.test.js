@@ -84,10 +84,11 @@ function makeProviderSecrets(overrides = {}) {
 }
 
 function makeStorage(overrides = {}) {
+  const { readUIPrefs, ...rest } = overrides;
   return {
-    ...makeLlmConfigStore(overrides),
-    ...makeProviderSecrets(overrides),
-    readUIPrefs: async () => ({}),
+    ...makeLlmConfigStore(rest),
+    ...makeProviderSecrets(rest),
+    readUIPrefs: readUIPrefs || (async () => ({})),
   };
 }
 
