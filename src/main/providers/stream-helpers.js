@@ -1,3 +1,8 @@
+// Token-Usage-Helfer stammen aus der gemeinsamen Contract-Schicht (Single
+// Source of Truth); hier nur re-exportiert, damit die Provider sie weiterhin
+// aus stream-helpers beziehen können.
+const { createEmptyUsage, normalizeUsage, mergeUsage } = require('../../shared/contracts/usage');
+
 // onRawLine (optional) erhaelt jede rohe Stream-Zeile, bevor sie geyieldet
 // wird — genutzt vom RAW-LLM-Protokoll, das hier alle Provider zentral abgreift.
 async function* iterStreamLines(reader, abortSignal, onRawLine) {
@@ -127,53 +132,6 @@ function abortIfRequested(abortSignal) {
 
 function cancelledChatRound(message) {
   return { cancelled: true, message };
-}
-
-function createEmptyUsage() {
-  return { prompt: 0, completion: 0, total: 0 };
-}
-
-function toUsageNumber(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.round(n);
-}
-
-/** Normalizes provider-specific usage payloads to { prompt, completion, total }. */
-function normalizeUsage(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const prompt = toUsageNumber(
-    raw.prompt
-    ?? raw.input
-    ?? raw.input_tokens
-    ?? raw.prompt_tokens
-    ?? raw.promptTokenCount
-    ?? raw.prompt_eval_count
-  );
-  const completion = toUsageNumber(
-    raw.completion
-    ?? raw.output
-    ?? raw.output_tokens
-    ?? raw.completion_tokens
-    ?? raw.candidatesTokenCount
-    ?? raw.eval_count
-  );
-  let total = toUsageNumber(raw.total ?? raw.total_tokens ?? raw.totalTokenCount);
-  if (total === 0 && (prompt > 0 || completion > 0)) {
-    total = prompt + completion;
-  }
-  if (prompt === 0 && completion === 0 && total === 0) return null;
-  return { prompt, completion, total };
-}
-
-function mergeUsage(base, addition) {
-  const next = normalizeUsage(addition);
-  if (!next) return base ? { ...base } : null;
-  if (!base) return next;
-  const prompt = base.prompt + next.prompt;
-  const completion = base.completion + next.completion;
-  const total = base.total + (next.total > 0 ? next.total : next.prompt + next.completion);
-  return { prompt, completion, total };
 }
 
 async function sleepAbortable(ms, abortSignal) {
