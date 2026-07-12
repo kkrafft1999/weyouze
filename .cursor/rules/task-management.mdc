@@ -37,6 +37,12 @@ Für dieses Projekt gilt folgende Konvention (Entscheidung vom 2026-07-01, siehe
 - **Sobald ein Eintrag als GitHub Issue existiert**, wird der Eintrag aus
   `docs/task.md` **entfernt** — das Issue ist danach die einzige Quelle der
   Wahrheit, keine Duplikate pflegen.
+- **Reiner Zwischenspeicher, kein Archiv:** `docs/task.md` bleibt leer
+  (Abschnitt „Offene Einträge“ nur mit Platzhaltertext), sobald alle
+  gesammelten Punkte als Issues angelegt sind. Es wird **keine
+  Verweisliste/Historie** der bereits übertragenen Issues in `task.md`
+  zurückgelassen (auch keine Liste mit Issue-Links) — diese Information
+  steht ausschließlich in GitHub selbst (Entscheidung vom 2026-07-12).
 - Details zum genauen Ablauf stehen direkt in der Kopfzeile von
   `docs/task.md`.
 
