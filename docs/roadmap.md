@@ -44,9 +44,10 @@ wieder entfernt.
      Streaming, Tools und Token-Usage liegen als gemeinsame Contract-Schicht
      (`src/shared/contracts/`) vor; Main und Renderer sind daran gebunden.
      Offen: DTOs für die Einstellungen (Provider-/Preset-/UI-Prefs) ergänzen.
-  2. **Anwendungs-Core extrahieren:** Chat-Orchestrierung, Tool-Schleife und
-     Workspace-Kontext aus Electron-IPC lösen und ohne UI-/Electron-Abhängigkeit
-     testbar machen
+  2. ✅ **Anwendungs-Core extrahieren:** Chat-Orchestrierung, Tool-Schleife und
+     Workspace-Kontext liegen in `src/main/chat-engine.js` und sind ohne
+     UI-/Electron-Abhängigkeit testbar; `chat-handlers.js` ist ein dünner
+     IPC-Adapter.
   3. **Provider und Tools über Ports anbinden:** Registries und Adapter hinter
      klaren Schnittstellen kapseln; provider- und tool-spezifisches Wissen aus
      dem Frontend entfernen
