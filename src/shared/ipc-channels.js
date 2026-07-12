@@ -1,9 +1,9 @@
 /**
  * Zentrale Definition aller IPC-Kanaele zwischen Main und Renderer.
  *
- * Quelle: Anhang A der REFACTORING_PLAN.md (Stand vor Modularisierung).
- * Jeder Kanal hier muss exakt dem entsprechen, was main.js sendet/registriert
- * und preload.js verbindet — beim Refactoring nicht stillschweigend umbenennen.
+ * Single Source of Truth fuer die Kanalnamen: muss exakt dem entsprechen, was
+ * main/index.js (bzw. IPC-Handler) registriert und preload.js verbindet —
+ * beim Refactoring nicht stillschweigend umbenennen.
  *
  * CommonJS, damit main.js und preload.js die Datei direkt per require nutzen
  * koennen, solange das Projekt kein "type": "module" gesetzt hat.

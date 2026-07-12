@@ -73,16 +73,16 @@
   <polygon class="hex" points="650,275 910,425 910,725 650,875 390,725 390,425"/>
   <text x="650" y="460" text-anchor="middle" class="zlabel tt-core">ANWENDUNGS-KERN · DOMÄNE / USE CASES</text>
   <text x="650" y="490" text-anchor="middle" font-size="17" font-weight="700" class="tt-core">Chat-Orchestrierung &amp; Tool-Loop</text>
-  <text class="note" x="470" y="518" fill="#204b3d">• Runden- &amp; Tool-Schleife, System-Prompt</text>
-  <text class="note" x="470" y="538" fill="#204b3d">• Kontextfenster (Trim), RAW-Protokoll</text>
+  <text class="note" x="470" y="518" fill="#204b3d">• src/application/chat/ — Runden- &amp; Tool-Schleife</text>
+  <text class="note" x="470" y="538" fill="#204b3d">• src/application/ports/ — LLM, Tool, Prefs, RAW</text>
   <text class="note" x="470" y="558" fill="#204b3d">• Usage-Aggregation, Abbruch-Handling</text>
   <text class="note" x="470" y="578" fill="#204b3d">• Provider-/Tool-/Electron-unabhängig</text>
   <rect x="452" y="596" width="396" height="110" rx="8" fill="#f4fbf8" stroke="#0e7a5b" stroke-width="1" stroke-dasharray="4 3"/>
   <text x="464" y="618" font-size="11" font-weight="700" fill="#0b5b44">Regel der Hexagonal-Architektur</text>
   <text x="464" y="637" font-size="10.5" fill="#356b58">Der Kern kennt keine Adapter — er spricht mit</text>
   <text x="464" y="653" font-size="10.5" fill="#356b58">der Außenwelt ausschließlich über Ports (Verträge).</text>
-  <text x="464" y="676" font-size="10.5" font-style="italic" fill="#0b5b44">Etappe 2 umgesetzt: chat-engine.js ist der</text>
-  <text x="464" y="692" font-size="10.5" font-style="italic" fill="#0b5b44">UI-/Electron-freie Kern; Ports folgen in Etappe 3.</text>
+  <text x="464" y="676" font-size="10.5" font-style="italic" fill="#0b5b44">Etappen 1–5 ✓ — Ports in application/ports</text>
+  <text x="464" y="692" font-size="10.5" font-style="italic" fill="#0b5b44">und main/ports; Adapter in main/adapters/.</text>
 
   <!-- ============ PORTS (on hexagon boundary) ============ -->
   <!-- driving ports (left edge) -->
@@ -134,34 +134,34 @@
 
   <!-- ============ SECONDARY (DRIVEN) ADAPTERS ============ -->
   <rect class="svc" x="985" y="306" width="210" height="72" rx="9"/>
-  <text class="btitle tt-svc" x="997" y="331">update-service</text>
-  <text class="bsub" x="997" y="348">Sekundäradapter (outbound)</text>
+  <text class="btitle tt-svc" x="997" y="331">update-adapter</text>
+  <text class="bsub" x="997" y="348">src/main/adapters/</text>
   <text class="bsub" x="997" y="366">Release-Check über GitHub</text>
 
   <rect class="svc" x="985" y="390" width="210" height="72" rx="9"/>
-  <text class="btitle tt-svc" x="997" y="415">whisper-service</text>
-  <text class="bsub" x="997" y="432">Sekundäradapter (outbound)</text>
-  <text class="bsub" x="997" y="450">Speech-to-Text</text>
+  <text class="btitle tt-svc" x="997" y="415">speech-adapter</text>
+  <text class="bsub" x="997" y="432">src/main/adapters/</text>
+  <text class="bsub" x="997" y="450">Whisper via whisper-service</text>
 
   <rect class="prov" x="985" y="486" width="210" height="84" rx="9"/>
-  <text class="btitle tt-prov" x="997" y="510">Provider-Registry</text>
-  <text class="bsub" x="997" y="527">Sekundäradapter · Ports/Adapter</text>
+  <text class="btitle tt-prov" x="997" y="510">provider-llm-adapter</text>
+  <text class="bsub" x="997" y="527">src/main/adapters/ + providers/</text>
   <text class="bsub" x="997" y="544">openai · anthropic · google</text>
   <text class="bsub" x="997" y="560">ollama · mlx-lm</text>
 
   <rect class="tool" x="985" y="596" width="210" height="72" rx="9"/>
-  <text class="btitle tt-tool" x="997" y="621">Tool-Registry</text>
-  <text class="bsub" x="997" y="638">Sekundäradapter · erweiterbar</text>
+  <text class="btitle tt-tool" x="997" y="621">workspace-tool-adapter</text>
+  <text class="bsub" x="997" y="638">src/main/adapters/</text>
   <text class="bsub" x="997" y="656">list/read/write/debug · via fs-service</text>
 
   <rect class="svc" x="985" y="700" width="210" height="72" rx="9"/>
-  <text class="btitle tt-svc" x="997" y="725">storage-service</text>
-  <text class="bsub" x="997" y="742">Sekundäradapter (outbound)</text>
+  <text class="btitle tt-svc" x="997" y="725">persistence-store-adapters</text>
+  <text class="bsub" x="997" y="742">src/main/adapters/</text>
   <text class="bsub" x="997" y="760">Config · Verlauf · Prefs</text>
 
   <rect class="svc" x="985" y="792" width="210" height="72" rx="9"/>
-  <text class="btitle tt-svc" x="997" y="817">fs-service</text>
-  <text class="bsub" x="997" y="834">Sekundäradapter (outbound)</text>
+  <text class="btitle tt-svc" x="997" y="817">filesystem-ipc-adapter</text>
+  <text class="bsub" x="997" y="834">src/main/adapters/</text>
   <text class="bsub" x="997" y="852">workspace-sichere Datei-IO</text>
 
   <!-- Tool-Registry delegates file IO to fs-service -->
@@ -187,7 +187,7 @@
   <line class="flow" x1="1195" y1="828" x2="1248" y2="830" marker-end="url(#ah)"/>
 
   <!-- ============ BOTTOM NOTE + STAMP ============ -->
-  <text x="650" y="925" text-anchor="middle" font-size="11.5" fill="#8a5a12">Ports sind Verträge: <tspan font-weight="700">src/shared/contracts</tspan> (DTOs · Events · Enums · Validatoren) — der Kern hängt nur von Ports ab, nie von Adaptern.</text>
+  <text x="650" y="925" text-anchor="middle" font-size="11.5" fill="#8a5a12">Ports: <tspan font-weight="700">src/application/ports/</tspan> (Kern) und <tspan font-weight="700">src/main/ports/</tspan> (Infra) — Contracts in <tspan font-weight="700">src/shared/contracts</tspan>. Verdrahtung: <tspan font-weight="700">src/main/composition/</tspan>.</text>
   <text x="30" y="1030" font-size="11" fill="#8a97a6">docs/architecture-hexagonal.svg</text>
-  <text x="1410" y="1030" text-anchor="end" font-size="11" fill="#8a97a6">Erstellt 2026-07-12 · Claude Opus 4.8 · Reasoning-Effort: high</text>
+  <text x="1410" y="1030" text-anchor="end" font-size="11" fill="#8a97a6">Aktualisiert 2026-07-12 · Etappen 1–5 abgeschlossen</text>
 </svg>
