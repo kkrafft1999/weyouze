@@ -51,13 +51,13 @@
   <text class="t-sub" x="31" y="70">Reine Präsentation (Renderer) · Anwendungs-Core (src/application/chat) · Infrastruktur (src/main/ports + Adapter) · getrennte Shared-Schichten (contracts · presentation · runtime)</text>
 
   <g>
-    <rect class="ui"       x="560"  y="32" width="13" height="13" rx="2"/><text class="legend" x="578"  y="43">UI</text>
-    <rect class="core"     x="605"  y="32" width="13" height="13" rx="2"/><text class="legend" x="623"  y="43">Core</text>
-    <rect class="port"     x="665"  y="32" width="13" height="13" rx="2"/><text class="legend" x="683"  y="43">App-Port</text>
-    <rect class="iport"    x="755"  y="32" width="13" height="13" rx="2"/><text class="legend" x="773"  y="43">Infra-Port</text>
-    <rect class="hand"     x="855"  y="32" width="13" height="13" rx="2"/><text class="legend" x="873"  y="43">Adapter</text>
-    <rect class="contract" x="940"  y="32" width="13" height="13" rx="2"/><text class="legend" x="958"  y="43">Shared</text>
-    <rect class="ext"      x="1020" y="32" width="13" height="13" rx="2"/><text class="legend" x="1038" y="43">Extern</text>
+    <rect class="ui"       x="870"  y="32" width="13" height="13" rx="2"/><text class="legend" x="888"  y="43">UI</text>
+    <rect class="core"     x="915"  y="32" width="13" height="13" rx="2"/><text class="legend" x="933"  y="43">Core</text>
+    <rect class="port"     x="975"  y="32" width="13" height="13" rx="2"/><text class="legend" x="993"  y="43">App-Port</text>
+    <rect class="iport"    x="1065" y="32" width="13" height="13" rx="2"/><text class="legend" x="1083" y="43">Infra-Port</text>
+    <rect class="hand"     x="1165" y="32" width="13" height="13" rx="2"/><text class="legend" x="1183" y="43">Adapter</text>
+    <rect class="contract" x="1250" y="32" width="13" height="13" rx="2"/><text class="legend" x="1268" y="43">Shared</text>
+    <rect class="ext"      x="1330" y="32" width="13" height="13" rx="2"/><text class="legend" x="1348" y="43">Extern</text>
   </g>
 
   <!-- ============ RENDERER / UI ZONE ============ -->
@@ -151,7 +151,7 @@
   <text class="note" x="78" y="788" fill="#204b3d">• chat-history-trim.js — Kontextfenster (Trim)</text>
   <text class="note" x="78" y="808" fill="#204b3d">• API: send() · explain() · abort()</text>
   <rect x="78" y="822" width="398" height="36" rx="8" fill="#eaf7f0" stroke="#0e7a5b" stroke-width="1" stroke-dasharray="4 3"/>
-  <text x="90" y="844" font-size="10.5" fill="#356b58">Importiert nur src/application/* und src/shared/* — nie Adapter, Provider oder Electron.</text>
+  <text x="90" y="844" font-size="10.5" fill="#356b58">Importiert nur src/application/*, shared/contracts und shared/runtime — nie Adapter, Provider oder Electron.</text>
 
   <text class="bsub" x="510" y="722" font-weight="700" fill="#0b5b44">ANWENDUNGS-PORTS — src/application/ports (≠ Contracts)</text>
   <g>
@@ -321,7 +321,7 @@
   <line class="cflow" x1="1224" y1="120" x2="1197" y2="120" marker-end="url(#ahc)" marker-start="url(#ahc)"/>
   <text class="arrlbl" x="1118" y="115" fill="#8a5a12">Vertrag → Renderer</text>
   <line class="cflow" x1="1224" y1="405" x2="1197" y2="405" marker-end="url(#ahc)" marker-start="url(#ahc)"/>
-  <text class="arrlbl" x="1108" y="400" fill="#8a5a12">Vertrag → Main &amp; Core</text>
+  <text class="arrlbl" x="1108" y="400" fill="#8a5a12">Shared → Main &amp; Core (modulabhängig)</text>
 
   <!-- ============ FOOTER / STAMP ============ -->
   <text x="30" y="1525" font-size="11" fill="#8a97a6">docs/architecture-layers.svg</text>

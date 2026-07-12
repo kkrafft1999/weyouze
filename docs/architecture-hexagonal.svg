@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 1280" width="1520" height="1280" role="img" aria-labelledby="title desc" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1740 1280" width="1740" height="1280" role="img" aria-labelledby="title desc" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
   <title id="title">Weyouze Anything — Hexagonale Architektur (Ports &amp; Adapters)</title>
   <desc id="desc">Hexagonales Architekturdiagramm: Anwendungs-Kern (src/application/chat) in der Mitte, treibender Adapter links, getriebene Core- und Infrastruktur-Adapter rechts, Anwendungs-Ports am Hexagon-Rand, Infrastruktur-Ports dahinter, externe Systeme außen. Stand: Roadmap-Etappen 1–5 abgeschlossen.</desc>
   <defs>
@@ -39,7 +39,7 @@
     </style>
   </defs>
 
-  <rect x="0" y="0" width="1520" height="1280" fill="#f7f9fb"/>
+  <rect x="0" y="0" width="1740" height="1280" fill="#f7f9fb"/>
 
   <text class="t-title" x="30" y="44">Weyouze Anything — Hexagonale Architektur (Ports &amp; Adapters)</text>
   <text class="t-sub" x="31" y="70">Kern src/application/chat · Anwendungs-Ports am Hexagon · Core-Adapter + Infrastruktur-Ports/Adapter rechts · Contracts/Presentation/Runtime getrennt (keine Ports)</text>
@@ -56,7 +56,7 @@
   <!-- Side banners -->
   <text class="zlabel tt-hand" x="40"   y="238">PRIMÄRE / TREIBENDE SEITE (Inbound)</text>
   <text class="zlabel tt-svc"  x="985"  y="296">GETRIEBENE ADAPTER (Outbound)</text>
-  <text class="zlabel tt-ext"  x="1490" y="296" text-anchor="end">EXTERNE SYSTEME</text>
+  <text class="zlabel tt-ext"  x="1700" y="296" text-anchor="end">EXTERNE SYSTEME</text>
 
   <!-- ============ DRIVEN CONNECTORS (app port -> core adapter) ============ -->
   <line class="flow" x1="954" y1="432" x2="983" y2="452" marker-end="url(#ah)"/>
@@ -159,9 +159,9 @@
   <text class="bsub" x="997" y="748">Raw-Port → llm-raw-log (prozessintern)</text>
 
   <!-- adapter -> external (core adapters with externals) -->
-  <line class="flow" x1="1200" y1="452" x2="1253" y2="452" marker-end="url(#ah)"/>
-  <line class="flow" x1="1200" y1="524" x2="1253" y2="524" marker-end="url(#ah)"/>
-  <line class="flow" x1="1200" y1="596" x2="1253" y2="596" marker-end="url(#ah)"/>
+  <line class="flow" x1="1200" y1="452" x2="1513" y2="452" marker-end="url(#ah)"/>
+  <line class="flow" x1="1200" y1="524" x2="1513" y2="524" marker-end="url(#ah)"/>
+  <line class="flow" x1="1200" y1="596" x2="1513" y2="596" marker-end="url(#ah)"/>
 
   <!-- ============ INFRASTRUCTURE PORTS PANEL ============ -->
   <rect x="985" y="788" width="445" height="148" rx="10" fill="#f5f7fc" stroke="#5566b5" stroke-width="1.5" stroke-dasharray="5 4"/>
@@ -187,27 +187,27 @@
   </g>
 
   <!-- ============ EXTERNAL SYSTEMS ============ -->
-  <rect class="ext" x="1255" y="422" width="175" height="60" rx="9"/>
-  <text class="chip tt-ext" x="1342" y="448">LLM-APIs</text><text class="chipsub" x="1342" y="466">OpenAI · Anthropic · Google · …</text>
-  <rect class="ext" x="1255" y="494" width="175" height="60" rx="9"/>
-  <text class="chip tt-ext" x="1342" y="520">Dateisystem</text><text class="chipsub" x="1342" y="538">Workspace-Ordner (fs-service)</text>
-  <rect class="ext" x="1255" y="566" width="175" height="60" rx="9"/>
-  <text class="chip tt-ext" x="1342" y="592">App-Storage</text><text class="chipsub" x="1342" y="610">safeStorage · JSON auf Disk</text>
-  <rect x="1255" y="638" width="175" height="126" rx="9" fill="#f3f6fa" stroke="#8a97a6" stroke-width="1.1" stroke-dasharray="4 3"/>
-  <text class="bsub" x="1267" y="660" font-weight="700" fill="#47535f">Ohne externes System</text>
-  <text class="note" x="1267" y="680">workspace-path-adapter und</text>
-  <text class="note" x="1267" y="696">raw-exchange-adapter bleiben</text>
-  <text class="note" x="1267" y="712">rein prozessintern: Node-path</text>
-  <text class="note" x="1267" y="728">bzw. RAW-Log, das der Chat-</text>
-  <text class="note" x="1267" y="744">Antwort beigelegt wird.</text>
+  <rect class="ext" x="1515" y="422" width="185" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1607" y="448">LLM-APIs</text><text class="chipsub" x="1607" y="466">OpenAI · Anthropic · Google · …</text>
+  <rect class="ext" x="1515" y="494" width="185" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1607" y="520">Dateisystem</text><text class="chipsub" x="1607" y="538">Workspace-Ordner (fs-service)</text>
+  <rect class="ext" x="1515" y="566" width="185" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1607" y="592">App-Storage</text><text class="chipsub" x="1607" y="610">safeStorage · JSON auf Disk</text>
+  <rect x="1515" y="638" width="185" height="126" rx="9" fill="#f3f6fa" stroke="#8a97a6" stroke-width="1.1" stroke-dasharray="4 3"/>
+  <text class="bsub" x="1527" y="660" font-weight="700" fill="#47535f">Ohne externes System</text>
+  <text class="note" x="1527" y="680">workspace-path-adapter und</text>
+  <text class="note" x="1527" y="696">raw-exchange-adapter bleiben</text>
+  <text class="note" x="1527" y="712">rein prozessintern: Node-path</text>
+  <text class="note" x="1527" y="728">bzw. RAW-Log, das der Chat-</text>
+  <text class="note" x="1527" y="744">Antwort beigelegt wird.</text>
 
-  <rect class="ext" x="1255" y="808" width="175" height="60" rx="9"/>
-  <text class="chip tt-ext" x="1342" y="834">Whisper-API</text><text class="chipsub" x="1342" y="852">Speech-to-Text</text>
-  <rect class="ext" x="1255" y="876" width="175" height="60" rx="9"/>
-  <text class="chip tt-ext" x="1342" y="902">GitHub Releases</text><text class="chipsub" x="1342" y="920">Update-Check</text>
+  <rect class="ext" x="1515" y="808" width="185" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1607" y="834">Whisper-API</text><text class="chipsub" x="1607" y="852">Speech-to-Text</text>
+  <rect class="ext" x="1515" y="876" width="185" height="60" rx="9"/>
+  <text class="chip tt-ext" x="1607" y="902">GitHub Releases</text><text class="chipsub" x="1607" y="920">Update-Check</text>
 
-  <line class="flow-d" x1="1421" y1="838" x2="1253" y2="838" marker-end="url(#ah)"/>
-  <line class="flow-d" x1="1421" y1="906" x2="1253" y2="906" marker-end="url(#ah)"/>
+  <line class="flow-d" x1="1430" y1="838" x2="1513" y2="838" marker-end="url(#ah)"/>
+  <line class="flow-d" x1="1430" y1="906" x2="1513" y2="906" marker-end="url(#ah)"/>
 
   <!-- ============ COMPOSITION ROOT NOTE ============ -->
   <rect x="40" y="960" width="440" height="88" rx="10" fill="#fff7e6" stroke="#c68a2e" stroke-width="1.2"/>
@@ -222,14 +222,14 @@
   <text x="720" y="1019" text-anchor="middle" font-size="10.5" fill="#8a5a12">src/main/index.js — Electron-Lifecycle, ruft nur</text>
   <text x="720" y="1035" text-anchor="middle" font-size="10.5" fill="#8a5a12">createApplication() auf (keine Handler-Verdrahtung).</text>
 
-  <rect x="960" y="960" width="470" height="88" rx="10" fill="#fdf6e3" stroke="#c68a2e" stroke-width="1.2"/>
-  <text x="1195" y="984" text-anchor="middle" font-size="12" font-weight="700" fill="#8a5a12">Shared-Schichten (≠ Ports)</text>
-  <text x="1195" y="1003" text-anchor="middle" font-size="10.5" fill="#8a5a12">contracts/ — DTOs &amp; Events · presentation/ — tool-display</text>
-  <text x="1195" y="1019" text-anchor="middle" font-size="10.5" fill="#8a5a12">runtime/ — abort · fetch-errors · daneben ipc-channels.js · limits.js</text>
-  <text x="1195" y="1035" text-anchor="middle" font-size="10.5" fill="#8a5a12">Main-Präsentation: settings-/raw-log-service, chat-history-normalization</text>
+  <rect x="960" y="960" width="740" height="88" rx="10" fill="#fdf6e3" stroke="#c68a2e" stroke-width="1.2"/>
+  <text x="1330" y="984" text-anchor="middle" font-size="12" font-weight="700" fill="#8a5a12">Shared-Schichten (≠ Ports)</text>
+  <text x="1330" y="1003" text-anchor="middle" font-size="10.5" fill="#8a5a12">contracts/ — DTOs &amp; Events · presentation/ — tool-display</text>
+  <text x="1330" y="1019" text-anchor="middle" font-size="10.5" fill="#8a5a12">runtime/ — abort · fetch-errors · daneben ipc-channels.js · limits.js</text>
+  <text x="1330" y="1035" text-anchor="middle" font-size="10.5" fill="#8a5a12">Main-Präsentation: settings-/raw-log-service, chat-history-normalization</text>
 
   <!-- ============ BOTTOM NOTE + STAMP ============ -->
-  <text x="760" y="1100" text-anchor="middle" font-size="11.5" font-weight="600" fill="#8a5a12">Anwendungs-Ports (src/application/ports) · Infrastruktur-Ports (src/main/ports) · Contracts (src/shared/contracts) — drei getrennte Vertragsarten. Der Kern kennt nur Anwendungs-Ports sowie shared/contracts und shared/runtime.</text>
+  <text x="870" y="1100" text-anchor="middle" font-size="11.5" font-weight="600" fill="#8a5a12">Anwendungs-Ports (src/application/ports) · Infrastruktur-Ports (src/main/ports) · Contracts (src/shared/contracts) — drei getrennte Vertragsarten. Der Kern kennt nur Anwendungs-Ports sowie shared/contracts und shared/runtime.</text>
   <text x="30" y="1256" font-size="11" fill="#8a97a6">docs/architecture-hexagonal.svg</text>
-  <text x="1490" y="1256" text-anchor="end" font-size="11" fill="#8a97a6">Aktualisiert 2026-07-12 · Roadmap-Etappen 1–5 abgeschlossen</text>
+  <text x="1710" y="1256" text-anchor="end" font-size="11" fill="#8a97a6">Aktualisiert 2026-07-12 · Roadmap-Etappen 1–5 abgeschlossen</text>
 </svg>
