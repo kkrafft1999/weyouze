@@ -224,6 +224,13 @@ test('CHAT_SEND returns the final assistant text when no tools are called', asyn
   assert.deepEqual(res.toolTrace, []);
   assert.deepEqual(res.usage, { prompt: 10, completion: 2, total: 12 });
   assert.equal(res.rawExchanges.length, 1);
+  assert.ok(res.rawLogTurn, 'CHAT_SEND must additively return rawLogTurn');
+  assert.equal(res.rawLogTurn.userText, 'Hi');
+  assert.equal(res.rawLogTurn.exchangeCount, 1);
+  assert.ok(res.rawLogTurn.contextStack);
+  assert.equal(res.rawLogTurn.rounds.length, 1);
+  assert.equal(res.rawLogTurn.exchanges, undefined, 'rawExchanges must not be duplicated in rawLogTurn');
+  assert.ok(Array.isArray(res.rawExchanges));
 });
 
 test('CHAT_SEND runs a full tool round-trip: tool call -> registry -> follow-up answer', async () => {
@@ -436,6 +443,47 @@ test('CHAT_EXPLAIN rejects an empty messages payload', async () => {
 
   const res = await explainHandler(null, { messages: [] });
   assert.deepEqual(res, { error: 'Keine Nachrichten übergeben.', code: 'INVALID' });
+});
+
+test('CHAT_EXPLAIN builds the explanation prompt on main from slim semantic payload', async () => {
+  const { provider, calls } = makeScriptedProvider([assistantText('Erklärung fertig.')]);
+  const { sendHandler, explainHandler } = setupChatHandlers({ provider });
+  const { event } = makeFakeEvent();
+
+  const sendRes = await sendHandler(event, {
+    messages: [{ role: 'user', content: 'Was passiert hier?' }],
+  });
+  assert.ok(sendRes.rawLogTurn);
+  assert.ok(sendRes.rawExchanges?.length);
+
+  const explainRes = await explainHandler(null, {
+    userText: sendRes.rawLogTurn.userText,
+    exchanges: sendRes.rawExchanges,
+  });
+  assert.equal(explainRes.content, 'Erklärung fertig.');
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].messages[0].content, /Ursprüngliche Anfrage des Nutzers/);
+  assert.match(calls[1].messages[0].content, /Was passiert hier\?/);
+  assert.equal(calls[1].tools, undefined);
+  assert.equal(calls[1].recorder, undefined);
+});
+
+test('CHAT_EXPLAIN still accepts prior rawLogTurn payload with embedded exchanges', async () => {
+  const { provider, calls } = makeScriptedProvider([assistantText('Compat ok.')]);
+  const { explainHandler } = setupChatHandlers({ provider });
+
+  const exchanges = [
+    {
+      model: 'test-model',
+      messages: [{ role: 'user', content: 'Alt' }],
+      response: { text: 'ok', toolCalls: [] },
+    },
+  ];
+  const res = await explainHandler(null, {
+    rawLogTurn: { userText: 'Alt', exchanges },
+  });
+  assert.equal(res.content, 'Compat ok.');
+  assert.match(calls[0].messages[0].content, /Ursprüngliche Anfrage des Nutzers/);
 });
 
 test('CHAT_EXPLAIN surfaces provider errors with their code', async () => {

@@ -30,7 +30,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       selectedIsDirectory: options?.selectedIsDirectory ?? false,
     }),
   abortChat: () => ipcRenderer.send(REQ.CHAT_ABORT),
-  explainChat: (messages) => ipcRenderer.invoke(REQ.CHAT_EXPLAIN, { messages }),
+  explainChat: (payload) =>
+    ipcRenderer.invoke(
+      REQ.CHAT_EXPLAIN,
+      Array.isArray(payload) ? { messages: payload } : payload ?? {}
+    ),
   onChatDelta: (callback) => {
     const channel = PUSH.CHAT_DELTA;
     const listener = (_event, payload) => callback(payload);

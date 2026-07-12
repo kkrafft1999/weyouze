@@ -593,12 +593,23 @@ export function initChatStream({
 
     // LLM-Runden gruppiert pro User-Anfrage ins Sitzungsprotokoll uebernehmen —
     // auch bei Fehler/Abbruch, denn gerade dann ist der Blick am wertvollsten.
-    if (Array.isArray(result?.rawExchanges) && result.rawExchanges.length) {
+    if (result?.rawLogTurn && Array.isArray(result?.rawExchanges) && result.rawExchanges.length) {
       appStore.rawLlmLog.push({
+        ...result.rawLogTurn,
+        exchanges: result.rawExchanges,
+        index: appStore.rawLlmLog.length + 1,
+      });
+      notifyRawLogChanged();
+    } else if (Array.isArray(result?.rawExchanges) && result.rawExchanges.length) {
+      appStore.rawLlmLog.push({
+        incomplete: true,
         index: appStore.rawLlmLog.length + 1,
         userText: text,
         ts: result.rawExchanges[0]?.ts || Date.now(),
         exchanges: result.rawExchanges,
+        exchangeCount: result.rawExchanges.length,
+        roundsSummary: `${result.rawExchanges.length} ${result.rawExchanges.length === 1 ? 'Aufruf' : 'Aufrufe'}`,
+        summaryText: text.length > 80 ? `${text.slice(0, 79)}…` : text || '(leer)',
       });
       notifyRawLogChanged();
     }

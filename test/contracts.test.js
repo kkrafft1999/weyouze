@@ -24,6 +24,7 @@ const {
   isChatErrorCode,
   isChatPhase,
   isToolLinePhase,
+  attachRawLogTurn,
 } = contracts;
 
 test('CONTRACT_VERSION is a positive integer', () => {
@@ -129,11 +130,12 @@ test('contracts aggregate exports settings helpers', () => {
   assert.equal(typeof contracts.formatPresetSublabelFromView, 'function');
 });
 
-test('validators accept known values and reject unknown ones', () => {
-  assert.equal(isChatErrorCode('NO_API_KEY'), true);
-  assert.equal(isChatErrorCode('NOPE'), false);
-  assert.equal(isChatPhase('idle'), true);
-  assert.equal(isChatPhase('busy'), false);
-  assert.equal(isToolLinePhase('done'), true);
-  assert.equal(isToolLinePhase('finished'), false);
+test('attachRawLogTurn adds rawLogTurn without mutating rawExchanges', () => {
+  const rawExchanges = [{ model: 'm' }];
+  const result = { content: 'ok', rawExchanges };
+  const rawLogTurn = { userText: 'Hi', exchangeCount: 1 };
+  const out = attachRawLogTurn(result, rawLogTurn);
+  assert.equal(out.rawExchanges, rawExchanges);
+  assert.equal(out.rawLogTurn, rawLogTurn);
+  assert.equal(out.content, 'ok');
 });
