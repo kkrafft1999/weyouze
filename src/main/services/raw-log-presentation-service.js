@@ -94,11 +94,43 @@ function prettyMaybeJson(text) {
 
 function buildToolSchemasPretty(toolDefs) {
   if (!Array.isArray(toolDefs) || toolDefs.length === 0) return '';
+  const names = toolDefs.map((t) => (t && t.name) || '?');
   try {
-    return truncate(JSON.stringify(toolDefs.map((t) => t.schema), null, 2), TOOL_SCHEMAS_PRETTY_MAX);
+    const compact = JSON.stringify(toolDefs.map((t) => t.schema), null, 2);
+    if (compact.length <= TOOL_SCHEMAS_PRETTY_MAX) return compact;
   } catch {
-    return '';
+    /* fall through to bounded sections */
   }
+
+  const nameIndex = `Tools: ${names.join(', ')}\n`;
+  if (nameIndex.length >= TOOL_SCHEMAS_PRETTY_MAX) {
+    return truncate(nameIndex, TOOL_SCHEMAS_PRETTY_MAX);
+  }
+
+  const parts = [nameIndex];
+  let remaining = TOOL_SCHEMAS_PRETTY_MAX - nameIndex.length;
+
+  for (let i = 0; i < toolDefs.length; i += 1) {
+    const header = `\n--- ${names[i]} ---\n`;
+    let section;
+    try {
+      section = JSON.stringify(toolDefs[i].schema, null, 2);
+    } catch {
+      section = '{}';
+    }
+    const block = header + section;
+    if (block.length <= remaining) {
+      parts.push(block);
+      remaining -= block.length;
+      continue;
+    }
+    if (remaining > header.length) {
+      parts.push(header + truncate(section, remaining - header.length));
+    }
+    break;
+  }
+
+  return parts.join('');
 }
 
 function findToolResult(exchanges, callId, fromIndex) {
