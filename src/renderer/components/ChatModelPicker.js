@@ -16,29 +16,13 @@ export function initChatModelPicker({
 
   let chatModelMenuOpen = false;
 
-  function findProviderMeta(providerId) {
+  function findProviderView(providerId) {
     return (appStore.llmState.providers || []).find((p) => p.id === providerId) || null;
-  }
-
-  function presetSummaryForMenu(pr) {
-    const meta = findProviderMeta(pr.providerId);
-    if (!meta) return '';
-    const parts = [];
-    if (pr.providerId === 'openai' && pr.reasoningEffort) {
-      parts.push(`reasoning_effort: ${pr.reasoningEffort}`);
-    }
-    if (meta.fields?.baseUrl) {
-      const url = (meta.baseUrl || meta.defaultBaseUrl || '').trim();
-      const host = url ? url.replace(/^https?:\/\//, '') : 'Server';
-      const tls = !!meta.insecureTls;
-      parts.push(`Server ${host} · TLS ${tls ? 'insecure' : 'geprüft'}`);
-    }
-    return parts.join(' · ');
   }
 
   function activeProviderConfigured() {
     const pid = appStore.llmState.chatTarget?.providerId;
-    const p = pid ? findProviderMeta(pid) : null;
+    const p = pid ? findProviderView(pid) : null;
     return !!(p && p.configured);
   }
 
@@ -58,8 +42,7 @@ export function initChatModelPicker({
     let count = 0;
     for (const pr of presets) {
       if (pr.menuVisible === false) continue;
-      const meta = findProviderMeta(pr.providerId);
-      if (!meta || !meta.configured) continue;
+      if (!pr.configured) continue;
       count += 1;
       const li = document.createElement('li');
       li.setAttribute('role', 'none');
@@ -76,13 +59,15 @@ export function initChatModelPicker({
       const t = document.createElement('span');
       t.className = 'chat-model-menu-opt-title';
       t.lang = 'en';
-      t.textContent = `${meta.name} · ${pr.model || meta.defaultModel}`;
+      t.textContent = pr.label || '';
       main.appendChild(t);
 
-      const sub = document.createElement('span');
-      sub.className = 'chat-model-menu-opt-meta';
-      sub.textContent = presetSummaryForMenu(pr);
-      main.appendChild(sub);
+      if (pr.sublabel) {
+        const sub = document.createElement('span');
+        sub.className = 'chat-model-menu-opt-meta';
+        sub.textContent = pr.sublabel;
+        main.appendChild(sub);
+      }
 
       btn.appendChild(main);
       li.appendChild(btn);
@@ -108,7 +93,7 @@ export function initChatModelPicker({
     const ct = appStore.llmState.chatTarget;
     if (!ct || !ct.providerId) {
       const ap = appStore.llmState.activeProvider;
-      const m = findProviderMeta(ap);
+      const m = findProviderView(ap);
       appStore.llmState.chatTarget = {
         providerId: ap,
         model: m?.model || '',
@@ -140,8 +125,11 @@ export function initChatModelPicker({
 
   function updateChatChrome() {
     const target = appStore.llmState.chatTarget;
-    const active = target?.providerId ? findProviderMeta(target.providerId) : null;
+    const active = target?.providerId ? findProviderView(target.providerId) : null;
     const isConfigured = activeProviderConfigured();
+    const activePreset = (appStore.llmState.presets || []).find(
+      (p) => p.id === appStore.llmState.activePresetId
+    );
 
     if (chatTitleEl) {
       chatTitleEl.textContent = appStore.rootPath
@@ -154,7 +142,7 @@ export function initChatModelPicker({
       if (active && target?.model && isConfigured) {
         chatModelPickerWrap.classList.remove('hidden');
         btnChatModelPicker.classList.remove('hidden');
-        chatModelPillLabel.textContent = `${active.name} · ${target.model}`;
+        chatModelPillLabel.textContent = activePreset?.label || `${active.name} · ${target.model}`;
       } else {
         chatModelPickerWrap.classList.add('hidden');
         btnChatModelPicker.classList.add('hidden');
@@ -167,7 +155,9 @@ export function initChatModelPicker({
     }
 
     let modelHint = '';
-    if (active && target?.model) {
+    if (activePreset?.label) {
+      modelHint = activePreset.label;
+    } else if (active && target?.model) {
       modelHint = `${active.name} · ${target.model}`;
     } else if (active) {
       modelHint = `${active.name}`;
@@ -233,12 +223,12 @@ export function initChatModelPicker({
   }
 
   return {
-    findProviderMeta,
+    findProviderMeta: findProviderView,
+    findProviderView,
     activeProviderConfigured,
     refreshLLMState,
     updateChatChrome,
     syncLiveDot,
     closeChatModelMenu,
-    presetSummaryForMenu,
   };
 }

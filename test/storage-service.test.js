@@ -8,10 +8,19 @@ const { createStorageService } = require('../src/main/services/storage-service')
 const mockProviders = {
   getProvider(id) {
     if (id === 'openai') {
-      return { defaultModel: 'gpt-4o', fields: { apiKey: true } };
+      return {
+        defaultModel: 'gpt-4o',
+        fields: { apiKey: true },
+        presentation: {
+          presetFields: [{
+            key: 'reasoningEffort',
+            options: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }],
+          }],
+        },
+      };
     }
     if (id === 'anthropic') {
-      return { defaultModel: 'claude-test', fields: { apiKey: true } };
+      return { defaultModel: 'claude-test', fields: { apiKey: true }, presentation: {} };
     }
     return null;
   },
@@ -84,7 +93,7 @@ test('resolveChatModelTarget prefers active preset', () => {
     activePresetId: 'p1',
     activeProvider: 'openai',
     presets: [
-      { id: 'p1', providerId: 'anthropic', model: 'claude-custom', reasoningEffort: null, menuVisible: true },
+      { id: 'p1', providerId: 'anthropic', model: 'claude-custom', menuVisible: true },
     ],
     providers: {},
   });
@@ -93,6 +102,35 @@ test('resolveChatModelTarget prefers active preset', () => {
     model: 'claude-custom',
     reasoningEffort: null,
   });
+});
+
+test('resolveChatModelTarget emits providerOptions from declared preset fields', () => {
+  const storage = makeStorage('/tmp/unused');
+  const openai = storage.normalizePresetEntry({
+    id: 'p1',
+    providerId: 'openai',
+    model: 'gpt-4o-mini',
+    reasoningEffort: 'high',
+  });
+  const target = storage.resolveChatModelTarget({
+    activePresetId: 'p1',
+    presets: [openai],
+    providers: { openai: { apiKeyEnc: 'x' } },
+  });
+  assert.equal(target.providerId, 'openai');
+  assert.deepEqual(target.providerOptions, { reasoningEffort: 'high' });
+  assert.equal(target.reasoningEffort, 'high');
+});
+
+test('normalizeSessionForStore infers title from first user message when title omitted', () => {
+  const storage = makeStorage('/tmp/unused');
+  const session = storage.normalizeSessionForStore({
+    id: 's1',
+    updatedAt: 42,
+    workspaceRoot: '/tmp/ws',
+    messages: [{ role: 'user', content: 'Mein Chat-Titel' }],
+  });
+  assert.equal(session.title, 'Mein Chat-Titel');
 });
 
 test('normalizeSessionForStore strips invalid roles and caps title', () => {

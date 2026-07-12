@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const { registerChatHandlers, resolveToolRoundLimit } = require('../src/main/ipc/chat-handlers');
+const { createChatApplication } = require('../src/main/composition/create-chat-application');
 const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('../src/shared/ipc-channels');
 
 test('resolveToolRoundLimit clamps to configured bounds', () => {
@@ -108,21 +109,42 @@ function toolCall(id, name, args) {
   return { id, type: 'function', function: { name, arguments: JSON.stringify(args) } };
 }
 
+function buildTestChatEngine({
+  provider,
+  storage = makeStorage(),
+  toolRegistry = makeToolRegistryStub(),
+  maxToolRounds = 5,
+  providers,
+} = {}) {
+  const providerRegistry = providers || { getProvider: () => provider };
+  const { engine } = createChatApplication({
+    storage,
+    providers: providerRegistry,
+    toolRegistry,
+    path,
+    maxToolRounds,
+  });
+  return engine;
+}
+
 function setupChatHandlers({
   provider,
   storage = makeStorage(),
   toolRegistry = makeToolRegistryStub(),
   maxToolRounds = 5,
+  providers,
 } = {}) {
   const ipcMain = makeIpcMain();
+  const chatEngine = buildTestChatEngine({
+    provider,
+    storage,
+    toolRegistry,
+    maxToolRounds,
+    providers,
+  });
   registerChatHandlers({
     ipcMain,
-    storage,
-    providers: { getProvider: () => provider },
-    toolRegistry,
-    path,
-    defaultProviderId: 'test',
-    maxToolRounds,
+    chatEngine,
     REQ,
     PUSH,
   });
@@ -131,6 +153,7 @@ function setupChatHandlers({
     explainHandler: ipcMain.handlers.get(REQ.CHAT_EXPLAIN),
     abortHandler: ipcMain.onHandlers.get(REQ.CHAT_ABORT),
     toolRegistry,
+    chatEngine,
   };
 }
 
@@ -145,16 +168,17 @@ test('CHAT_SEND rejects an empty messages payload', async () => {
 
 test('CHAT_SEND reports an unknown provider without calling streamChatRound', async () => {
   const { provider, calls } = makeScriptedProvider([assistantText('unused')]);
-  const storage = makeStorage({ resolveChatModelTarget: () => ({ providerId: 'ghost' }) });
+  const storage = makeStorage({ resolveChatModelTarget: () => ({ providerId: 'ghost', model: 'x' }) });
   const ipcMain = makeIpcMain();
+  const chatEngine = buildTestChatEngine({
+    provider,
+    storage,
+    toolRegistry: makeToolRegistryStub(),
+    providers: { getProvider: () => null },
+  });
   registerChatHandlers({
     ipcMain,
-    storage,
-    providers: { getProvider: () => null },
-    toolRegistry: makeToolRegistryStub(),
-    path,
-    defaultProviderId: 'test',
-    maxToolRounds: 5,
+    chatEngine,
     REQ,
     PUSH,
   });
@@ -200,6 +224,13 @@ test('CHAT_SEND returns the final assistant text when no tools are called', asyn
   assert.deepEqual(res.toolTrace, []);
   assert.deepEqual(res.usage, { prompt: 10, completion: 2, total: 12 });
   assert.equal(res.rawExchanges.length, 1);
+  assert.ok(res.rawLogTurn, 'CHAT_SEND must additively return rawLogTurn');
+  assert.equal(res.rawLogTurn.userText, 'Hi');
+  assert.equal(res.rawLogTurn.exchangeCount, 1);
+  assert.ok(res.rawLogTurn.contextStack);
+  assert.equal(res.rawLogTurn.rounds.length, 1);
+  assert.equal(res.rawLogTurn.exchanges, undefined, 'rawExchanges must not be duplicated in rawLogTurn');
+  assert.ok(Array.isArray(res.rawExchanges));
 });
 
 test('CHAT_SEND runs a full tool round-trip: tool call -> registry -> follow-up answer', async () => {
@@ -235,9 +266,42 @@ test('CHAT_SEND runs a full tool round-trip: tool call -> registry -> follow-up 
   assert.equal(toolMsg.tool_call_id, 'call_1');
   assert.deepEqual(JSON.parse(toolMsg.content), { relative_path: '.', items: [] });
 
-  // Start/Done-Ereignisse werden als Rohdaten an den Renderer gepusht.
+  // Start/Done-Ereignisse enthalten Anzeige-Zeilen und Rohdaten.
   const toolLineEvents = sent.filter((s) => s.channel === PUSH.CHAT_TOOL_LINE);
   assert.deepEqual(toolLineEvents.map((e) => e.payload.phase), ['start', 'done']);
+  assert.ok(toolLineEvents.every((e) => typeof e.payload.line === 'string' && e.payload.line.length > 0));
+  assert.equal(toolLineEvents[0].payload.tool, 'list_directory');
+  assert.equal(toolLineEvents[0].payload.line, 'Projektordner wird durchsucht …');
+  assert.equal(toolLineEvents[1].payload.line, 'Projektordner durchsucht');
+});
+
+test('CHAT_SEND emits a workspace fileWritten progress event after write_file_text', async () => {
+  const { provider } = makeScriptedProvider([
+    assistantToolCall([toolCall('call_1', 'write_file_text', { relative_path: 'notes/new.md', content: 'hi' })]),
+    assistantText('Geschrieben.'),
+  ]);
+  const toolRegistry = makeToolRegistryStub((toolName) =>
+    JSON.stringify(toolName === 'write_file_text' ? { ok: true } : { ok: true })
+  );
+  const storage = makeStorage({ readUIPrefs: async () => ({ allowWorkspaceWrite: true }) });
+  const { sendHandler } = setupChatHandlers({ provider, toolRegistry, storage });
+  const { event, sent } = makeFakeEvent();
+
+  const res = await sendHandler(event, {
+    messages: [{ role: 'user', content: 'Schreib eine Datei' }],
+    workspaceRoot: '/tmp/weyouze-project',
+  });
+
+  assert.equal(res.content, 'Geschrieben.');
+  const workspaceEvents = sent.filter(
+    (s) => s.channel === PUSH.CHAT_PROGRESS && s.payload.type === 'workspace'
+  );
+  assert.equal(workspaceEvents.length, 1);
+  assert.deepEqual(workspaceEvents[0].payload, {
+    type: 'workspace',
+    event: 'fileWritten',
+    relativePath: 'notes/new.md',
+  });
 });
 
 test('CHAT_SEND rejects tool calls with a synthetic error when no workspace is open', async () => {
@@ -278,6 +342,7 @@ test('CHAT_SEND attaches the clamped debug_wait duration to the tool trace entry
 
   // duration_seconds: 0.1 liegt unter dem Minimum (500ms) und wird geclampt.
   assert.equal(res.toolTrace[0].waitMs, 500);
+  assert.equal(res.toolTrace[0].line, '0,5 Sekunden gewartet');
 });
 
 test('CHAT_SEND stops with TOOL_LIMIT once the configured round limit is exhausted', async () => {
@@ -350,14 +415,14 @@ test('CHAT_EXPLAIN returns the provider content without recording tools or a raw
   const { provider, calls } = makeScriptedProvider([assistantText('Erklärung des Ablaufs.')]);
   const storage = makeStorage();
   const ipcMain = makeIpcMain();
+  const chatEngine = buildTestChatEngine({
+    provider,
+    storage,
+    toolRegistry: makeToolRegistryStub(),
+  });
   registerChatHandlers({
     ipcMain,
-    storage,
-    providers: { getProvider: () => provider },
-    toolRegistry: makeToolRegistryStub(),
-    path,
-    defaultProviderId: 'test',
-    maxToolRounds: 5,
+    chatEngine,
     REQ,
     PUSH,
   });
@@ -378,6 +443,47 @@ test('CHAT_EXPLAIN rejects an empty messages payload', async () => {
 
   const res = await explainHandler(null, { messages: [] });
   assert.deepEqual(res, { error: 'Keine Nachrichten übergeben.', code: 'INVALID' });
+});
+
+test('CHAT_EXPLAIN builds the explanation prompt on main from slim semantic payload', async () => {
+  const { provider, calls } = makeScriptedProvider([assistantText('Erklärung fertig.')]);
+  const { sendHandler, explainHandler } = setupChatHandlers({ provider });
+  const { event } = makeFakeEvent();
+
+  const sendRes = await sendHandler(event, {
+    messages: [{ role: 'user', content: 'Was passiert hier?' }],
+  });
+  assert.ok(sendRes.rawLogTurn);
+  assert.ok(sendRes.rawExchanges?.length);
+
+  const explainRes = await explainHandler(null, {
+    userText: sendRes.rawLogTurn.userText,
+    exchanges: sendRes.rawExchanges,
+  });
+  assert.equal(explainRes.content, 'Erklärung fertig.');
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].messages[0].content, /Ursprüngliche Anfrage des Nutzers/);
+  assert.match(calls[1].messages[0].content, /Was passiert hier\?/);
+  assert.equal(calls[1].tools, undefined);
+  assert.equal(calls[1].recorder, undefined);
+});
+
+test('CHAT_EXPLAIN still accepts prior rawLogTurn payload with embedded exchanges', async () => {
+  const { provider, calls } = makeScriptedProvider([assistantText('Compat ok.')]);
+  const { explainHandler } = setupChatHandlers({ provider });
+
+  const exchanges = [
+    {
+      model: 'test-model',
+      messages: [{ role: 'user', content: 'Alt' }],
+      response: { text: 'ok', toolCalls: [] },
+    },
+  ];
+  const res = await explainHandler(null, {
+    rawLogTurn: { userText: 'Alt', exchanges },
+  });
+  assert.equal(res.content, 'Compat ok.');
+  assert.match(calls[0].messages[0].content, /Ursprüngliche Anfrage des Nutzers/);
 });
 
 test('CHAT_EXPLAIN surfaces provider errors with their code', async () => {

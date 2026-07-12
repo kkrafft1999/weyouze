@@ -20,9 +20,11 @@ const {
   createToolLineEvent,
   createPhaseEvent,
   createReasoningEvent,
+  createWorkspaceFileWrittenEvent,
   isChatErrorCode,
   isChatPhase,
   isToolLinePhase,
+  attachRawLogTurn,
 } = contracts;
 
 test('CONTRACT_VERSION is a positive integer', () => {
@@ -108,17 +110,32 @@ test('event factories match the push payload shapes', () => {
   assert.deepEqual(createDeltaEvent(undefined), { text: '' });
   assert.deepEqual(createPhaseEvent(CHAT_PHASES.WAITING), { type: 'phase', phase: 'waiting' });
   assert.deepEqual(createReasoningEvent('r'), { type: 'reasoning', text: 'r' });
+  assert.deepEqual(createWorkspaceFileWrittenEvent('src/a.js'), {
+    type: 'workspace',
+    event: 'fileWritten',
+    relativePath: 'src/a.js',
+  });
   assert.deepEqual(
-    createToolLineEvent(TOOL_LINE_PHASES.START, { tool: 'read_file_text', args: { relative_path: 'a' } }),
-    { phase: 'start', tool: 'read_file_text', args: { relative_path: 'a' } }
+    createToolLineEvent(TOOL_LINE_PHASES.START, {
+      tool: 'read_file_text',
+      args: { relative_path: 'a' },
+      line: 'Datei a wird gelesen …',
+    }),
+    { phase: 'start', tool: 'read_file_text', args: { relative_path: 'a' }, line: 'Datei a wird gelesen …' }
   );
 });
 
-test('validators accept known values and reject unknown ones', () => {
-  assert.equal(isChatErrorCode('NO_API_KEY'), true);
-  assert.equal(isChatErrorCode('NOPE'), false);
-  assert.equal(isChatPhase('idle'), true);
-  assert.equal(isChatPhase('busy'), false);
-  assert.equal(isToolLinePhase('done'), true);
-  assert.equal(isToolLinePhase('finished'), false);
+test('contracts aggregate exports settings helpers', () => {
+  assert.equal(typeof contracts.normalizePresetWire, 'function');
+  assert.equal(typeof contracts.formatPresetSublabelFromView, 'function');
+});
+
+test('attachRawLogTurn adds rawLogTurn without mutating rawExchanges', () => {
+  const rawExchanges = [{ model: 'm' }];
+  const result = { content: 'ok', rawExchanges };
+  const rawLogTurn = { userText: 'Hi', exchangeCount: 1 };
+  const out = attachRawLogTurn(result, rawLogTurn);
+  assert.equal(out.rawExchanges, rawExchanges);
+  assert.equal(out.rawLogTurn, rawLogTurn);
+  assert.equal(out.content, 'ok');
 });

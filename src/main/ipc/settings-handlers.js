@@ -1,3 +1,12 @@
+const {
+  createSettingsOk,
+  createSettingsError,
+  createListModelsResult,
+  normalizeListModelsRequest,
+  normalizeUiPrefsPatch,
+} = require('../../shared/contracts/settings');
+const { createSettingsPresentationService } = require('../services/settings-presentation-service');
+
 function registerSettingsHandlers({
   ipcMain,
   safeStorage,
@@ -6,41 +15,25 @@ function registerSettingsHandlers({
   defaultProviderId,
   REQ,
   setActiveWorkspaceRoot,
+  presentation,
 }) {
+  const presentationService = presentation || createSettingsPresentationService({
+    providers,
+    defaultProviderId,
+  });
+
   ipcMain.handle(REQ.SETTINGS_GET_LLM_STATE, async () => {
     const encryptionAvailable = safeStorage.isEncryptionAvailable();
     const config = await storage.readLLMConfig();
-    const meta = providers.listProviderMeta();
-    const list = meta.map((m) => {
-      const entry = (config.providers && config.providers[m.id]) || {};
-      const hasKey = m.fields.apiKey ? !!entry.apiKeyEnc : false;
-      const baseUrl = m.fields.baseUrl ? (entry.baseUrl || m.defaultBaseUrl) : '';
-      const configured = m.fields.apiKey ? hasKey : m.fields.baseUrl ? !!baseUrl : true;
-      const insecureTls = m.fields.insecureTls
-        ? (typeof entry.insecureTls === 'boolean' ? entry.insecureTls : m.defaultInsecureTls === true)
-        : false;
-      return {
-        ...m,
-        configured,
-        hasKey,
-        model: entry.model || m.defaultModel,
-        baseUrl,
-        insecureTls,
-      };
-    });
     const chatTarget = storage.resolveChatModelTarget(config);
-    const active = config.activeProvider || defaultProviderId;
-    const presets = Array.isArray(config.presets)
+    const presetsWire = Array.isArray(config.presets)
       ? config.presets.map((row) => storage.normalizePresetEntry(row)).filter(Boolean)
       : [];
-    return {
+    return presentationService.buildLlmStateDto({
       encryptionAvailable,
-      activeProvider: active,
-      activePresetId: config.activePresetId || null,
-      presets,
+      config: { ...config, presets: presetsWire },
       chatTarget,
-      providers: list,
-    };
+    });
   });
 
   function mergeProviderPatchIntoConfig(config, providerId, patch) {
@@ -49,7 +42,7 @@ function registerSettingsHandlers({
 
   ipcMain.handle(REQ.SETTINGS_SET_ACTIVE_PRESET, async (_event, presetId) => {
     if (typeof presetId !== 'string' || !presetId.trim()) {
-      return { ok: false, error: 'Kein Eintrag gewählt.' };
+      return createSettingsError('Kein Eintrag gewählt.');
     }
     let validationError = null;
     await storage.updateLLMConfig(async (config) => {
@@ -57,7 +50,7 @@ function registerSettingsHandlers({
         ? config.presets.find((p) => p && p.id === presetId.trim())
         : null;
       if (!preset || !providers.getProvider(preset.providerId)) {
-        validationError = { ok: false, error: 'Eintrag nicht gefunden.' };
+        validationError = createSettingsError('Eintrag nicht gefunden.');
         return config;
       }
       const meta = providers.getProvider(preset.providerId);
@@ -68,7 +61,7 @@ function registerSettingsHandlers({
           ? !!(entry.baseUrl || meta.defaultBaseUrl)
           : true;
       if (!configured) {
-        validationError = { ok: false, error: 'Anbieter ist noch nicht konfiguriert.' };
+        validationError = createSettingsError('Anbieter ist noch nicht konfiguriert.');
         return config;
       }
       config.activePresetId = presetId.trim();
@@ -82,7 +75,7 @@ function registerSettingsHandlers({
       return config;
     });
     if (validationError) return validationError;
-    return { ok: true };
+    return createSettingsOk();
   });
 
   ipcMain.handle(REQ.SETTINGS_COMMIT_SETTINGS, async (_event, payload) => {
@@ -91,12 +84,12 @@ function registerSettingsHandlers({
       .map((row) => storage.normalizePresetEntry(row))
       .filter(Boolean);
     if (presets.length === 0) {
-      return { ok: false, error: 'Mindestens ein Modell-Eintrag ist erforderlich.' };
+      return createSettingsError('Mindestens ein Modell-Eintrag ist erforderlich.');
     }
     const seen = new Set();
     for (const p of presets) {
       if (seen.has(p.id)) {
-        return { ok: false, error: 'Doppelte Eintrags-IDs in der Liste.' };
+        return createSettingsError('Doppelte Eintrags-IDs in der Liste.');
       }
       seen.add(p.id);
     }
@@ -117,15 +110,17 @@ function registerSettingsHandlers({
       const incomingKey = typeof patch?.apiKey === 'string' ? patch.apiKey.trim() : '';
       if (meta.fields?.apiKey && incomingKey) {
         if (!safeStorage.isEncryptionAvailable()) {
-          return { ok: false, error: 'Verschlüsselter Speicher ist nicht verfügbar.' };
+          return createSettingsError('Verschlüsselter Speicher ist nicht verfügbar.');
         }
       }
     }
 
     let validationError = null;
     await storage.updateLLMConfig(async (config) => {
+      const draft = cloneLlmConfig(config);
+
       for (const providerId of Object.keys(patches)) {
-        const res = mergeProviderPatchIntoConfig(config, providerId, patches[providerId]);
+        const res = mergeProviderPatchIntoConfig(draft, providerId, patches[providerId]);
         if (!res.ok) {
           validationError = res;
           return config;
@@ -134,122 +129,68 @@ function registerSettingsHandlers({
 
       for (const pr of presets) {
         const meta = providers.getProvider(pr.providerId);
-        const entry = (config.providers && config.providers[pr.providerId]) || {};
-        const baseUrlEff = meta.fields?.baseUrl
-          ? (entry.baseUrl || meta.defaultBaseUrl || '')
-          : '';
-        const configured = meta.fields?.apiKey
-          ? !!entry.apiKeyEnc
-          : meta.fields?.baseUrl
-            ? !!String(baseUrlEff).trim()
-            : true;
-        if (!configured) {
-          validationError = {
-            ok: false,
-            error: `Zugang für „${meta.name}“ ist unvollständig (z. B. API-Schlüssel oder Server-URL).`,
-          };
+        const entry = (draft.providers && draft.providers[pr.providerId]) || {};
+        if (!isProviderConfigured(meta, entry)) {
+          validationError = createSettingsError(
+            `Zugang für „${meta.name}“ ist unvollständig (z. B. API-Schlüssel oder Server-URL).`
+          );
           return config;
         }
       }
 
       const providerIdsInUse = new Set(presets.map((pr) => pr.providerId));
-      config.providers = config.providers || {};
-      for (const pid of Object.keys(config.providers)) {
+      draft.providers = draft.providers || {};
+      for (const pid of Object.keys(draft.providers)) {
         if (!providerIdsInUse.has(pid)) {
-          delete config.providers[pid];
+          delete draft.providers[pid];
         }
       }
 
-      config.version = 3;
-      config.presets = presets;
-      config.activePresetId = activePresetId;
-      const target = storage.resolveChatModelTarget(config);
-      config.activeProvider = target.providerId;
+      draft.version = 3;
+      draft.presets = presets;
+      draft.activePresetId = activePresetId;
+      const target = storage.resolveChatModelTarget(draft);
+      draft.activeProvider = target.providerId;
       const activeEntryPid = target.providerId;
       if (activeEntryPid && providers.getProvider(activeEntryPid)) {
-        const pe = { ...(config.providers[activeEntryPid] || {}) };
+        const pe = { ...(draft.providers[activeEntryPid] || {}) };
         pe.model = target.model;
-        config.providers[activeEntryPid] = pe;
+        draft.providers[activeEntryPid] = pe;
       }
 
-      return config;
+      return draft;
     });
     if (validationError) return validationError;
 
-    const uiPatch =
-      payload?.uiPrefs && typeof payload.uiPrefs === 'object' ? payload.uiPrefs : {};
-    if (
-      typeof uiPatch.baseSystemPrompt === 'string'
-      || uiPatch.appLocale === 'en'
-      || uiPatch.appLocale === 'de'
-      || typeof uiPatch.maxToolRounds === 'number'
-      || typeof uiPatch.sidebarWidth === 'number'
-      || typeof uiPatch.chatPanelWidth === 'number'
-      || typeof uiPatch.historyCharLimit === 'number'
-      || typeof uiPatch.allowWorkspaceWrite === 'boolean'
-    ) {
-      await storage.updateUIPrefs(async (out) => {
-        if (typeof uiPatch.baseSystemPrompt === 'string') {
-          out.baseSystemPrompt = uiPatch.baseSystemPrompt;
-        }
-        if (uiPatch.appLocale === 'en' || uiPatch.appLocale === 'de') {
-          out.appLocale = uiPatch.appLocale;
-        }
-        if (typeof uiPatch.maxToolRounds === 'number' && Number.isFinite(uiPatch.maxToolRounds)) {
-          const clamped = Math.min(500, Math.max(1, Math.round(uiPatch.maxToolRounds)));
-          out.maxToolRounds = clamped;
-        }
-        const sidebarWidth = storage.clampSidebarWidth(uiPatch.sidebarWidth);
-        if (typeof sidebarWidth === 'number') {
-          out.sidebarWidth = sidebarWidth;
-        }
-        const chatPanelWidth = storage.clampChatPanelWidth(uiPatch.chatPanelWidth);
-        if (typeof chatPanelWidth === 'number') {
-          out.chatPanelWidth = chatPanelWidth;
-        }
-        const historyCharLimit = storage.clampHistoryCharLimit(uiPatch.historyCharLimit);
-        if (typeof historyCharLimit === 'number') {
-          out.historyCharLimit = historyCharLimit;
-        }
-        if (typeof uiPatch.allowWorkspaceWrite === 'boolean') {
-          out.allowWorkspaceWrite = uiPatch.allowWorkspaceWrite;
-        }
-        return out;
-      });
+    const uiPatch = normalizeUiPrefsPatch(payload?.uiPrefs);
+    if (Object.keys(uiPatch).length > 0) {
+      await storage.updateUIPrefs(async (out) => Object.assign(out, uiPatch));
     }
 
-    return { ok: true };
+    return createSettingsOk();
   });
 
   ipcMain.handle(REQ.SETTINGS_LIST_MODELS, async (_event, payload) => {
-    const providerId = payload?.providerId;
-    const provider = providers.getProvider(providerId);
-    if (!provider) return { error: 'Unbekannter Provider.' };
+    const req = normalizeListModelsRequest(payload);
+    const provider = providers.getProvider(req.providerId);
+    if (!provider) return createListModelsResult({ error: 'Unbekannter Provider.' });
 
-    const stored = (await storage.getEffectiveProviderConfig(providerId)) || {};
-    const incomingKey = typeof payload?.apiKey === 'string' && payload.apiKey.trim()
-      ? payload.apiKey.trim()
-      : null;
-    const incomingUrl = typeof payload?.baseUrl === 'string' && payload.baseUrl.trim()
-      ? payload.baseUrl.trim()
-      : null;
-    const incomingInsecure = typeof payload?.insecureTls === 'boolean'
-      ? payload.insecureTls
-      : null;
-
+    const stored = (await storage.getEffectiveProviderConfig(req.providerId)) || {};
     const config = {
-      apiKey: incomingKey || stored.apiKey || '',
-      baseUrl: incomingUrl || stored.baseUrl || provider.defaultBaseUrl || '',
-      insecureTls: incomingInsecure !== null
-        ? incomingInsecure
+      apiKey: req.apiKey || stored.apiKey || '',
+      baseUrl: req.baseUrl || stored.baseUrl || provider.defaultBaseUrl || '',
+      insecureTls: typeof req.insecureTls === 'boolean'
+        ? req.insecureTls
         : (typeof stored.insecureTls === 'boolean'
             ? stored.insecureTls
             : provider.defaultInsecureTls === true),
     };
     try {
-      return await provider.listModels(config);
+      const result = await provider.listModels(config);
+      if (result?.error) return createListModelsResult({ error: result.error });
+      return createListModelsResult({ models: result?.models });
     } catch (err) {
-      return { error: err.message || 'Modelle konnten nicht geladen werden.' };
+      return createListModelsResult({ error: err.message || 'Modelle konnten nicht geladen werden.' });
     }
   });
 
@@ -263,7 +204,7 @@ function registerSettingsHandlers({
     if (setActiveWorkspaceRoot) {
       setActiveWorkspaceRoot(folderPath);
     }
-    return { ok: true };
+    return createSettingsOk();
   });
 
   ipcMain.handle(REQ.SETTINGS_GET_FOLDER_HISTORY, async () => {
@@ -274,45 +215,18 @@ function registerSettingsHandlers({
   ipcMain.handle(REQ.SETTINGS_GET_UI_PREFS, async () => storage.readUIPrefs());
 
   ipcMain.handle(REQ.SETTINGS_SET_UI_PREFS, async (_event, partial) => {
-    const patch = partial && typeof partial === 'object' ? partial : {};
-    return storage.updateUIPrefs(async (out) => {
-      if (typeof patch.contentPaneVisible === 'boolean') {
-        out.contentPaneVisible = patch.contentPaneVisible;
-      }
-      if (typeof patch.baseSystemPrompt === 'string') {
-        out.baseSystemPrompt = patch.baseSystemPrompt;
-      }
-      if (patch.appLocale === 'en' || patch.appLocale === 'de') {
-        out.appLocale = patch.appLocale;
-      }
-      if (typeof patch.maxToolRounds === 'number' && Number.isFinite(patch.maxToolRounds)) {
-        const clamped = Math.min(500, Math.max(1, Math.round(patch.maxToolRounds)));
-        out.maxToolRounds = clamped;
-      }
-      const sidebarWidth = storage.clampSidebarWidth(patch.sidebarWidth);
-      if (typeof sidebarWidth === 'number') {
-        out.sidebarWidth = sidebarWidth;
-      }
-      const chatPanelWidth = storage.clampChatPanelWidth(patch.chatPanelWidth);
-      if (typeof chatPanelWidth === 'number') {
-        out.chatPanelWidth = chatPanelWidth;
-      }
-      const historyCharLimit = storage.clampHistoryCharLimit(patch.historyCharLimit);
-      if (typeof historyCharLimit === 'number') {
-        out.historyCharLimit = historyCharLimit;
-      }
-      if (typeof patch.allowWorkspaceWrite === 'boolean') {
-        out.allowWorkspaceWrite = patch.allowWorkspaceWrite;
-      }
-      return out;
-    });
+    const patch = normalizeUiPrefsPatch(partial);
+    if (Object.keys(patch).length === 0) {
+      return storage.readUIPrefs();
+    }
+    return storage.updateUIPrefs(async (out) => Object.assign(out, patch));
   });
 }
 
 function mergeProviderPatchIntoConfigImpl(deps, config, providerId, patch) {
   const { safeStorage, providers } = deps;
   const provider = providers.getProvider(providerId);
-  if (!provider) return { ok: false, error: 'Unbekannter Provider.' };
+  if (!provider) return createSettingsError('Unbekannter Provider.');
   const prevEntry = (config.providers && config.providers[providerId]) || {};
   const next = { ...prevEntry };
 
@@ -323,7 +237,7 @@ function mergeProviderPatchIntoConfigImpl(deps, config, providerId, patch) {
     const incomingKey = typeof patch?.apiKey === 'string' ? patch.apiKey.trim() : '';
     if (incomingKey) {
       if (!safeStorage.isEncryptionAvailable()) {
-        return { ok: false, error: 'Verschlüsselter Speicher ist nicht verfügbar.' };
+        return createSettingsError('Verschlüsselter Speicher ist nicht verfügbar.');
       }
       next.apiKeyEnc = safeStorage.encryptString(incomingKey).toString('base64');
     }
@@ -339,7 +253,22 @@ function mergeProviderPatchIntoConfigImpl(deps, config, providerId, patch) {
 
   config.providers = config.providers || {};
   config.providers[providerId] = next;
-  return { ok: true };
+  return createSettingsOk();
+}
+
+function cloneLlmConfig(config) {
+  return JSON.parse(JSON.stringify(config));
+}
+
+function isProviderConfigured(meta, entry) {
+  const baseUrlEff = meta.fields?.baseUrl
+    ? (entry.baseUrl || meta.defaultBaseUrl || '')
+    : '';
+  return meta.fields?.apiKey
+    ? !!entry.apiKeyEnc
+    : meta.fields?.baseUrl
+      ? !!String(baseUrlEff).trim()
+      : true;
 }
 
 module.exports = { registerSettingsHandlers, mergeProviderPatchIntoConfigImpl };

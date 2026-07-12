@@ -2,16 +2,28 @@ function registerChatHistoryHandlers({ ipcMain, storage, REQ }) {
   ipcMain.handle(REQ.CHAT_HISTORY_GET, async (_event, workspaceRoot) => {
     const store = await storage.readChatHistoryStore();
     const wsRoot = storage.normalizeWorkspaceRoot(workspaceRoot);
-    const sessions = store.sessions.filter((s) => storage.sessionMatchesWorkspace(s, wsRoot));
+    const sessions = store.sessions
+      .filter((s) => storage.sessionMatchesWorkspace(s, wsRoot))
+      .map((s) => storage.normalizeSessionForLoad(s))
+      .filter(Boolean);
     const activeChatId = store.activeByWorkspace[storage.workspaceBucketKey(wsRoot)] || null;
     return { sessions, activeChatId, workspaceRoot: wsRoot };
   });
 
   ipcMain.handle(REQ.CHAT_HISTORY_UPSERT, async (_event, sessionRow) =>
     storage.withChatHistoryLock(async () => {
-      const normalized = storage.normalizeSessionForStore(sessionRow);
-      if (!normalized) return { ok: false };
       const store = await storage.readChatHistoryStore({ skipMigration: true });
+      const existing =
+        sessionRow && typeof sessionRow.id === 'string'
+          ? store.sessions.find((x) => x.id === sessionRow.id.trim())
+          : null;
+      const titleProvided =
+        typeof sessionRow?.title === 'string' && sessionRow.title.trim().length > 0;
+      const normalized = storage.normalizeSessionForStore(sessionRow, {
+        existingTitle: titleProvided ? undefined : existing?.title,
+        requireMessages: true,
+      });
+      if (!normalized) return { ok: false };
       const idx = store.sessions.findIndex((x) => x.id === normalized.id);
       if (idx >= 0) store.sessions[idx] = normalized;
       else store.sessions.push(normalized);

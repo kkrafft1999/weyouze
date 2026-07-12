@@ -1,10 +1,4 @@
 import { markdownToSafeHtml } from '../utils/helpers.js';
-import {
-  inferChatTitle,
-  serializeChatMessagesForStorage,
-  normalizeLoadedMessages,
-} from '../chat/messageUtils.js';
-import { summarizeToolEvent } from '../chat/toolCallSummary.js';
 // Token-Usage-Normalisierung/-Summierung aus der gemeinsamen Contract-Schicht,
 // damit Anzeige (Renderer) und Provider-Seite (Main) nicht auseinanderlaufen.
 import contracts from '../generated/contracts.js';
@@ -358,16 +352,12 @@ export function initChatStream({
 
   async function persistCurrentChat() {
     if (!appStore.currentChatId || appStore.chatMessages.length === 0) return;
-    const messages = serializeChatMessagesForStorage(appStore.chatMessages);
-    if (messages.length === 0) return;
-    const title = inferChatTitle(appStore.chatMessages);
     await api.upsertChatSession({
       id: appStore.currentChatId,
       workspaceRoot: appStore.currentChatWorkspace,
-      title,
       updatedAt: Date.now(),
-      messages,
-      tokenUsage: { ...appStore.chatTokenUsage },
+      messages: appStore.chatMessages,
+      tokenUsage: appStore.chatTokenUsage,
     });
     await api.setActiveChatId(appStore.currentChatWorkspace, appStore.currentChatId);
   }
@@ -385,7 +375,7 @@ export function initChatStream({
       if (s && Array.isArray(s.messages)) {
         appStore.currentChatId = s.id;
         appStore.currentChatWorkspace = workspaceRoot || null;
-        appStore.chatMessages = normalizeLoadedMessages(s.messages);
+        appStore.chatMessages = s.messages;
         setChatTokenUsage(s.tokenUsage);
         chatInput.value = '';
         onInputChanged();
@@ -497,23 +487,27 @@ export function initChatStream({
               typeof payload === 'object' && payload !== null && payload.phase
                 ? payload.phase
                 : 'start';
-            // Main pusht Rohdaten ({ tool, args, … }); die Anzeige-Zeile
-            // entsteht hier. Strings (alte Sessions) gehen unverändert durch.
+            // Main liefert fertige Anzeige-Zeilen in payload.line (Rohdaten optional für Debug).
+            // Strings in toolTrace sind persistierte Alt-Sessions.
             const line =
               typeof payload === 'string'
                 ? payload
                 : typeof payload?.line === 'string'
                   ? payload.line
-                  : payload?.tool
-                    ? summarizeToolEvent(payload, phase)
-                    : '';
+                  : '';
             if (!line) return;
 
             const wrap = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type .chat-tool-log');
             if (!wrap) {
+              if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
               if (phase === 'start') {
-                if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
                 last.toolTrace.push(line);
+              } else if (phase === 'done') {
+                if (last.toolTrace.length > 0) {
+                  last.toolTrace[last.toolTrace.length - 1] = line;
+                } else {
+                  last.toolTrace.push(line);
+                }
               }
               renderChatMessages();
               return;
@@ -532,13 +526,6 @@ export function initChatStream({
               setToolLineDone(target, line);
               if (target && Array.isArray(last.toolTrace) && last.toolTrace.length > 0) {
                 last.toolTrace[last.toolTrace.length - 1] = line;
-              }
-              if (
-                payload?.tool === 'write_file_text'
-                && typeof payload?.args?.relative_path === 'string'
-                && typeof onWorkspaceFileWritten === 'function'
-              ) {
-                onWorkspaceFileWritten(payload.args.relative_path);
               }
             } else {
               if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
@@ -567,6 +554,14 @@ export function initChatStream({
               last.reasoningText = (last.reasoningText || '') + p.text;
               updateStreamingChrome();
             }
+            if (
+              p.type === 'workspace'
+              && p.event === 'fileWritten'
+              && typeof p.relativePath === 'string'
+              && typeof onWorkspaceFileWritten === 'function'
+            ) {
+              onWorkspaceFileWritten(p.relativePath);
+            }
           })
         : () => {};
 
@@ -589,12 +584,23 @@ export function initChatStream({
 
     // LLM-Runden gruppiert pro User-Anfrage ins Sitzungsprotokoll uebernehmen —
     // auch bei Fehler/Abbruch, denn gerade dann ist der Blick am wertvollsten.
-    if (Array.isArray(result?.rawExchanges) && result.rawExchanges.length) {
+    if (result?.rawLogTurn && Array.isArray(result?.rawExchanges) && result.rawExchanges.length) {
       appStore.rawLlmLog.push({
+        ...result.rawLogTurn,
+        exchanges: result.rawExchanges,
+        index: appStore.rawLlmLog.length + 1,
+      });
+      notifyRawLogChanged();
+    } else if (Array.isArray(result?.rawExchanges) && result.rawExchanges.length) {
+      appStore.rawLlmLog.push({
+        incomplete: true,
         index: appStore.rawLlmLog.length + 1,
         userText: text,
         ts: result.rawExchanges[0]?.ts || Date.now(),
         exchanges: result.rawExchanges,
+        exchangeCount: result.rawExchanges.length,
+        roundsSummary: `${result.rawExchanges.length} ${result.rawExchanges.length === 1 ? 'Aufruf' : 'Aufrufe'}`,
+        summaryText: text.length > 80 ? `${text.slice(0, 79)}…` : text || '(leer)',
       });
       notifyRawLogChanged();
     }
@@ -610,7 +616,7 @@ export function initChatStream({
             last.content = result.content;
           }
           last.toolTrace = Array.isArray(result?.toolTrace)
-            ? result.toolTrace.map((e) => summarizeToolEvent(e, 'done'))
+            ? result.toolTrace.map((e) => toolLineText(e))
             : last.toolTrace || [];
           const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
           if (bubble) {
@@ -633,7 +639,7 @@ export function initChatStream({
       last.streaming = false;
       last.content = result.content ?? '';
       last.toolTrace = Array.isArray(result.toolTrace)
-        ? result.toolTrace.map((e) => summarizeToolEvent(e, 'done'))
+        ? result.toolTrace.map((e) => toolLineText(e))
         : last.toolTrace || [];
       const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
       if (bubble) {

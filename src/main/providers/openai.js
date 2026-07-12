@@ -236,6 +236,27 @@ module.exports = {
   fields: { apiKey: true },
   defaultModel: 'gpt-4o-mini',
   apiBase: DEFAULT_BASE,
+  presentation: {
+    apiKeyPlaceholder: 'sk-…',
+    presetFields: [
+      {
+        key: 'reasoningEffort',
+        type: 'select',
+        label: 'Reasoning',
+        hint: 'reasoning_effort bei passenden OpenAI-Modellen.',
+        defaultValue: 'medium',
+        affectsPresetIdentity: true,
+        detailStyle: 'mono',
+        detailPrefix: 'reasoning_effort: ',
+        options: [
+          { value: 'low', label: 'low' },
+          { value: 'medium', label: 'medium' },
+          { value: 'high', label: 'high' },
+        ],
+        formatDetail: (value) => `reasoning_effort: ${value}`,
+      },
+    ],
+  },
   listModels,
   streamChatRound,
 };

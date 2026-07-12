@@ -1,21 +1,15 @@
-const { createChatEngine, CHAT_ENGINE_EVENTS, resolveToolRoundLimit } = require('../chat-engine');
+const { CHAT_ENGINE_EVENTS, resolveToolRoundLimit } = require('../chat-engine');
+const { createRawLogPresentationService } = require('../services/raw-log-presentation-service');
+
 function registerChatHandlers({
   ipcMain,
-  storage,
-  providers,
-  toolRegistry,
-  path,
-  maxToolRounds,
+  chatEngine,
   REQ,
   PUSH,
+  rawLogPresentation,
 }) {
-  const engine = createChatEngine({
-    storage,
-    providers,
-    toolRegistry,
-    path,
-    maxToolRounds,
-  });
+  const engine = chatEngine;
+  const presentation = rawLogPresentation || createRawLogPresentationService();
 
   const eventChannels = {
     [CHAT_ENGINE_EVENTS.DELTA]: PUSH.CHAT_DELTA,
@@ -33,12 +27,22 @@ function registerChatHandlers({
     engine.abort(event.sender.id);
   });
 
-  ipcMain.handle(REQ.CHAT_EXPLAIN, (_event, payload) => engine.explain({ payload }));
-  ipcMain.handle(REQ.CHAT_SEND, (event, payload) => engine.send({
-    sessionId: event.sender.id,
-    payload,
-    onEvent: (engineEvent) => forwardEvent(event.sender, engineEvent),
-  }));
+  ipcMain.handle(REQ.CHAT_EXPLAIN, (_event, payload) => {
+    const messages = presentation.resolveExplainMessages(payload);
+    if (!messages) {
+      return engine.explain({ payload: { messages: [] } });
+    }
+    return engine.explain({ payload: { messages } });
+  });
+
+  ipcMain.handle(REQ.CHAT_SEND, async (event, payload) => {
+    const result = await engine.send({
+      sessionId: event.sender.id,
+      payload,
+      onEvent: (engineEvent) => forwardEvent(event.sender, engineEvent),
+    });
+    return presentation.enrichSendResult(result, payload);
+  });
 }
 
 module.exports = {

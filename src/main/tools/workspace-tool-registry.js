@@ -1,5 +1,5 @@
 const { resolveDebugWaitMs } = require('../../shared/contracts/debug-wait');
-const { sleepAbortable } = require('../providers/stream-helpers');
+const { sleepAbortable } = require('../../shared/runtime/abort');
 
 function toAllowedNameSet(allowedNames) {
   if (allowedNames == null) return null;

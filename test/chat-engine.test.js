@@ -1,28 +1,60 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const { createChatEngine, CHAT_ENGINE_EVENTS } = require('../src/main/chat-engine');
+const { createChatEngine, CHAT_ENGINE_EVENTS } = require('../src/application/chat/chat-engine');
+const { formatToolDisplayLine } = require('../src/shared/presentation/tool-display');
+const { TOOL_LINE_PHASES } = require('../src/shared/contracts/enums');
+const { sleepAbortable } = require('../src/shared/runtime/abort');
 
-function makeStorage(overrides = {}) {
+function makeMockRecorder() {
   return {
-    readLLMConfig: async () => ({}),
-    resolveChatModelTarget: () => ({ providerId: 'test' }),
-    getEffectiveProviderConfig: async () => ({ apiKey: 'sk-test' }),
-    readUIPrefs: async () => ({}),
-    ...overrides,
+    request() {},
+    onRawLine() {},
+    toExchange(meta) {
+      return { ...meta, request: null, responseRaw: '' };
+    },
   };
 }
 
-function makeToolRegistry(execute) {
+function makeToolPort(execute) {
   const calls = [];
   return {
     calls,
     getTools: () => [{ type: 'function', function: { name: 'list_directory' } }],
     buildSystemPrompt: () => 'Tools: list_directory',
+    buildTraceEntry(toolName, args, extra = {}) {
+      const entry = { tool: toolName, args, ...extra };
+      if (toolName === 'debug_wait') entry.waitMs = 500;
+      return entry;
+    },
+    formatDisplayLine(entry, phase) {
+      return formatToolDisplayLine(entry, phase);
+    },
     async execute(toolName, args, context) {
       calls.push({ toolName, args, context });
-      return execute ? execute(toolName, args, context) : JSON.stringify({ ok: true });
+      const output = execute ? await execute(toolName, args, context) : JSON.stringify({ ok: true });
+      return { output, progressEvents: [] };
     },
+  };
+}
+
+function makeWorkspacePaths() {
+  return {
+    resolveRoot(rawRoot) {
+      if (typeof rawRoot !== 'string' || !rawRoot.trim()) return null;
+      return path.resolve(rawRoot.trim());
+    },
+    resolveSelection(root, selectedPath, selectedIsDirectory) {
+      if (!root || typeof selectedPath !== 'string' || !selectedPath.trim()) return null;
+      const trimmed = selectedPath.trim();
+      const absolutePath = path.isAbsolute(trimmed)
+        ? path.resolve(trimmed)
+        : path.resolve(root, trimmed);
+      const relativePath = path.relative(root, absolutePath);
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) return null;
+      return { relativePath: relativePath || '.', isDirectory: !!selectedIsDirectory };
+    },
+    basename: (absPath) => path.basename(absPath),
   };
 }
 
@@ -42,30 +74,62 @@ function assistantToolCall(id, name, args) {
   };
 }
 
-function makeEngine(results, { storage, toolRegistry, provider, providers } = {}) {
+function makeLlmPort(results, {
+  resolveResult = { providerId: 'test', model: 'test-model' },
+  validateResult = null,
+  sendBundle = null,
+} = {}) {
   let resultIndex = 0;
   const calls = [];
-  const scriptedProvider = provider || {
-    defaultModel: 'test-model',
-    fields: {},
-    async streamChatRound(args) {
-      calls.push(args);
+  const bundleCalls = [];
+  const port = {
+    calls,
+    bundleCalls,
+    async resolveChatTarget() {
+      if (resolveResult?.error) return resolveResult;
+      return typeof resolveResult === 'function' ? resolveResult() : resolveResult;
+    },
+    async validateTarget() {
+      return validateResult;
+    },
+    async prepareSendBundle(target) {
+      bundleCalls.push(target);
+      if (sendBundle) return sendBundle;
+      return { config: { apiKey: 'test' }, model: target.model || 'test-model' };
+    },
+    async streamRound(params) {
+      calls.push(params);
       const result = typeof results === 'function'
-        ? results(args, resultIndex)
+        ? results(params, resultIndex)
         : results[Math.min(resultIndex, results.length - 1)];
       resultIndex += 1;
       return result;
     },
+    formatRoundError(err) {
+      return err?.message || String(err);
+    },
   };
+  return port;
+}
+
+function makeEngine(results, {
+  llm,
+  tools,
+  preferences,
+  workspacePaths,
+  maxToolRounds = 3,
+} = {}) {
+  const llmPort = llm || makeLlmPort(results);
   return {
-    calls,
-    toolRegistry: toolRegistry || makeToolRegistry(),
+    calls: llmPort.calls,
+    tools: tools || makeToolPort(),
     engine: createChatEngine({
-      storage: storage || makeStorage(),
-      providers: providers || { getProvider: () => scriptedProvider },
-      toolRegistry: toolRegistry || makeToolRegistry(),
-      path,
-      maxToolRounds: 3,
+      llm: llmPort,
+      tools: tools || makeToolPort(),
+      preferences: preferences || { async read() { return {}; } },
+      workspacePaths: workspacePaths || makeWorkspacePaths(),
+      rawExchange: { createRoundRecorder: makeMockRecorder },
+      maxToolRounds,
       clock: () => 1234,
     }),
   };
@@ -96,10 +160,12 @@ test('engine streams contract events and returns a chat result without Electron'
 
 test('engine validates provider configuration before streaming', async () => {
   const { engine, calls } = makeEngine([assistantText('unused')], {
-    storage: makeStorage({
-      resolveChatModelTarget: () => ({ providerId: 'ghost' }),
+    llm: makeLlmPort([assistantText('unused')], {
+      resolveResult: {
+        error: 'Unbekannter Provider: ghost.',
+        code: 'INVALID',
+      },
     }),
-    providers: { getProvider: () => null },
   });
 
   const result = await engine.send({
@@ -114,14 +180,12 @@ test('engine validates provider configuration before streaming', async () => {
 
 test('engine rejects a missing required API key without streaming', async () => {
   const { engine, calls } = makeEngine([assistantText('unused')], {
-    provider: {
-      defaultModel: 'test-model',
-      fields: { apiKey: true },
-      async streamChatRound() {
-        calls.push('called');
+    llm: makeLlmPort([assistantText('unused')], {
+      validateResult: {
+        error: 'Kein API-Key für Test hinterlegt. Bitte in den Einstellungen speichern.',
+        code: 'NO_API_KEY',
       },
-    },
-    storage: makeStorage({ getEffectiveProviderConfig: async () => ({}) }),
+    }),
   });
 
   const result = await engine.send({
@@ -133,12 +197,58 @@ test('engine rejects a missing required API key without streaming', async () => 
   assert.equal(calls.length, 0);
 });
 
+test('engine forwards providerOptions without provider-specific branching', async () => {
+  const seen = [];
+  const llm = makeLlmPort([assistantText('ok')], {
+    resolveResult: {
+      providerId: 'anthropic',
+      model: 'claude-test',
+      providerOptions: { reasoningEffort: 'high' },
+    },
+  });
+  llm.streamRound = async (params) => {
+    seen.push(params.target);
+    return assistantText('ok');
+  };
+
+  const { engine } = makeEngine([], { llm });
+  await engine.send({
+    sessionId: 'renderer-1',
+    payload: { messages: [{ role: 'user', content: 'Hi' }] },
+  });
+
+  assert.deepEqual(seen[0].providerOptions, { reasoningEffort: 'high' });
+  assert.equal(seen[0].providerId, 'anthropic');
+});
+
+test('engine reuses per-send bundle across tool rounds', async () => {
+  const bundle = { config: { apiKey: 'snap' }, model: 'snap-model' };
+  const llm = makeLlmPort([
+    assistantToolCall('call_1', 'list_directory', { relative_path: '.' }),
+    assistantText('done'),
+  ], { sendBundle: bundle });
+
+  const { engine } = makeEngine([], { llm });
+  await engine.send({
+    sessionId: 'renderer-1',
+    payload: {
+      messages: [{ role: 'user', content: 'Hi' }],
+      workspaceRoot: '/tmp/weyouze-project',
+    },
+  });
+
+  assert.equal(llm.bundleCalls.length, 1);
+  assert.equal(llm.calls.length, 2);
+  assert.equal(llm.calls[0].sendBundle, bundle);
+  assert.equal(llm.calls[1].sendBundle, bundle);
+});
+
 test('engine runs the tool loop and emits tool events through its event sink', async () => {
-  const toolRegistry = makeToolRegistry(() => JSON.stringify({ items: ['README.md'] }));
+  const tools = makeToolPort(() => JSON.stringify({ items: ['README.md'] }));
   const { engine, calls } = makeEngine([
     assistantToolCall('call_1', 'list_directory', { relative_path: '.' }),
     assistantText('Im Ordner liegt README.md.'),
-  ], { toolRegistry });
+  ], { tools });
   const events = [];
 
   const result = await engine.send({
@@ -151,20 +261,28 @@ test('engine runs the tool loop and emits tool events through its event sink', a
   });
 
   assert.equal(result.content, 'Im Ordner liegt README.md.');
-  assert.equal(toolRegistry.calls.length, 1);
-  assert.deepEqual(toolRegistry.calls[0].args, { relative_path: '.' });
+  assert.equal(tools.calls.length, 1);
+  assert.deepEqual(tools.calls[0].args, { relative_path: '.' });
   assert.equal(result.rawExchanges.length, 2);
   assert.equal(calls[1].messages.find((message) => message.role === 'tool').tool_call_id, 'call_1');
   const toolEvents = events.filter((event) => event.type === CHAT_ENGINE_EVENTS.TOOL_LINE);
   assert.deepEqual(toolEvents.map((event) => event.payload.phase), ['start', 'done']);
+  assert.ok(toolEvents.every((event) => typeof event.payload.line === 'string' && event.payload.line.length > 0));
+  assert.equal(
+    toolEvents[0].payload.line,
+    formatToolDisplayLine(
+      { tool: 'list_directory', args: { relative_path: '.' } },
+      TOOL_LINE_PHASES.START
+    )
+  );
 });
 
 test('engine supplies a synthetic tool error when no workspace is open', async () => {
-  const toolRegistry = makeToolRegistry();
+  const tools = makeToolPort();
   const { engine, calls } = makeEngine([
     assistantToolCall('call_1', 'list_directory', { relative_path: '.' }),
     assistantText('Kein Arbeitsordner offen.'),
-  ], { toolRegistry });
+  ], { tools });
 
   const result = await engine.send({
     sessionId: 'renderer-1',
@@ -172,7 +290,7 @@ test('engine supplies a synthetic tool error when no workspace is open', async (
   });
 
   assert.equal(result.content, 'Kein Arbeitsordner offen.');
-  assert.equal(toolRegistry.calls.length, 0);
+  assert.equal(tools.calls.length, 0);
   assert.equal(result.toolTrace[0].noWorkspace, true);
   const toolMessage = calls[1].messages.find((message) => message.role === 'tool');
   assert.match(toolMessage.content, /Kein Arbeitsordner geöffnet/);
@@ -194,6 +312,7 @@ test('engine preserves debug_wait metadata in its tool trace', async () => {
 
   assert.equal(result.content, 'Fertig.');
   assert.equal(result.toolTrace[0].waitMs, 500);
+  assert.equal(result.toolTrace[0].line, '0,5 Sekunden gewartet');
 });
 
 test('engine stops at its configured tool-round limit', async () => {
@@ -214,16 +333,13 @@ test('engine stops at its configured tool-round limit', async () => {
 });
 
 test('engine emits delta and reasoning events from provider callbacks', async () => {
-  const provider = {
-    defaultModel: 'test-model',
-    fields: {},
-    async streamChatRound({ callbacks }) {
-      callbacks.onTextDelta('Teil');
-      callbacks.onReasoningDelta('Gedanke');
-      return assistantText('Teil');
-    },
+  const llm = makeLlmPort([]);
+  llm.streamRound = async ({ callbacks }) => {
+    callbacks.onTextDelta('Teil');
+    callbacks.onReasoningDelta('Gedanke');
+    return assistantText('Teil');
   };
-  const { engine } = makeEngine([], { provider });
+  const { engine } = makeEngine([], { llm });
   const events = [];
 
   await engine.send({
@@ -245,14 +361,14 @@ test('engine emits delta and reasoning events from provider callbacks', async ()
 
 test('engine passes the write preference to its tool registry', async () => {
   const getToolsCalls = [];
-  const toolRegistry = makeToolRegistry();
-  toolRegistry.getTools = (options) => {
+  const tools = makeToolPort();
+  tools.getTools = (options) => {
     getToolsCalls.push(options);
     return [{ type: 'function', function: { name: options.allowWrite ? 'write_file_text' : 'list_directory' } }];
   };
   const { engine, calls } = makeEngine([assistantText('ok')], {
-    toolRegistry,
-    storage: makeStorage({ readUIPrefs: async () => ({ allowWorkspaceWrite: true }) }),
+    tools,
+    preferences: { async read() { return { allowWorkspaceWrite: true }; } },
   });
 
   await engine.send({
@@ -267,17 +383,43 @@ test('engine passes the write preference to its tool registry', async () => {
   assert.equal(calls[0].tools[0].function.name, 'write_file_text');
 });
 
+test('engine preserves start display lines on tool trace when aborted during execution', async () => {
+  const tools = makeToolPort(async (_toolName, _args, context) => {
+    await sleepAbortable(30_000, context.abortSignal);
+    return JSON.stringify({ ok: true });
+  });
+  const { engine } = makeEngine([
+    assistantToolCall('call_1', 'list_directory', { relative_path: 'src' }),
+    assistantText('unused'),
+  ], { tools });
+
+  const pending = engine.send({
+    sessionId: 'renderer-1',
+    payload: {
+      messages: [{ role: 'user', content: 'Liste' }],
+      workspaceRoot: '/tmp/weyouze-project',
+    },
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  engine.abort('renderer-1');
+
+  const result = await pending;
+  assert.equal(result.cancelled, true);
+  assert.equal(result.toolTrace.length, 1);
+  assert.equal(result.toolTrace[0].tool, 'list_directory');
+  assert.equal(result.toolTrace[0].line, 'Ordner src wird durchsucht …');
+});
+
 test('engine aborts only the targeted in-flight session', async () => {
-  const provider = {
-    defaultModel: 'test-model',
-    fields: {},
-    streamChatRound: ({ abortSignal }) => new Promise((resolve) => {
+  const llm = makeLlmPort([]);
+  llm.streamRound = ({ abortSignal }) =>
+    new Promise((resolve) => {
       const finish = () => resolve({ cancelled: true, message: { role: 'assistant', content: '' } });
       if (abortSignal.aborted) return finish();
       abortSignal.addEventListener('abort', finish, { once: true });
-    }),
-  };
-  const { engine } = makeEngine([], { provider });
+    });
+  const { engine } = makeEngine([], { llm });
 
   const pending = engine.send({
     sessionId: 'renderer-1',

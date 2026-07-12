@@ -98,6 +98,19 @@ function makeHandlerProviders({ listModelsImpl } = {}) {
       name: 'OpenAI',
       fields: { apiKey: true },
       defaultModel: 'gpt-4o',
+      presentation: {
+        apiKeyPlaceholder: 'sk-…',
+        presetFields: [{
+          key: 'reasoningEffort',
+          type: 'select',
+          defaultValue: 'medium',
+          affectsPresetIdentity: true,
+          detailStyle: 'mono',
+          detailPrefix: 'reasoning_effort: ',
+          options: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }],
+          formatDetail: (v) => `reasoning_effort: ${v}`,
+        }],
+      },
       listModels: listModelsImpl || (async () => ({ models: [] })),
     },
     ollama: {
@@ -106,6 +119,10 @@ function makeHandlerProviders({ listModelsImpl } = {}) {
       fields: { baseUrl: true },
       defaultModel: 'llama3',
       defaultBaseUrl: 'http://127.0.0.1:11434',
+      presentation: {
+        baseUrlPlaceholder: 'http://localhost:11434',
+        connectionDetail: true,
+      },
       listModels: listModelsImpl || (async () => ({ models: [] })),
     },
   };
@@ -193,6 +210,29 @@ test('commitSettings rejects presets whose provider is not configured', async (t
     false,
     'failed commit must not persist presets'
   );
+});
+
+test('commitSettings does not persist provider patches when preset validation fails', async (t) => {
+  const { ipcMain, storage } = await setupHandlers(t);
+  await storage.updateLLMConfig(async (config) => {
+    config.providers = {
+      openai: { apiKeyEnc: 'stored-key' },
+      ollama: { baseUrl: 'http://old:1' },
+    };
+    return config;
+  });
+
+  const res = await ipcMain.invoke(REQ.SETTINGS_COMMIT_SETTINGS, {
+    presets: [{ id: 'p1', providerId: 'openai', model: 'gpt-4o' }],
+    providerPatches: { openai: { removeApiKey: true } },
+  });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /unvollständig/);
+
+  const config = await storage.readLLMConfig();
+  assert.equal(config.providers.openai?.apiKeyEnc, 'stored-key', 'provider patch must not persist');
+  assert.equal(config.providers.ollama?.baseUrl, 'http://old:1', 'existing provider entries must stay unchanged');
+  assert.equal(config.presets.some((p) => p.id === 'p1'), false);
 });
 
 test('commitSettings persists presets, encrypts keys, prunes unused providers and writes UI prefs', async (t) => {
@@ -298,4 +338,30 @@ test('setUIPrefs persists a clamped historyCharLimit', async (t) => {
   await ipcMain.invoke(REQ.SETTINGS_SET_UI_PREFS, { historyCharLimit: 'nope' });
   prefs = await storage.readUIPrefs();
   assert.equal(prefs.historyCharLimit, 50_000, 'invalid values must not overwrite the stored limit');
+});
+
+test('getLLMState returns normalized preset and provider view DTOs', async (t) => {
+  const { ipcMain, storage } = await setupHandlers(t);
+  await storage.updateLLMConfig(async (config) => {
+    config.providers = {
+      openai: {
+        apiKeyEnc: Buffer.from('enc:key', 'utf8').toString('base64'),
+        model: 'gpt-4o',
+      },
+    };
+    config.presets = [
+      { id: 'p1', providerId: 'openai', model: 'gpt-4o', reasoningEffort: 'low', menuVisible: true },
+    ];
+    config.activePresetId = 'p1';
+    return config;
+  });
+
+  const state = await ipcMain.invoke(REQ.SETTINGS_GET_LLM_STATE);
+  assert.equal(state.encryptionAvailable, true);
+  assert.equal(state.presets.length, 1);
+  assert.equal(state.presets[0].label, 'OpenAI · gpt-4o');
+  assert.equal(state.presets[0].sublabel, 'reasoning_effort: low');
+  assert.equal(state.providers.find((p) => p.id === 'openai').form.showApiKey, true);
+  assert.equal(state.providers.find((p) => p.id === 'openai').configured, true);
+  assert.equal(state.providers.find((p) => p.id === 'openai').fields, undefined);
 });

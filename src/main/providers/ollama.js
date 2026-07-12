@@ -215,6 +215,11 @@ module.exports = {
   defaultBaseUrl: DEFAULT_BASE,
   defaultInsecureTls: false,
   apiBase: DEFAULT_BASE,
+  presentation: {
+    baseUrlPlaceholder: 'http://localhost:11434',
+    connectionDetail: true,
+    insecureTlsHint: 'Nur bei selbstsigniertem oder intern signiertem Zertifikat, dem du vertraust.',
+  },
   listModels,
   streamChatRound,
   translateMessagesToOllama,

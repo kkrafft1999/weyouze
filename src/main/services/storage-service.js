@@ -1,5 +1,20 @@
 const { randomUUID } = require('crypto');
 const { clampHistoryCharLimit } = require('../chat-history-trim');
+const {
+  clampSidebarWidth,
+  clampChatPanelWidth,
+  normalizePresetWire,
+  normalizeUiPrefs,
+  extractPresetOptions,
+} = require('../../shared/contracts/settings');
+const {
+  inferChatTitle,
+  sanitizeChatMessagesForStore,
+  normalizeTokenUsageForStore,
+  normalizeLoadedMessages,
+  normalizeSessionForStore: buildNormalizedSessionForStore,
+  normalizeSessionForLoad,
+} = require('./chat-history-normalization');
 
 function createStorageService({
   app,
@@ -68,26 +83,21 @@ function createStorageService({
   }
 
   function normalizePresetEntry(raw) {
-    if (!raw || typeof raw !== 'object') return null;
-    const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : null;
-    const providerId = typeof raw.providerId === 'string' && raw.providerId.trim()
-      ? raw.providerId.trim()
-      : null;
-    if (!id || !providerId || !providers.getProvider(providerId)) return null;
-    let model =
-      typeof raw.model === 'string' && raw.model.trim()
-        ? raw.model.trim()
-        : providers.getProvider(providerId).defaultModel;
-    const menuVisible = raw.menuVisible !== false;
-    let reasoningEffort = null;
-    if (
-      providerId === 'openai'
-      && typeof raw.reasoningEffort === 'string'
-      && raw.reasoningEffort.trim()
-    ) {
-      reasoningEffort = raw.reasoningEffort.trim();
+    return normalizePresetWire(raw, (id) => providers.getProvider(id));
+  }
+
+  function buildProviderOptionsFromPreset(preset, provider) {
+    const opts = extractPresetOptions(preset, provider);
+    return Object.keys(opts).length > 0 ? opts : undefined;
+  }
+
+  function withLegacyReasoningEffort(target, providerOptions) {
+    if (providerOptions?.reasoningEffort) {
+      target.reasoningEffort = providerOptions.reasoningEffort;
+    } else {
+      target.reasoningEffort = null;
     }
-    return { id, providerId, model, reasoningEffort, menuVisible };
+    return target;
   }
 
   /** Chat-Ziel aus LLM-Konfiguration (Preset-first, Fallback aktiv/Provider-Modell). */
@@ -96,25 +106,26 @@ function createStorageService({
     const preset = list.find((p) => p && p.id === llmConfig.activePresetId);
     if (preset && providers.getProvider(preset.providerId)) {
       const pMeta = providers.getProvider(preset.providerId);
-      return {
+      const providerOptions = buildProviderOptionsFromPreset(preset, pMeta);
+      const target = {
         providerId: preset.providerId,
         model: typeof preset.model === 'string' && preset.model.trim()
           ? preset.model.trim()
           : pMeta.defaultModel,
-        reasoningEffort: preset.reasoningEffort || null,
       };
+      if (providerOptions) target.providerOptions = providerOptions;
+      return withLegacyReasoningEffort(target, providerOptions);
     }
     const ap = llmConfig.activeProvider || DEFAULT_PROVIDER;
     const pMeta = providers.getProvider(ap);
     const entry = (llmConfig.providers && llmConfig.providers[ap]) || {};
-    return {
+    return withLegacyReasoningEffort({
       providerId: ap,
       model:
         typeof entry.model === 'string' && entry.model.trim()
           ? entry.model.trim()
           : (pMeta && pMeta.defaultModel) || '',
-      reasoningEffort: null,
-    };
+    }, undefined);
   }
 
   async function migrateLLMConfigToV3(existing, { persist = true } = {}) {
@@ -313,14 +324,12 @@ function createStorageService({
   const CHAT_PANEL_WIDTH_MIN = 260;
   const CHAT_PANEL_WIDTH_MAX = 2000;
 
-  function clampSidebarWidth(raw) {
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
-    return Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(raw)));
+  function clampSidebarWidthLocal(raw) {
+    return clampSidebarWidth(raw);
   }
 
-  function clampChatPanelWidth(raw) {
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
-    return Math.min(CHAT_PANEL_WIDTH_MAX, Math.max(CHAT_PANEL_WIDTH_MIN, Math.round(raw)));
+  function clampChatPanelWidthLocal(raw) {
+    return clampChatPanelWidth(raw);
   }
 
   function getUIPrefsPath() {
@@ -331,41 +340,9 @@ function createStorageService({
     try {
       const raw = await fs.readFile(getUIPrefsPath(), 'utf8');
       const data = JSON.parse(raw);
-      let baseSystemPrompt = '';
-      if (typeof data.baseSystemPrompt === 'string') {
-        baseSystemPrompt = data.baseSystemPrompt;
-      }
-      const appLocale = data.appLocale === 'en' ? 'en' : 'de';
-      let maxToolRounds;
-      if (typeof data.maxToolRounds === 'number' && Number.isFinite(data.maxToolRounds)) {
-        maxToolRounds = Math.round(data.maxToolRounds);
-      }
-      const sidebarWidth = clampSidebarWidth(data.sidebarWidth);
-      const chatPanelWidth = clampChatPanelWidth(data.chatPanelWidth);
-      const historyCharLimit = clampHistoryCharLimit(data.historyCharLimit);
-      const ignoredUpdateVersion = typeof data.ignoredUpdateVersion === 'string'
-        ? data.ignoredUpdateVersion
-        : undefined;
-      return {
-        contentPaneVisible: data.contentPaneVisible !== false,
-        baseSystemPrompt,
-        appLocale,
-        // Default AUS: das Modell darf ohne explizite Zustimmung keine Dateien
-        // schreiben (Einstellungen › Tools).
-        allowWorkspaceWrite: data.allowWorkspaceWrite === true,
-        ...(typeof maxToolRounds === 'number' ? { maxToolRounds } : {}),
-        ...(typeof sidebarWidth === 'number' ? { sidebarWidth } : {}),
-        ...(typeof chatPanelWidth === 'number' ? { chatPanelWidth } : {}),
-        ...(typeof historyCharLimit === 'number' ? { historyCharLimit } : {}),
-        ...(typeof ignoredUpdateVersion === 'string' ? { ignoredUpdateVersion } : {}),
-      };
+      return normalizeUiPrefs(data);
     } catch {
-      return {
-        contentPaneVisible: true,
-        baseSystemPrompt: '',
-        appLocale: 'de',
-        allowWorkspaceWrite: false,
-      };
+      return normalizeUiPrefs({});
     }
   }
 
@@ -377,8 +354,9 @@ function createStorageService({
     return withFileLock(getUIPrefsPath(), async () => {
       const current = await readUIPrefs();
       const updated = await updater({ ...current });
-      await writeJsonAtomic(getUIPrefsPath(), updated);
-      return updated;
+      const normalized = normalizeUiPrefs(updated);
+      await writeJsonAtomic(getUIPrefsPath(), normalized);
+      return normalized;
     });
   }
 
@@ -401,53 +379,16 @@ function createStorageService({
     return workspaceRoot ? workspaceRoot : NO_WORKSPACE_KEY;
   }
 
-  function sanitizeChatMessagesForStore(raw) {
-    if (!Array.isArray(raw)) return [];
-    const out = [];
-    for (const m of raw) {
-      if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue;
-      const content = typeof m.content === 'string' ? m.content : '';
-      if (m.role === 'user') {
-        out.push({ role: 'user', content });
-        continue;
-      }
-      const row = { role: 'assistant', content };
-      if (m.isError === true) row.isError = true;
-      if (Array.isArray(m.toolTrace) && m.toolTrace.length) row.toolTrace = m.toolTrace;
-      if (typeof m.reasoningText === 'string' && m.reasoningText.trim()) {
-        row.reasoningText = m.reasoningText;
-      }
-      out.push(row);
-    }
-    return out;
+  function sanitizeChatMessagesForStoreLocal(raw) {
+    return sanitizeChatMessagesForStore(raw);
   }
 
-  function normalizeTokenUsageForStore(raw) {
-    if (!raw || typeof raw !== 'object') {
-      return { prompt: 0, completion: 0, total: 0 };
-    }
-    const prompt = Math.max(0, Math.round(Number(raw.prompt) || 0));
-    const completion = Math.max(0, Math.round(Number(raw.completion) || 0));
-    let total = Math.max(0, Math.round(Number(raw.total) || 0));
-    if (total === 0 && (prompt > 0 || completion > 0)) {
-      total = prompt + completion;
-    }
-    return { prompt, completion, total };
+  function normalizeTokenUsageForStoreLocal(raw) {
+    return normalizeTokenUsageForStore(raw);
   }
 
-  function normalizeSessionForStore(s) {
-    if (!s || typeof s.id !== 'string' || !s.id.trim()) return null;
-    const messages = sanitizeChatMessagesForStore(s.messages);
-    const titleRaw = typeof s.title === 'string' ? s.title.trim() : '';
-    const workspaceRoot = normalizeWorkspaceRoot(s.workspaceRoot);
-    return {
-      id: s.id.trim(),
-      workspaceRoot,
-      title: titleRaw ? titleRaw.slice(0, 200) : 'Chat',
-      updatedAt: Number.isFinite(s.updatedAt) ? s.updatedAt : Date.now(),
-      messages,
-      tokenUsage: normalizeTokenUsageForStore(s.tokenUsage),
-    };
+  function normalizeSessionForStore(s, options = {}) {
+    return buildNormalizedSessionForStore(s, { normalizeWorkspaceRoot, ...options });
   }
 
   function parseChatHistoryStoreData(data) {
@@ -613,14 +554,19 @@ function createStorageService({
     getEffectiveProviderConfig,
     getOpenAIApiKey,
     getValidatedLastFolder,
-    clampSidebarWidth,
-    clampChatPanelWidth,
+    clampSidebarWidth: clampSidebarWidthLocal,
+    clampChatPanelWidth: clampChatPanelWidthLocal,
     clampHistoryCharLimit,
     readUIPrefs,
     writeUIPrefs,
     updateUIPrefs,
     normalizeWorkspaceRoot,
     workspaceBucketKey,
+    inferChatTitle,
+    sanitizeChatMessagesForStore: sanitizeChatMessagesForStoreLocal,
+    normalizeTokenUsageForStore: normalizeTokenUsageForStoreLocal,
+    normalizeLoadedMessages,
+    normalizeSessionForLoad,
     normalizeSessionForStore,
     readChatHistoryStore,
     writeChatHistoryStore,

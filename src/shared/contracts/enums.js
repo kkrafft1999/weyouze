@@ -42,6 +42,30 @@ const TOOL_LINE_PHASES = Object.freeze({
 const CHAT_PROGRESS_TYPES = Object.freeze({
   PHASE: 'phase',
   REASONING: 'reasoning',
+  /** Semantisches Anwendungs-/Workspace-Ereignis (z. B. Datei geschrieben). */
+  WORKSPACE: 'workspace',
+});
+
+/** Untertyp eines chat:progress-Events mit type='workspace'. */
+const WORKSPACE_PROGRESS_EVENTS = Object.freeze({
+  FILE_WRITTEN: 'fileWritten',
+});
+
+// App-Sprache (ui-preferences.json, Einstellungen).
+const APP_LOCALES = Object.freeze({
+  DE: 'de',
+  EN: 'en',
+});
+
+// CSS-Klasse für Preset-Sublabels in der UI.
+const PRESET_DETAIL_STYLES = Object.freeze({
+  DEFAULT: 'default',
+  MONO: 'mono',
+});
+
+// Typ eines dynamischen Preset-Felds im Add-Model-Dialog.
+const PRESET_FIELD_TYPES = Object.freeze({
+  SELECT: 'select',
 });
 
 module.exports = {
@@ -50,4 +74,8 @@ module.exports = {
   CHAT_PHASES,
   TOOL_LINE_PHASES,
   CHAT_PROGRESS_TYPES,
+  WORKSPACE_PROGRESS_EVENTS,
+  APP_LOCALES,
+  PRESET_DETAIL_STYLES,
+  PRESET_FIELD_TYPES,
 };

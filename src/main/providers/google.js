@@ -260,6 +260,9 @@ module.exports = {
   fields: { apiKey: true },
   defaultModel: 'gemini-2.0-flash',
   apiBase: API_BASE,
+  presentation: {
+    apiKeyPlaceholder: 'AIza…',
+  },
   listModels,
   streamChatRound,
   translateMessagesToGoogle,
