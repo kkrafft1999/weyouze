@@ -5,6 +5,11 @@ import {
   normalizeLoadedMessages,
 } from '../chat/messageUtils.js';
 import { summarizeToolEvent } from '../chat/toolCallSummary.js';
+// Token-Usage-Normalisierung/-Summierung aus der gemeinsamen Contract-Schicht,
+// damit Anzeige (Renderer) und Provider-Seite (Main) nicht auseinanderlaufen.
+import contracts from '../generated/contracts.js';
+
+const { coerceUsage, mergeUsage } = contracts;
 
 function toolLineText(entry) {
   if (typeof entry === 'string') return entry;
@@ -94,30 +99,6 @@ const CHAT_STOP_ICON_HTML =
 
 const tokenCountFormatter = new Intl.NumberFormat('de-DE');
 
-function mergeChatTokenUsage(target, usage) {
-  if (!usage || typeof usage !== 'object') return;
-  const prompt = Number(usage.prompt) || 0;
-  const completion = Number(usage.completion) || 0;
-  const total = Number(usage.total) || prompt + completion;
-  if (prompt === 0 && completion === 0 && total === 0) return;
-  target.prompt += prompt;
-  target.completion += completion;
-  target.total += total;
-}
-
-function normalizeChatTokenUsage(raw) {
-  if (!raw || typeof raw !== 'object') {
-    return { prompt: 0, completion: 0, total: 0 };
-  }
-  const prompt = Math.max(0, Math.round(Number(raw.prompt) || 0));
-  const completion = Math.max(0, Math.round(Number(raw.completion) || 0));
-  let total = Math.max(0, Math.round(Number(raw.total) || 0));
-  if (total === 0 && (prompt > 0 || completion > 0)) {
-    total = prompt + completion;
-  }
-  return { prompt, completion, total };
-}
-
 function formatChatTokenUsage(total) {
   const n = Math.max(0, Math.round(Number(total) || 0));
   if (n < 1000) {
@@ -167,7 +148,7 @@ export function initChatStream({
   }
 
   function setChatTokenUsage(usage) {
-    appStore.chatTokenUsage = normalizeChatTokenUsage(usage);
+    appStore.chatTokenUsage = coerceUsage(usage);
     syncChatTokenUsageDisplay();
   }
 
@@ -183,7 +164,7 @@ export function initChatStream({
 
   function applyUsageFromResult(result) {
     if (!result?.usage) return;
-    mergeChatTokenUsage(appStore.chatTokenUsage, result.usage);
+    appStore.chatTokenUsage = mergeUsage(appStore.chatTokenUsage, result.usage);
     syncChatTokenUsageDisplay();
   }
   function syncChatSendButton() {
