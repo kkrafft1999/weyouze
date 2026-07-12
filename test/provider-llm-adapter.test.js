@@ -54,15 +54,21 @@ function makeProviders(overrides = {}) {
   };
 }
 
-function makeStorage(overrides = {}) {
-  let configCall = 0;
-  const storage = {
+function makeLlmConfigStore(overrides = {}) {
+  return {
     readLLMConfig: async () => ({}),
     resolveChatModelTarget: () => ({
       providerId: 'test',
       model: 'test-model',
       reasoningEffort: null,
     }),
+    ...overrides,
+  };
+}
+
+function makeProviderSecrets(overrides = {}) {
+  let configCall = 0;
+  const secrets = {
     getEffectiveProviderConfig: async () => {
       configCall += 1;
       return { apiKey: 'sk-test', model: 'stored-model', baseUrl: 'http://stored' };
@@ -72,16 +78,25 @@ function makeStorage(overrides = {}) {
     },
     ...overrides,
   };
-  return storage;
+  return secrets;
+}
+
+function makeAdapterDeps(overrides = {}) {
+  const llmOverrides = overrides.llmConfigStore || {};
+  const secretsOverrides = overrides.providerSecrets || {};
+  return {
+    providerRuntime: overrides.providerRuntime || makeProviders(),
+    llmConfigStore: makeLlmConfigStore(llmOverrides),
+    providerSecrets: makeProviderSecrets(secretsOverrides),
+  };
 }
 
 test('adapter resolves unknown provider as INVALID chat error', async () => {
-  const llm = createProviderLlmAdapter({
-    providers: makeProviders(),
-    storage: makeStorage({
+  const llm = createProviderLlmAdapter(makeAdapterDeps({
+    llmConfigStore: {
       resolveChatModelTarget: () => ({ providerId: 'ghost', model: 'x' }),
-    }),
-  });
+    },
+  }));
 
   const result = await llm.resolveChatTarget();
   assert.equal(result.code, 'INVALID');
@@ -106,9 +121,9 @@ test('adapter merges only declared preset option keys into provider config', asy
     };
   };
 
-  const llm = createProviderLlmAdapter({
-    providers,
-    storage: makeStorage({
+  const llm = createProviderLlmAdapter(makeAdapterDeps({
+    providerRuntime: providers,
+    llmConfigStore: {
       resolveChatModelTarget: () => ({
         providerId: 'openai',
         model: 'gpt-4o',
@@ -118,9 +133,11 @@ test('adapter merges only declared preset option keys into provider config', asy
         },
         reasoningEffort: 'high',
       }),
+    },
+    providerSecrets: {
       getEffectiveProviderConfig: async () => ({ apiKey: 'sk-test', model: 'gpt-4o' }),
-    }),
-  });
+    },
+  }));
 
   const target = await llm.resolveChatTarget();
   assert.deepEqual(target.providerOptions, { reasoningEffort: 'high' });
@@ -140,12 +157,7 @@ test('adapter merges only declared preset option keys into provider config', asy
 
 test('adapter prepareSendBundle snapshots config and model for multi-round reuse', async () => {
   let configCalls = 0;
-  const storage = makeStorage({
-    resolveChatModelTarget: () => ({
-      providerId: 'openai',
-      model: 'preset-model',
-      providerOptions: { reasoningEffort: 'medium' },
-    }),
+  const providerSecrets = makeProviderSecrets({
     getEffectiveProviderConfig: async () => {
       configCalls += 1;
       return {
@@ -181,7 +193,17 @@ test('adapter prepareSendBundle snapshots config and model for multi-round reuse
     },
   });
 
-  const llm = createProviderLlmAdapter({ providers, storage });
+  const llm = createProviderLlmAdapter(makeAdapterDeps({
+    providerRuntime: providers,
+    llmConfigStore: {
+      resolveChatModelTarget: () => ({
+        providerId: 'openai',
+        model: 'preset-model',
+        providerOptions: { reasoningEffort: 'medium' },
+      }),
+    },
+    providerSecrets,
+  }));
   const target = await llm.resolveChatTarget();
   const bundle = await llm.prepareSendBundle(target);
 
@@ -222,16 +244,18 @@ test('adapter falls back to stored model and base URL when target omits them', a
       },
     };
   };
-  const llm = createProviderLlmAdapter({
-    providers,
-    storage: makeStorage({
+  const llm = createProviderLlmAdapter(makeAdapterDeps({
+    providerRuntime: providers,
+    llmConfigStore: {
       resolveChatModelTarget: () => ({ providerId: 'ollama', model: '' }),
+    },
+    providerSecrets: {
       getEffectiveProviderConfig: async () => ({
         baseUrl: 'http://127.0.0.1:11434',
         model: 'stored-ollama-model',
       }),
-    }),
-  });
+    },
+  }));
 
   const target = await llm.resolveChatTarget();
   const bundle = await llm.prepareSendBundle(target);
@@ -248,29 +272,29 @@ test('adapter falls back to stored model and base URL when target omits them', a
 });
 
 test('adapter resolves legacy reasoningEffort wire field via declared preset keys', async () => {
-  const llm = createProviderLlmAdapter({
-    providers: makeProviders(),
-    storage: makeStorage({
+  const llm = createProviderLlmAdapter(makeAdapterDeps({
+    llmConfigStore: {
       resolveChatModelTarget: () => ({
         providerId: 'openai',
         model: 'gpt-4o',
         reasoningEffort: 'low',
       }),
-    }),
-  });
+    },
+  }));
 
   const target = await llm.resolveChatTarget();
   assert.deepEqual(target.providerOptions, { reasoningEffort: 'low' });
 });
 
 test('adapter validateTarget returns NO_API_KEY with send-specific suffix', async () => {
-  const llm = createProviderLlmAdapter({
-    providers: makeProviders(),
-    storage: makeStorage({
+  const llm = createProviderLlmAdapter(makeAdapterDeps({
+    providerSecrets: {
       getEffectiveProviderConfig: async () => ({}),
+    },
+    llmConfigStore: {
       resolveChatModelTarget: () => ({ providerId: 'openai', model: 'gpt-4o' }),
-    }),
-  });
+    },
+  }));
 
   const target = await llm.resolveChatTarget();
   const sendErr = await llm.validateTarget(target, { forSend: true });

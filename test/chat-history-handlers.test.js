@@ -4,6 +4,8 @@ const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
 const { createStorageService } = require('../src/main/services/storage-service');
+const { createChatHistoryStorePort } = require('../src/main/adapters/persistence-store-adapters');
+const { createMockProviderCatalog } = require('./helpers/provider-ports');
 const { registerChatHistoryHandlers } = require('../src/main/ipc/chat-history-handlers');
 const { REQUEST_CHANNELS: REQ } = require('../src/shared/ipc-channels');
 const { createMockIpcMain } = require('./helpers/mock-ipc');
@@ -22,13 +24,14 @@ async function setup(t, { maxChatSessions = 3 } = {}) {
     safeStorage: { isEncryptionAvailable: () => false },
     fs,
     path,
-    providers: mockProviders,
+    providerCatalog: createMockProviderCatalog((id) => mockProviders.getProvider(id)),
     maxChatSessions,
     maxFolderHistory: 5,
     defaultProviderId: 'openai',
   });
+  const chatHistoryStore = createChatHistoryStorePort(storage);
   const ipcMain = createMockIpcMain();
-  registerChatHistoryHandlers({ ipcMain, storage, REQ });
+  registerChatHistoryHandlers({ ipcMain, chatHistoryStore, REQ });
   return { ipcMain, storage, tmpDir };
 }
 

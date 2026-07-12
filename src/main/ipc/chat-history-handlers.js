@@ -1,25 +1,25 @@
-function registerChatHistoryHandlers({ ipcMain, storage, REQ }) {
+function registerChatHistoryHandlers({ ipcMain, chatHistoryStore, REQ }) {
   ipcMain.handle(REQ.CHAT_HISTORY_GET, async (_event, workspaceRoot) => {
-    const store = await storage.readChatHistoryStore();
-    const wsRoot = storage.normalizeWorkspaceRoot(workspaceRoot);
+    const store = await chatHistoryStore.readChatHistoryStore();
+    const wsRoot = chatHistoryStore.normalizeWorkspaceRoot(workspaceRoot);
     const sessions = store.sessions
-      .filter((s) => storage.sessionMatchesWorkspace(s, wsRoot))
-      .map((s) => storage.normalizeSessionForLoad(s))
+      .filter((s) => chatHistoryStore.sessionMatchesWorkspace(s, wsRoot))
+      .map((s) => chatHistoryStore.normalizeSessionForLoad(s))
       .filter(Boolean);
-    const activeChatId = store.activeByWorkspace[storage.workspaceBucketKey(wsRoot)] || null;
+    const activeChatId = store.activeByWorkspace[chatHistoryStore.workspaceBucketKey(wsRoot)] || null;
     return { sessions, activeChatId, workspaceRoot: wsRoot };
   });
 
   ipcMain.handle(REQ.CHAT_HISTORY_UPSERT, async (_event, sessionRow) =>
-    storage.withChatHistoryLock(async () => {
-      const store = await storage.readChatHistoryStore({ skipMigration: true });
+    chatHistoryStore.withChatHistoryLock(async () => {
+      const store = await chatHistoryStore.readChatHistoryStore({ skipMigration: true });
       const existing =
         sessionRow && typeof sessionRow.id === 'string'
           ? store.sessions.find((x) => x.id === sessionRow.id.trim())
           : null;
       const titleProvided =
         typeof sessionRow?.title === 'string' && sessionRow.title.trim().length > 0;
-      const normalized = storage.normalizeSessionForStore(sessionRow, {
+      const normalized = chatHistoryStore.normalizeSessionForStore(sessionRow, {
         existingTitle: titleProvided ? undefined : existing?.title,
         requireMessages: true,
       });
@@ -28,40 +28,42 @@ function registerChatHistoryHandlers({ ipcMain, storage, REQ }) {
       if (idx >= 0) store.sessions[idx] = normalized;
       else store.sessions.push(normalized);
       store.sessions.sort((a, b) => b.updatedAt - a.updatedAt);
-      if (store.sessions.length > storage.MAX_CHAT_SESSIONS) {
-        const dropped = store.sessions.slice(storage.MAX_CHAT_SESSIONS);
-        store.sessions = store.sessions.slice(0, storage.MAX_CHAT_SESSIONS);
+      if (store.sessions.length > chatHistoryStore.MAX_CHAT_SESSIONS) {
+        const dropped = store.sessions.slice(chatHistoryStore.MAX_CHAT_SESSIONS);
+        store.sessions = store.sessions.slice(0, chatHistoryStore.MAX_CHAT_SESSIONS);
         const droppedIds = new Set(dropped.map((s) => s.id));
         for (const [k, v] of Object.entries(store.activeByWorkspace)) {
           if (droppedIds.has(v)) delete store.activeByWorkspace[k];
         }
       }
-      await storage.writeChatHistoryStore(store);
+      await chatHistoryStore.writeChatHistoryStore(store);
       return { ok: true };
     }));
 
   ipcMain.handle(REQ.CHAT_HISTORY_DELETE, async (_event, id) =>
-    storage.withChatHistoryLock(async () => {
+    chatHistoryStore.withChatHistoryLock(async () => {
       if (typeof id !== 'string' || !id.trim()) return { ok: false };
-      const store = await storage.readChatHistoryStore({ skipMigration: true });
+      const store = await chatHistoryStore.readChatHistoryStore({ skipMigration: true });
       store.sessions = store.sessions.filter((s) => s.id !== id);
       for (const [k, v] of Object.entries(store.activeByWorkspace)) {
         if (v === id) delete store.activeByWorkspace[k];
       }
-      await storage.writeChatHistoryStore(store);
+      await chatHistoryStore.writeChatHistoryStore(store);
       return { ok: true };
     }));
 
   ipcMain.handle(REQ.CHAT_HISTORY_SET_ACTIVE, async (_event, workspaceRoot, id) =>
-    storage.withChatHistoryLock(async () => {
-      const store = await storage.readChatHistoryStore({ skipMigration: true });
-      const wsKey = storage.workspaceBucketKey(storage.normalizeWorkspaceRoot(workspaceRoot));
+    chatHistoryStore.withChatHistoryLock(async () => {
+      const store = await chatHistoryStore.readChatHistoryStore({ skipMigration: true });
+      const wsKey = chatHistoryStore.workspaceBucketKey(
+        chatHistoryStore.normalizeWorkspaceRoot(workspaceRoot)
+      );
       if (id === null || id === undefined || id === '') {
         delete store.activeByWorkspace[wsKey];
       } else if (typeof id === 'string') {
         store.activeByWorkspace[wsKey] = id;
       }
-      await storage.writeChatHistoryStore(store);
+      await chatHistoryStore.writeChatHistoryStore(store);
       return { ok: true };
     }));
 }

@@ -61,13 +61,34 @@ function makeScriptedProvider(results, { fields = {}, defaultModel = 'test-model
   };
 }
 
-function makeStorage(overrides = {}) {
+function makeUiPrefsStore(overrides = {}) {
+  return {
+    readUIPrefs: async () => ({}),
+    ...overrides,
+  };
+}
+
+function makeLlmConfigStore(overrides = {}) {
   return {
     readLLMConfig: async () => ({}),
     resolveChatModelTarget: () => ({ providerId: 'test' }),
-    getEffectiveProviderConfig: async () => ({ apiKey: 'sk-test' }),
-    readUIPrefs: async () => ({}),
     ...overrides,
+  };
+}
+
+function makeProviderSecrets(overrides = {}) {
+  return {
+    getEffectiveProviderConfig: async () => ({ apiKey: 'sk-test' }),
+    ...overrides,
+  };
+}
+
+function makeStorage(overrides = {}) {
+  const { readUIPrefs, ...rest } = overrides;
+  return {
+    ...makeLlmConfigStore(rest),
+    ...makeProviderSecrets(rest),
+    readUIPrefs: readUIPrefs || (async () => ({})),
   };
 }
 
@@ -114,12 +135,16 @@ function buildTestChatEngine({
   storage = makeStorage(),
   toolRegistry = makeToolRegistryStub(),
   maxToolRounds = 5,
-  providers,
+  providerRuntime,
 } = {}) {
-  const providerRegistry = providers || { getProvider: () => provider };
+  const runtime = providerRuntime || { getProvider: () => provider };
+  const llmConfigStore = makeLlmConfigStore(storage);
+  const providerSecrets = makeProviderSecrets(storage);
   const { engine } = createChatApplication({
-    storage,
-    providers: providerRegistry,
+    llmConfigStore,
+    providerRuntime: runtime,
+    providerSecrets,
+    uiPrefsStore: makeUiPrefsStore({ readUIPrefs: storage.readUIPrefs || (async () => ({})) }),
     toolRegistry,
     path,
     maxToolRounds,
@@ -132,7 +157,7 @@ function setupChatHandlers({
   storage = makeStorage(),
   toolRegistry = makeToolRegistryStub(),
   maxToolRounds = 5,
-  providers,
+  providerRuntime,
 } = {}) {
   const ipcMain = makeIpcMain();
   const chatEngine = buildTestChatEngine({
@@ -140,7 +165,7 @@ function setupChatHandlers({
     storage,
     toolRegistry,
     maxToolRounds,
-    providers,
+    providerRuntime,
   });
   registerChatHandlers({
     ipcMain,
@@ -174,7 +199,7 @@ test('CHAT_SEND reports an unknown provider without calling streamChatRound', as
     provider,
     storage,
     toolRegistry: makeToolRegistryStub(),
-    providers: { getProvider: () => null },
+    providerRuntime: { getProvider: () => null },
   });
   registerChatHandlers({
     ipcMain,

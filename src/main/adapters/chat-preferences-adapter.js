@@ -1,9 +1,9 @@
 'use strict';
 
-function createChatPreferencesAdapter({ storage }) {
+function createChatPreferencesAdapter({ uiPrefsStore }) {
   return {
     async read() {
-      const prefs = await storage.readUIPrefs();
+      const prefs = await uiPrefsStore.readUIPrefs();
       const out = {
         baseSystemPrompt: typeof prefs.baseSystemPrompt === 'string' ? prefs.baseSystemPrompt : '',
         allowWorkspaceWrite: prefs.allowWorkspaceWrite === true,

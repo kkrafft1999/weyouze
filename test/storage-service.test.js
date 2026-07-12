@@ -4,11 +4,14 @@ const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
 const { createStorageService } = require('../src/main/services/storage-service');
+const { createMockProviderCatalog } = require('./helpers/provider-ports');
 
 const mockProviders = {
   getProvider(id) {
     if (id === 'openai') {
       return {
+        id: 'openai',
+        name: 'OpenAI',
         defaultModel: 'gpt-4o',
         fields: { apiKey: true },
         presentation: {
@@ -20,7 +23,13 @@ const mockProviders = {
       };
     }
     if (id === 'anthropic') {
-      return { defaultModel: 'claude-test', fields: { apiKey: true }, presentation: {} };
+      return {
+        id: 'anthropic',
+        name: 'Anthropic',
+        defaultModel: 'claude-test',
+        fields: { apiKey: true },
+        presentation: {},
+      };
     }
     return null;
   },
@@ -32,7 +41,7 @@ function makeStorage(tmpDir) {
     safeStorage: { isEncryptionAvailable: () => false },
     fs,
     path,
-    providers: mockProviders,
+    providerCatalog: createMockProviderCatalog((id) => mockProviders.getProvider(id)),
     maxChatSessions: 3,
     maxFolderHistory: 5,
     defaultProviderId: 'openai',
@@ -59,7 +68,7 @@ function makeStorageWithEncryption(tmpDir) {
     safeStorage: makeEncryptedSafeStorage(),
     fs,
     path,
-    providers: mockProviders,
+    providerCatalog: createMockProviderCatalog((id) => mockProviders.getProvider(id)),
     maxChatSessions: 3,
     maxFolderHistory: 5,
     defaultProviderId: 'openai',

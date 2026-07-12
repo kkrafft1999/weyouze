@@ -10,6 +10,9 @@ Status einzelner Issues lässt sich im zugehörigen
 [GitHub Project](https://github.com/kkrafft1999/weyouze/projects) als
 Kanban-Board verfolgen (Spalten: *Backlog* → *To do* → *In Progress* → *Done*).
 
+Die **Schichtenarchitektur** (Ports, Adapter, Composition Root) ist in
+[`docs/architecture.md`](./architecture.md) beschrieben.
+
 Solange eine Aufgabe noch nicht als Issue angelegt ist (z. B. weil gerade
 kein Schreibzugriff auf GitHub besteht), wird sie zwischenzeitlich in
 [`docs/task.md`](./task.md) gesammelt und beim Anlegen des Issues dort
@@ -32,30 +35,30 @@ wieder entfernt.
 - 🔔 Update-Notifier (Stufe 1) über GitHub Releases
 - 🖥️ Builds für macOS (Apple Silicon) und Windows über Electron Forge
 - 📜 Gemeinsame **Contract-Schicht** (`src/shared/contracts/`): versionierte
-  DTOs/Events, Enums und Validatoren für Chat, Streaming, Tools und Token-Usage
-  — Single Source of Truth für Main (require) und Renderer (generiertes
-  ESM-Bundle); beseitigt die doppelte Usage-/`debug_wait`-Logik (Etappe 1)
+  DTOs/Events, Enums und Validatoren für Chat, Streaming, Tools, Token-Usage
+  und Einstellungen — Single Source of Truth für Main (require) und Renderer
+  (generiertes ESM-Bundle)
+- 🏗️ **Saubere, frontend-unabhängige Anwendungsarchitektur** (fünf Etappen):
+  1. **Stabile Verträge:** `src/shared/contracts/` inkl. Settings-DTOs
+     (`settings.js`) und RAW-Log-View-Modelle (`raw-log.js`)
+  2. **Anwendungs-Core:** Chat-Orchestrierung in `src/application/chat/`
+     (`chat-engine.js`, `chat-history-trim.js`); dünne Re-Exports unter
+     `src/main/chat-engine.js` für bestehende Importe
+  3. **Provider und Tools über Ports:** Anwendungs-Ports unter
+     `src/application/ports/`; Adapter in `src/main/adapters/` (LLM, Tools,
+     Preferences, Workspace-Pfade, RAW-Aufzeichnung)
+  4. **Infrastruktur abgrenzen:** Infrastruktur-Ports unter `src/main/ports/`;
+     austauschbare Adapter für Storage, Dateisystem, Speech, Updates und
+     Provider-Katalog; Verdrahtung in `src/main/composition/`
+  5. **Frontend als Präsentationsschicht:** Renderer erhält normalisierte
+     Settings-, Tool-, RAW-Log- und Verlaufs-Daten; provider-/tool-spezifische
+     Semantik liegt in Main (`settings-presentation-service`,
+     `raw-log-presentation-service`, `chat-history-normalization`) und
+     `src/shared/presentation/` — der Renderer behält nur DOM- und
+     lokale Formatierung (z. B. Markdown, Zeitstempel)
 
 ## 🚧 Jetzt / als Nächstes
 
-- 🏗️ **Saubere, frontend-unabhängige Anwendungsarchitektur** als Grundlage
-  für Provider, Tools, Skills und weitere funktionale Module:
-  1. ✅ **Stabile Verträge definieren:** versionierte DTOs und Events für Chat,
-     Streaming, Tools und Token-Usage liegen als gemeinsame Contract-Schicht
-     (`src/shared/contracts/`) vor; Main und Renderer sind daran gebunden.
-     Offen: DTOs für die Einstellungen (Provider-/Preset-/UI-Prefs) ergänzen.
-  2. ✅ **Anwendungs-Core extrahieren:** Chat-Orchestrierung, Tool-Schleife und
-     Workspace-Kontext liegen in `src/main/chat-engine.js` und sind ohne
-     UI-/Electron-Abhängigkeit testbar; `chat-handlers.js` ist ein dünner
-     IPC-Adapter.
-  3. **Provider und Tools über Ports anbinden:** Registries und Adapter hinter
-     klaren Schnittstellen kapseln; provider- und tool-spezifisches Wissen aus
-     dem Frontend entfernen
-  4. **Infrastruktur abgrenzen:** Dateisystem, Storage, Netzwerk, Whisper und
-     Updates als austauschbare Adapter des Anwendungs-Cores behandeln
-  5. **Frontend zur reinen Präsentationsschicht machen:** Der Renderer erhält
-     nur normalisierte Anzeige-Daten und löst Aktionen über die Preload-/IPC-
-     Schnittstelle aus
 - 🧩 Erweiterbares **Skill-Konzept** (Konfiguration + dynamisches Laden)
 - 🛠️ Erweiterbares **Tool-Konzept** über das bestehende Workspace-Tool-Set
   hinaus

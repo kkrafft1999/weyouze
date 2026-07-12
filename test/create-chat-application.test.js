@@ -43,11 +43,12 @@ test('createChatApplication wires raw recorder through provider rounds end-to-en
     },
   };
 
-  const storage = {
+  const llmConfigStore = {
     readLLMConfig: async () => ({}),
     resolveChatModelTarget: () => ({ providerId: 'test', model: 'test-model' }),
+  };
+  const providerSecrets = {
     getEffectiveProviderConfig: async () => ({ apiKey: 'sk-test', model: 'test-model' }),
-    readUIPrefs: async () => ({}),
   };
 
   const toolRegistry = {
@@ -57,8 +58,10 @@ test('createChatApplication wires raw recorder through provider rounds end-to-en
   };
 
   const { engine } = createChatApplication({
-    storage,
-    providers: { getProvider: () => provider },
+    llmConfigStore,
+    providerRuntime: { getProvider: () => provider },
+    providerSecrets,
+    uiPrefsStore: { readUIPrefs: async () => ({}) },
     toolRegistry,
     path,
     maxToolRounds: 3,

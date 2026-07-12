@@ -84,19 +84,28 @@ Die meisten Einstellungen (Provider, Modelle, System-Prompt, Sprache) pflegst du
 ```
 .
 ├── src/
-│   ├── main/            Electron Main-Prozess (Fenster, Permissions, Workspace-State)
-│   │   ├── ipc/         IPC-Handler (Chat, Settings, Dateisystem, Chat-History)
-│   │   ├── providers/   Adapter für OpenAI, Anthropic, Google, Ollama, MLX-LM
-│   │   └── services/    Storage (Keys, Prefs, History) & Dateisystem-Zugriff
+│   ├── application/     transport-agnostischer Anwendungs-Core (Chat, Ports)
+│   │   ├── chat/        Chat-Engine, Verlaufstrim
+│   │   └── ports/       LLM-, Tool-, Preferences- und weitere Kern-Ports
+│   ├── main/            Electron Main-Prozess
+│   │   ├── composition/ Composition Root (Verdrahtung aller Adapter)
+│   │   ├── adapters/    Port-Implementierungen (LLM, Tools, Storage, FS, …)
+│   │   ├── ports/       Infrastruktur-Port-Schnittstellen
+│   │   ├── ipc/         dünne IPC-Handler
+│   │   ├── providers/   LLM-Provider-Implementierungen
+│   │   ├── services/    Infrastruktur (Storage, FS, Whisper, Updates, Präsentation)
+│   │   └── tools/       Workspace-Tool-Registry
 │   ├── preload/         sichere Bridge zwischen Main und Renderer (gebundelt)
-│   ├── renderer/        UI (HTML, CSS, JS) – läuft im Browser-Kontext
-│   └── shared/          gemeinsame Definitionen (z. B. IPC-Kanäle)
-├── test/                Tests (node:test)
+│   ├── renderer/        UI (HTML, CSS, JS) — reine Präsentationsschicht
+│   └── shared/          Contracts, IPC-Kanäle, gemeinsame Presentation-Helfer
+├── test/                Tests (node:test), inkl. Architektur-Grenzwächter
 ├── scripts/             Build-Helfer (z. B. Vendor-Sync für den Renderer)
-├── docs/                interne Notizen & UI-Designs
+├── docs/                Roadmap, Architektur (`architecture.md`, SVG-Diagramme)
 ├── icon.icns / icon.ico App-Icons für macOS / Windows
 └── package.json
 ```
+
+Details zur Schichtenarchitektur: [`docs/architecture.md`](./docs/architecture.md).
 
 ## Sicherheitshinweise
 

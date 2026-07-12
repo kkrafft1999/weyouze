@@ -4,6 +4,7 @@ const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
 const { createFsService } = require('../src/main/services/fs-service');
+const { createFilesystemIpcAdapter } = require('../src/main/adapters/filesystem-ipc-adapter');
 const { registerFsHandlers } = require('../src/main/ipc/fs-handlers');
 const { REQUEST_CHANNELS: REQ } = require('../src/shared/ipc-channels');
 const { createMockIpcMain } = require('./helpers/mock-ipc');
@@ -33,12 +34,15 @@ async function setup(t) {
 
   let activeWorkspaceRoot = workspace;
   const fsService = createFsService({ fs, path, maxReadFileBytes: 2 * 1024 * 1024 });
+  const filesystem = createFilesystemIpcAdapter({
+    fsService,
+    getActiveWorkspaceRoot: () => activeWorkspaceRoot,
+  });
   const ipcMain = createMockIpcMain();
   registerFsHandlers({
     ipcMain,
-    fsService,
+    filesystem,
     REQ,
-    getActiveWorkspaceRoot: () => activeWorkspaceRoot,
   });
   return {
     ipcMain,

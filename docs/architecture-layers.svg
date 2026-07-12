@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1320" width="1440" height="1320" role="img" aria-labelledby="title desc" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1540" width="1440" height="1540" role="img" aria-labelledby="title desc" font-family="'Segoe UI', Helvetica, Arial, sans-serif">
   <title id="title">Weyouze Anything — Architektur: Schichten (UI · Anwendungs-Core · Infrastruktur)</title>
-  <desc id="desc">Geschichtetes Architekturdiagramm: reine UI (Renderer) getrennt vom UI-/Electron-/Node-freien Anwendungs-Core (src/application) mit seinen Ports, davon getrennt die Infrastruktur (src/main) mit Composition-Root, primären IPC-Adaptern, sekundären Adaptern, Registries und Services. Verbunden über Preload-Bridge und Shared Contracts.</desc>
+  <desc id="desc">Geschichtetes Architekturdiagramm: reine Präsentation (Renderer) mit normalisierten View-Daten, UI-/Electron-/Node-freier Anwendungs-Core (src/application/chat) mit Anwendungs-Ports, Infrastruktur (src/main) mit Infrastruktur-Ports, Adaptern und Composition-Root. Verbunden über Preload-Bridge und getrennte Shared-Schichten (contracts, presentation, runtime).</desc>
   <defs>
     <marker id="ah" viewBox="0 0 8 6" markerWidth="9" markerHeight="7" refX="7" refY="3" orient="auto-start-reverse">
       <path d="M0,0 L8,3 L0,6 Z" fill="#5a6a78"/>
@@ -31,6 +31,7 @@
       rect.ext{fill:#eef1f4;stroke:#8a97a6;stroke-width:1.3;stroke-dasharray:5 4}
       rect.core{fill:#cfe9df;stroke:#0e7a5b;stroke-width:2.4}
       rect.port{fill:#d7efe6;stroke:#0e7a5b;stroke-width:1.5}
+      rect.iport{fill:#e8edf8;stroke:#5566b5;stroke-width:1.4}
       rect.contract{fill:#fcefd2;stroke:#c68a2e;stroke-width:1.3}
       rect.zone-ui{fill:#f3f8fd;stroke:#b8d4ee;stroke-width:1.5}
       rect.zone-core{fill:#effaf4;stroke:#8fd2b4;stroke-width:1.8}
@@ -44,24 +45,24 @@
     </style>
   </defs>
 
-  <rect x="0" y="0" width="1440" height="1320" fill="#f7f9fb"/>
+  <rect x="0" y="0" width="1440" height="1540" fill="#f7f9fb"/>
 
   <text class="t-title" x="30" y="44">Weyouze Anything — Architekturüberblick</text>
-  <text class="t-sub" x="31" y="70">Reine UI (Renderer) · UI-/Electron-/Node-freier Anwendungs-Core (src/application) mit Ports · Infrastruktur (src/main) · verbunden über Preload-Bridge &amp; Shared Contracts</text>
+  <text class="t-sub" x="31" y="70">Reine Präsentation (Renderer) · Anwendungs-Core (src/application/chat) · Infrastruktur (src/main/ports + Adapter) · getrennte Shared-Schichten (contracts · presentation · runtime)</text>
 
   <g>
-    <rect class="ui"       x="600"  y="32" width="13" height="13" rx="2"/><text class="legend" x="618"  y="43">UI</text>
-    <rect class="core"     x="655"  y="32" width="13" height="13" rx="2"/><text class="legend" x="673"  y="43">Core</text>
-    <rect class="port"     x="720"  y="32" width="13" height="13" rx="2"/><text class="legend" x="738"  y="43">Port</text>
-    <rect class="hand"     x="775"  y="32" width="13" height="13" rx="2"/><text class="legend" x="793"  y="43">Adapter</text>
-    <rect class="contract" x="860"  y="32" width="13" height="13" rx="2"/><text class="legend" x="878"  y="43">Contracts</text>
-    <rect class="svc"      x="965"  y="32" width="13" height="13" rx="2"/><text class="legend" x="983"  y="43">Infra</text>
-    <rect class="ext"      x="1035" y="32" width="13" height="13" rx="2"/><text class="legend" x="1053" y="43">Extern</text>
+    <rect class="ui"       x="870"  y="32" width="13" height="13" rx="2"/><text class="legend" x="888"  y="43">UI</text>
+    <rect class="core"     x="915"  y="32" width="13" height="13" rx="2"/><text class="legend" x="933"  y="43">Core</text>
+    <rect class="port"     x="975"  y="32" width="13" height="13" rx="2"/><text class="legend" x="993"  y="43">App-Port</text>
+    <rect class="iport"    x="1065" y="32" width="13" height="13" rx="2"/><text class="legend" x="1083" y="43">Infra-Port</text>
+    <rect class="hand"     x="1165" y="32" width="13" height="13" rx="2"/><text class="legend" x="1183" y="43">Adapter</text>
+    <rect class="contract" x="1250" y="32" width="13" height="13" rx="2"/><text class="legend" x="1268" y="43">Shared</text>
+    <rect class="ext"      x="1330" y="32" width="13" height="13" rx="2"/><text class="legend" x="1348" y="43">Extern</text>
   </g>
 
   <!-- ============ RENDERER / UI ZONE ============ -->
-  <rect class="zone-ui" x="30" y="96" width="1180" height="196" rx="14"/>
-  <text class="zlabel tt-ui" x="50" y="122">RENDERER-PROZESS — UI / PRÄSENTATIONSSCHICHT · src/renderer</text>
+  <rect class="zone-ui" x="30" y="96" width="1180" height="228" rx="14"/>
+  <text class="zlabel tt-ui" x="50" y="122">RENDERER-PROZESS — REINE PRÄSENTATION · src/renderer</text>
 
   <g>
     <rect class="ui" x="50"   y="146" width="218" height="42" rx="8"/>
@@ -87,199 +88,243 @@
     <rect class="ui" x="978"  y="200" width="218" height="42" rx="8"/>
     <text class="chip tt-ui" x="1087" y="218">WhisperRecorder</text><text class="chipsub" x="1087" y="233">Spracheingabe</text>
   </g>
-  <text class="note" x="50" y="270">Reine Präsentationsschicht: kennt nur <tspan font-style="italic">window.electronAPI</tspan> + Contracts — kein Provider-, Tool-, Electron- oder Node-Wissen. Weitere: ThemeManager, SidebarResizer, messageUtils, helpers.</text>
+
+  <rect x="50" y="252" width="1148" height="58" rx="8" fill="#f8fbff" stroke="#2f6db3" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="62" y="272" font-size="11" font-weight="700" fill="#1c4b82">Normalisierte View-Daten vom Main (kein Provider-Wire, keine Tool-Namen-Logik, kein Cross-Round-Parsing)</text>
+  <text x="62" y="290" font-size="10.5" fill="#475569">Settings-Formular · Tool-Zeilen (entry.line) · RAW-Log-View-Model · Chat-Verlauf (Titel, Usage, Sanitisierung)</text>
+  <text x="62" y="306" font-size="10.5" fill="#475569">Legitim im Renderer: DOM/Markdown (marked+DOMPurify) · lokale Zeit/a11y · Anzeige vorgefertigter DTO-Felder — nur window.electronAPI + Contracts</text>
 
   <!-- ============ PRELOAD BRIDGE ============ -->
-  <rect class="preload" x="30" y="304" width="1180" height="56" rx="10"/>
-  <text x="620" y="329" text-anchor="middle" font-size="15" font-weight="700" fill="#1e2b3d">PRELOAD-BRIDGE — contextBridge: window.electronAPI · src/preload</text>
-  <text x="620" y="348" text-anchor="middle" font-size="12" fill="#475569">einzige Brücke UI ⇄ Main · invoke (Request/Response) &amp; push (Events) über shared/ipc-channels.js</text>
+  <rect class="preload" x="30" y="336" width="1180" height="56" rx="10"/>
+  <text x="620" y="361" text-anchor="middle" font-size="15" font-weight="700" fill="#1e2b3d">PRELOAD-BRIDGE — contextBridge: window.electronAPI · src/preload</text>
+  <text x="620" y="380" text-anchor="middle" font-size="12" fill="#475569">einzige Brücke UI ⇄ Main · invoke (Request/Response) &amp; push (Events) über shared/ipc-channels.js</text>
 
-  <line class="flow" x1="380" y1="292" x2="380" y2="303" marker-end="url(#ah)" marker-start="url(#ah)"/>
-  <line class="flow" x1="860" y1="292" x2="860" y2="303" marker-end="url(#ah)" marker-start="url(#ah)"/>
+  <line class="flow" x1="380" y1="324" x2="380" y2="335" marker-end="url(#ah)" marker-start="url(#ah)"/>
+  <line class="flow" x1="860" y1="324" x2="860" y2="335" marker-end="url(#ah)" marker-start="url(#ah)"/>
 
   <!-- ============ MAIN / INFRASTRUCTURE ZONE ============ -->
-  <rect class="zone-main" x="30" y="380" width="1180" height="808" rx="14"/>
-  <text class="zlabel tt-hand" x="50" y="405">MAIN-PROZESS — INFRASTRUKTUR · src/main (Node/Electron)</text>
+  <rect class="zone-main" x="30" y="412" width="1180" height="968" rx="14"/>
+  <text class="zlabel tt-hand" x="50" y="437">MAIN-PROZESS — INFRASTRUKTUR · src/main (Node/Electron)</text>
 
-  <line class="flow" x1="380" y1="360" x2="380" y2="415" marker-end="url(#ah)" marker-start="url(#ah)"/>
-  <line class="flow" x1="860" y1="360" x2="860" y2="415" marker-end="url(#ah)" marker-start="url(#ah)"/>
-  <text class="arrlbl" x="620" y="374">IPC-Kanäle · DTOs / Events</text>
+  <line class="flow" x1="380" y1="392" x2="380" y2="447" marker-end="url(#ah)" marker-start="url(#ah)"/>
+  <line class="flow" x1="860" y1="392" x2="860" y2="447" marker-end="url(#ah)" marker-start="url(#ah)"/>
+  <text class="arrlbl" x="620" y="406">IPC-Kanäle · DTOs / Events</text>
+
+  <!-- Bootstrap -->
+  <rect class="subbox" x="46" y="448" width="1148" height="34" rx="8"/>
+  <text x="620" y="470" text-anchor="middle" font-size="11.5" font-weight="700" fill="#47535f">Electron-Lifecycle / Bootstrap · src/main/index.js → createApplication() (keine verstreute Verdrahtung in Handlern)</text>
 
   <!-- Primary adapters: IPC handlers -->
-  <rect class="subbox" x="46" y="418" width="1148" height="96" rx="10"/>
-  <text class="bsub" x="58" y="438" font-weight="700" fill="#1f6b47">Primäre (treibende) Adapter — IPC-Handler · src/main/ipc</text>
+  <rect class="subbox" x="46" y="490" width="1148" height="96" rx="10"/>
+  <text class="bsub" x="58" y="510" font-weight="700" fill="#1f6b47">Primäre (treibende) Adapter — dünne IPC-Handler · src/main/ipc</text>
   <g>
-    <rect class="hand" x="58"  y="450" width="148" height="34" rx="7"/><text class="chip tt-hand" x="132"  y="472">chat</text>
-    <rect class="hand" x="217" y="450" width="148" height="34" rx="7"/><text class="chip tt-hand" x="291"  y="472">chat-history</text>
-    <rect class="hand" x="376" y="450" width="148" height="34" rx="7"/><text class="chip tt-hand" x="450"  y="472">fs</text>
-    <rect class="hand" x="535" y="450" width="148" height="34" rx="7"/><text class="chip tt-hand" x="609"  y="472">dialog</text>
-    <rect class="hand" x="694" y="450" width="148" height="34" rx="7"/><text class="chip tt-hand" x="768"  y="472">settings</text>
-    <rect class="hand" x="853" y="450" width="148" height="34" rx="7"/><text class="chip tt-hand" x="927"  y="472">whisper</text>
-    <rect class="hand" x="1012" y="450" width="148" height="34" rx="7"/><text class="chip tt-hand" x="1086" y="472">update</text>
+    <rect class="hand" x="58"  y="522" width="148" height="34" rx="7"/><text class="chip tt-hand" x="132"  y="544">chat</text>
+    <rect class="hand" x="217" y="522" width="148" height="34" rx="7"/><text class="chip tt-hand" x="291"  y="544">chat-history</text>
+    <rect class="hand" x="376" y="522" width="148" height="34" rx="7"/><text class="chip tt-hand" x="450"  y="544">fs</text>
+    <rect class="hand" x="535" y="522" width="148" height="34" rx="7"/><text class="chip tt-hand" x="609"  y="544">dialog</text>
+    <rect class="hand" x="694" y="522" width="148" height="34" rx="7"/><text class="chip tt-hand" x="768"  y="544">settings</text>
+    <rect class="hand" x="853" y="522" width="148" height="34" rx="7"/><text class="chip tt-hand" x="927"  y="544">whisper</text>
+    <rect class="hand" x="1012" y="522" width="148" height="34" rx="7"/><text class="chip tt-hand" x="1086" y="544">update</text>
   </g>
-  <text class="note" x="58" y="504">Nur „chat" treibt den Anwendungs-Core (chat:send/explain/abort); die übrigen Handler rufen direkt ihre Services auf.</text>
+  <text class="note" x="58" y="576">Nur „chat" treibt den Anwendungs-Core (chat:send/explain/abort); die übrigen Handler delegieren an injizierte Ports/Services.</text>
 
-  <!-- Composition root -->
-  <rect class="comp" x="46" y="526" width="1148" height="40" rx="10"/>
-  <text x="620" y="551" text-anchor="middle" font-size="12" font-weight="700" fill="#8a5a12">Composition-Root · src/main/composition/create-chat-application.js — verdrahtet Ports ↔ Adapter und baut die Chat-Engine</text>
+  <!-- Composition roots -->
+  <rect class="comp" x="46" y="598" width="560" height="52" rx="10"/>
+  <text x="326" y="620" text-anchor="middle" font-size="12" font-weight="700" fill="#8a5a12">Composition-Root · create-application.js</text>
+  <text x="326" y="638" text-anchor="middle" font-size="10.5" fill="#8a5a12">Services, Infrastruktur-Ports, Adapter, IPC-Registrierung</text>
 
-  <line class="flow" x1="132" y1="484" x2="132" y2="525" marker-end="url(#ah)"/>
-  <text class="arrlbl" x="185" y="512">chat:send</text>
+  <rect class="comp" x="618" y="598" width="576" height="52" rx="10"/>
+  <text x="906" y="620" text-anchor="middle" font-size="12" font-weight="700" fill="#8a5a12">Chat-Core-Assembly · create-chat-application.js</text>
+  <text x="906" y="638" text-anchor="middle" font-size="10.5" fill="#8a5a12">verdrahtet Anwendungs-Ports ↔ Core-Adapter → createChatEngine()</text>
 
-  <!-- ============ APPLICATION CORE ZONE (nested, highlighted) ============ -->
-  <rect class="zone-core" x="46" y="578" width="1148" height="236" rx="12"/>
-  <text class="zlabel tt-core" x="62" y="602">ANWENDUNGS-CORE — src/application · UI-/Electron-/Node-frei (per Test erzwungen)</text>
+  <line class="flow" x1="132" y1="556" x2="132" y2="597" marker-end="url(#ah)"/>
+  <text class="arrlbl" x="185" y="584">chat:send</text>
 
-  <!-- core modules -->
-  <rect class="core" x="62" y="616" width="470" height="182" rx="12"/>
-  <text x="297" y="642" text-anchor="middle" font-size="15" font-weight="700" class="tt-core">Chat-Orchestrierung &amp; Tool-Loop</text>
-  <text class="note" x="78" y="668" fill="#204b3d">• chat-engine.js — Runden-/Tool-Schleife, System-Prompt,</text>
-  <text class="note" x="90" y="684" fill="#204b3d">Usage-Aggregation, RAW-Protokoll, Abbruch</text>
-  <text class="note" x="78" y="704" fill="#204b3d">• chat-history-trim.js — Kontextfenster (Trim)</text>
-  <text class="note" x="78" y="724" fill="#204b3d">• API: send() · explain() · abort()</text>
-  <rect x="78" y="738" width="438" height="46" rx="8" fill="#eaf7f0" stroke="#0e7a5b" stroke-width="1" stroke-dasharray="4 3"/>
-  <text x="90" y="757" font-size="10.5" fill="#356b58">Hängt nur von src/application/ports und src/shared ab —</text>
-  <text x="90" y="773" font-size="10.5" fill="#356b58">niemals von Adaptern, Providern, Electron oder dem Dateisystem.</text>
+  <!-- ============ APPLICATION CORE ZONE ============ -->
+  <rect class="zone-core" x="46" y="662" width="1148" height="220" rx="12"/>
+  <text class="zlabel tt-core" x="62" y="686">ANWENDUNGS-CORE — src/application/chat · UI-/Electron-/Node-frei (application-layer-imports.test.js)</text>
 
-  <!-- ports panel -->
-  <text class="bsub" x="556" y="638" font-weight="700" fill="#0b5b44">PORTS — src/application/ports (Interfaces = Verträge des Cores)</text>
+  <rect class="core" x="62" y="700" width="430" height="168" rx="12"/>
+  <text x="277" y="726" text-anchor="middle" font-size="15" font-weight="700" class="tt-core">Chat-Orchestrierung &amp; Tool-Loop</text>
+  <text class="note" x="78" y="752" fill="#204b3d">• chat-engine.js — Runden-/Tool-Schleife, System-Prompt,</text>
+  <text class="note" x="90" y="768" fill="#204b3d">Usage-Aggregation, RAW-Protokoll, Abbruch</text>
+  <text class="note" x="78" y="788" fill="#204b3d">• chat-history-trim.js — Kontextfenster (Trim)</text>
+  <text class="note" x="78" y="808" fill="#204b3d">• API: send() · explain() · abort()</text>
+  <rect x="78" y="822" width="398" height="42" rx="8" fill="#eaf7f0" stroke="#0e7a5b" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="90" y="840" font-size="10.5" fill="#356b58">Nur src/application/*, shared/contracts und shared/runtime.</text>
+  <text x="90" y="856" font-size="10.5" fill="#356b58">Keine Adapter-, Provider-, Electron- oder Node-Imports.</text>
+
+  <text class="bsub" x="510" y="722" font-weight="700" fill="#0b5b44">ANWENDUNGS-PORTS — src/application/ports (≠ Contracts)</text>
   <g>
-    <rect class="port" x="556" y="650" width="122" height="46" rx="7"/>
-    <text class="chip tt-core" x="617" y="670">LlmPort</text><text class="chipsub" x="617" y="685">Ziel · Validierung · Stream</text>
-    <rect class="port" x="690" y="650" width="122" height="46" rx="7"/>
-    <text class="chip tt-core" x="751" y="670">ToolPort</text><text class="chipsub" x="751" y="685">Tools · Prompt · execute</text>
-    <rect class="port" x="824" y="650" width="122" height="46" rx="7"/>
-    <text class="chip tt-core" x="885" y="670">ChatPrefsPort</text><text class="chipsub" x="885" y="685">UI-Prefs lesen</text>
-    <rect class="port" x="958" y="650" width="112" height="46" rx="7"/>
-    <text class="chip tt-core" x="1014" y="670">WorkspacePath</text><text class="chipsub" x="1014" y="685">Pfad-Auflösung</text>
-    <rect class="port" x="1082" y="650" width="100" height="46" rx="7"/>
-    <text class="chip tt-core" x="1132" y="670">RawExchange</text><text class="chipsub" x="1132" y="685">RAW-Recorder</text>
+    <rect class="port" x="510" y="734" width="118" height="44" rx="7"/>
+    <text class="chip tt-core" x="569" y="754">LlmPort</text><text class="chipsub" x="569" y="769">Stream · Validierung</text>
+    <rect class="port" x="638" y="734" width="118" height="44" rx="7"/>
+    <text class="chip tt-core" x="697" y="754">ToolPort</text><text class="chipsub" x="697" y="769">Tools · execute</text>
+    <rect class="port" x="766" y="734" width="118" height="44" rx="7"/>
+    <text class="chip tt-core" x="825" y="754">ChatPrefsPort</text><text class="chipsub" x="825" y="769">UI-Prefs lesen</text>
+    <rect class="port" x="894" y="734" width="118" height="44" rx="7"/>
+    <text class="chip tt-core" x="953" y="754">WorkspacePath</text><text class="chipsub" x="953" y="769">Pfad-Auflösung</text>
+    <rect class="port" x="1022" y="734" width="118" height="44" rx="7"/>
+    <text class="chip tt-core" x="1081" y="754">RawExchange</text><text class="chipsub" x="1081" y="769">RAW-Recorder</text>
   </g>
-  <rect x="556" y="708" width="626" height="90" rx="8" fill="#f4fbf8" stroke="#0e7a5b" stroke-width="1" stroke-dasharray="4 3"/>
-  <text x="568" y="728" font-size="11" font-weight="700" fill="#0b5b44">Roadmap · Etappe 2–4 ✓</text>
-  <text x="568" y="747" font-size="10.5" fill="#356b58">Etappe 2: UI-/Electron-freier Core in src/application extrahiert.</text>
-  <text x="568" y="765" font-size="10.5" fill="#356b58">Etappe 3: Provider &amp; Tools über Ports angebunden.</text>
-  <text x="568" y="783" font-size="10.5" fill="#356b58">Etappe 4: Infrastruktur als austauschbare Adapter des Cores.</text>
+  <rect x="510" y="788" width="630" height="72" rx="8" fill="#f4fbf8" stroke="#0e7a5b" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="522" y="808" font-size="11" font-weight="700" fill="#0b5b44">Roadmap Etappen 1–5 ✓ (Stand 2026-07-12)</text>
+  <text x="522" y="826" font-size="10.5" fill="#356b58">1 Verträge · 2 Core-Extraktion · 3 Provider/Tools über Ports · 4 Infrastruktur-Ports · 5 Renderer-Präsentation</text>
+  <text x="522" y="844" font-size="10.5" fill="#356b58">Legacy-Re-Exports: src/main/chat-engine.js · chat-history-trim.js → src/application/chat/</text>
 
-  <!-- ============ SECONDARY ADAPTERS ============ -->
-  <rect class="subbox" x="46" y="826" width="1148" height="84" rx="10"/>
-  <text class="bsub" x="58" y="846" font-weight="700" fill="#1f6b47">Sekundäre (getriebene) Adapter — src/main/adapters (implementieren die Ports)</text>
+  <!-- ============ CORE PORT ADAPTERS ============ -->
+  <rect class="subbox" x="46" y="894" width="1148" height="72" rx="10"/>
+  <text class="bsub" x="58" y="914" font-weight="700" fill="#1f6b47">Core-Port-Adapter — src/main/adapters (implementieren Anwendungs-Ports)</text>
   <g>
-    <rect class="hand" x="58"  y="858" width="218" height="40" rx="7"/><text class="chip tt-hand" x="167"  y="882">provider-llm-adapter</text>
-    <rect class="hand" x="286" y="858" width="218" height="40" rx="7"/><text class="chip tt-hand" x="395"  y="882">workspace-tool-adapter</text>
-    <rect class="hand" x="514" y="858" width="220" height="40" rx="7"/><text class="chip tt-hand" x="624"  y="882">chat-preferences-adapter</text>
-    <rect class="hand" x="744" y="858" width="210" height="40" rx="7"/><text class="chip tt-hand" x="849"  y="882">workspace-path-adapter</text>
-    <rect class="hand" x="964" y="858" width="196" height="40" rx="7"/><text class="chip tt-hand" x="1062" y="882">raw-exchange-adapter</text>
-  </g>
-
-  <line class="flow" x1="620" y1="798" x2="620" y2="825" marker-end="url(#ah)" marker-start="url(#ah)"/>
-  <text class="arrlbl" x="690" y="817">Port ⇄ Adapter</text>
-
-  <!-- ============ INFRASTRUCTURE: registries + services ============ -->
-  <rect class="subbox" x="46" y="922" width="1148" height="248" rx="10"/>
-  <text class="bsub" x="58" y="942" font-weight="700" fill="#333f78">Registries &amp; Services — austauschbare Infrastruktur · src/main</text>
-
-  <!-- provider registry -->
-  <rect class="prov" x="58" y="954" width="330" height="150" rx="10" fill="#f6f2fd"/>
-  <text class="btitle tt-prov" x="70" y="976">Provider-Registry</text>
-  <text class="bsub" x="70" y="992">src/main/providers</text>
-  <g>
-    <rect class="prov" x="70"  y="1004" width="145" height="28" rx="6"/><text class="chip tt-prov" x="142" y="1023">openai</text>
-    <rect class="prov" x="229" y="1004" width="145" height="28" rx="6"/><text class="chip tt-prov" x="301" y="1023">anthropic</text>
-    <rect class="prov" x="70"  y="1038" width="145" height="28" rx="6"/><text class="chip tt-prov" x="142" y="1057">google</text>
-    <rect class="prov" x="229" y="1038" width="145" height="28" rx="6"/><text class="chip tt-prov" x="301" y="1057">ollama</text>
-    <rect class="prov" x="70"  y="1072" width="145" height="28" rx="6"/><text class="chip tt-prov" x="142" y="1091">mlx-lm</text>
-    <rect class="prov" x="229" y="1072" width="145" height="28" rx="6"/><text class="chip tt-prov" x="301" y="1091">stream-helpers</text>
+    <rect class="hand" x="58"  y="926" width="210" height="32" rx="7"/><text class="chip tt-hand" x="163" y="947">provider-llm-adapter</text>
+    <rect class="hand" x="278" y="926" width="210" height="32" rx="7"/><text class="chip tt-hand" x="383" y="947">workspace-tool-adapter</text>
+    <rect class="hand" x="498" y="926" width="210" height="32" rx="7"/><text class="chip tt-hand" x="603" y="947">chat-preferences-adapter</text>
+    <rect class="hand" x="718" y="926" width="210" height="32" rx="7"/><text class="chip tt-hand" x="823" y="947">workspace-path-adapter</text>
+    <rect class="hand" x="938" y="926" width="210" height="32" rx="7"/><text class="chip tt-hand" x="1043" y="947">raw-exchange-adapter</text>
   </g>
 
-  <!-- tool registry -->
-  <rect class="tool" x="404" y="954" width="300" height="150" rx="10" fill="#fdf1f6"/>
-  <text class="btitle tt-tool" x="416" y="976">Tool-Registry</text>
-  <text class="bsub" x="416" y="992">src/main/tools</text>
-  <g>
-    <rect class="tool" x="416" y="1004" width="130" height="28" rx="6"/><text class="chip tt-tool" x="481"  y="1023">list_directory</text>
-    <rect class="tool" x="560" y="1004" width="130" height="28" rx="6"/><text class="chip tt-tool" x="625"  y="1023">read_file_text</text>
-    <rect class="tool" x="416" y="1038" width="130" height="28" rx="6"/><text class="chip tt-tool" x="481"  y="1057">write_file_text*</text>
-    <rect class="tool" x="560" y="1038" width="130" height="28" rx="6"/><text class="chip tt-tool" x="625"  y="1057">debug_wait</text>
-  </g>
-  <text class="note" x="416" y="1090">* benötigt aktivierten</text>
-  <text class="note" x="416" y="1102">Schreibzugriff (Einstellungen)</text>
+  <line class="flow" x1="620" y1="882" x2="620" y2="893" marker-end="url(#ah)" marker-start="url(#ah)"/>
+  <text class="arrlbl" x="690" y="901">App-Port ⇄ Adapter</text>
 
-  <!-- services -->
-  <rect class="svc" x="720" y="954" width="462" height="150" rx="10" fill="#eef1f8"/>
-  <text class="btitle tt-svc" x="732" y="976">Services &amp; Laufzeit</text>
-  <text class="bsub" x="732" y="992">src/main/services (+ workspace-state, permissions, window, llm-raw-log)</text>
+  <!-- ============ INFRASTRUCTURE PORTS ============ -->
+  <rect class="subbox" x="46" y="978" width="1148" height="88" rx="10"/>
+  <text class="bsub" x="58" y="998" font-weight="700" fill="#333f78">Infrastruktur-Ports — src/main/ports (schmale Oberflächen, keine Leaks)</text>
   <g>
-    <rect class="svc" x="732" y="1004" width="140" height="28" rx="6"/><text class="chip tt-svc" x="802"  y="1023">storage-service</text>
-    <rect class="svc" x="884" y="1004" width="140" height="28" rx="6"/><text class="chip tt-svc" x="954"  y="1023">fs-service</text>
-    <rect class="svc" x="1036" y="1004" width="134" height="28" rx="6"/><text class="chip tt-svc" x="1103" y="1023">whisper-service</text>
-    <rect class="svc" x="732" y="1038" width="140" height="28" rx="6"/><text class="chip tt-svc" x="802"  y="1057">update-service</text>
-    <rect class="svc" x="884" y="1038" width="140" height="28" rx="6"/><text class="chip tt-svc" x="954"  y="1057">workspace-state</text>
-    <rect class="svc" x="1036" y="1038" width="134" height="28" rx="6"/><text class="chip tt-svc" x="1103" y="1057">permissions</text>
-    <rect class="svc" x="732" y="1072" width="140" height="28" rx="6"/><text class="chip tt-svc" x="802"  y="1091">llm-raw-log</text>
-    <rect class="svc" x="884" y="1072" width="140" height="28" rx="6"/><text class="chip tt-svc" x="954"  y="1091">window</text>
-    <rect class="svc" x="1036" y="1072" width="134" height="28" rx="6"/><text class="chip tt-svc" x="1103" y="1091">presentation</text>
+    <rect class="iport" x="58"  y="1010" width="128" height="28" rx="6"/><text class="chip tt-svc" x="122" y="1029">provider-runtime</text>
+    <rect class="iport" x="196" y="1010" width="128" height="28" rx="6"/><text class="chip tt-svc" x="260" y="1029">provider-catalog</text>
+    <rect class="iport" x="334" y="1010" width="128" height="28" rx="6"/><text class="chip tt-svc" x="398" y="1029">provider-secrets</text>
+    <rect class="iport" x="472" y="1010" width="128" height="28" rx="6"/><text class="chip tt-svc" x="536" y="1029">model-listing</text>
+    <rect class="iport" x="610" y="1010" width="128" height="28" rx="6"/><text class="chip tt-svc" x="674" y="1029">credential</text>
+    <rect class="iport" x="748" y="1010" width="128" height="28" rx="6"/><text class="chip tt-svc" x="812" y="1029">filesystem</text>
+    <rect class="iport" x="886" y="1010" width="128" height="28" rx="6"/><text class="chip tt-svc" x="950" y="1029">speech</text>
+    <rect class="iport" x="1024" y="1010" width="128" height="28" rx="6"/><text class="chip tt-svc" x="1088" y="1029">update</text>
+  </g>
+  <g>
+    <rect class="iport" x="58"  y="1044" width="128" height="28" rx="6"/><text class="chip tt-svc" x="122" y="1063">llm-config-store</text>
+    <rect class="iport" x="196" y="1044" width="128" height="28" rx="6"/><text class="chip tt-svc" x="260" y="1063">ui-prefs-store</text>
+    <rect class="iport" x="334" y="1044" width="128" height="28" rx="6"/><text class="chip tt-svc" x="398" y="1063">chat-history-store</text>
+    <rect class="iport" x="472" y="1044" width="128" height="28" rx="6"/><text class="chip tt-svc" x="536" y="1063">workspace-folder</text>
   </g>
 
-  <!-- adapter -> infra guide arrows -->
-  <line class="flow-d flow" x1="167" y1="898" x2="167" y2="953" marker-end="url(#ah)" stroke-dasharray="5 4"/>
-  <line class="flow-d flow" x1="395" y1="898" x2="480" y2="953" marker-end="url(#ah)" stroke-dasharray="5 4"/>
-  <line class="flow-d flow" x1="624" y1="898" x2="800" y2="953" marker-end="url(#ah)" stroke-dasharray="5 4"/>
+  <!-- ============ INFRA ADAPTERS + PRESENTATION ============ -->
+  <rect class="subbox" x="46" y="1078" width="1148" height="118" rx="10"/>
+  <text class="bsub" x="58" y="1098" font-weight="700" fill="#333f78">Infrastruktur-Adapter &amp; Präsentations-Normalisierung (Stage 5)</text>
+  <g>
+    <rect class="svc" x="58"  y="1110" width="168" height="30" rx="6"/><text class="chip tt-svc" x="142" y="1130">persistence-store-adapters</text>
+    <rect class="svc" x="236" y="1110" width="168" height="30" rx="6"/><text class="chip tt-svc" x="320" y="1130">provider-catalog-adapter</text>
+    <rect class="svc" x="414" y="1110" width="168" height="30" rx="6"/><text class="chip tt-svc" x="498" y="1130">provider-secrets-adapter</text>
+    <rect class="svc" x="592" y="1110" width="168" height="30" rx="6"/><text class="chip tt-svc" x="676" y="1130">model-listing-adapter</text>
+    <rect class="svc" x="770" y="1110" width="168" height="30" rx="6"/><text class="chip tt-svc" x="854" y="1130">credential-adapter</text>
+    <rect class="svc" x="948" y="1110" width="168" height="30" rx="6"/><text class="chip tt-svc" x="1032" y="1130">filesystem-ipc-adapter</text>
+  </g>
+  <g>
+    <rect class="svc" x="58"  y="1146" width="168" height="30" rx="6"/><text class="chip tt-svc" x="142" y="1166">speech-adapter</text>
+    <rect class="svc" x="236" y="1146" width="168" height="30" rx="6"/><text class="chip tt-svc" x="320" y="1166">update-adapter</text>
+    <rect class="contract" x="414" y="1146" width="220" height="30" rx="6"/><text class="chip tt-contract" x="524" y="1166">settings-presentation-service</text>
+    <rect class="contract" x="644" y="1146" width="220" height="30" rx="6"/><text class="chip tt-contract" x="754" y="1166">raw-log-presentation-service</text>
+    <rect class="contract" x="874" y="1146" width="220" height="30" rx="6"/><text class="chip tt-contract" x="984" y="1166">chat-history-normalization</text>
+  </g>
+
+  <!-- ============ REGISTRIES + SERVICES ============ -->
+  <rect class="subbox" x="46" y="1208" width="1148" height="156" rx="10"/>
+  <text class="bsub" x="58" y="1228" font-weight="700" fill="#333f78">Registries &amp; Laufzeit-Services — src/main</text>
+
+  <rect class="prov" x="58" y="1240" width="300" height="112" rx="10" fill="#f6f2fd"/>
+  <text class="btitle tt-prov" x="70" y="1262">Provider-Registry</text>
+  <text class="bsub" x="70" y="1278">src/main/providers (über provider-runtime-port)</text>
+  <g>
+    <rect class="prov" x="70"  y="1290" width="130" height="26" rx="6"/><text class="chip tt-prov" x="135" y="1308">openai · anthropic</text>
+    <rect class="prov" x="212" y="1290" width="130" height="26" rx="6"/><text class="chip tt-prov" x="277" y="1308">google · ollama</text>
+    <rect class="prov" x="70"  y="1322" width="130" height="26" rx="6"/><text class="chip tt-prov" x="135" y="1340">mlx-lm</text>
+    <rect class="prov" x="212" y="1322" width="130" height="26" rx="6"/><text class="chip tt-prov" x="277" y="1340">stream-helpers</text>
+  </g>
+
+  <rect class="tool" x="372" y="1240" width="280" height="112" rx="10" fill="#fdf1f6"/>
+  <text class="btitle tt-tool" x="384" y="1262">Tool-Registry</text>
+  <text class="bsub" x="384" y="1278">src/main/tools/workspace-tool-registry</text>
+  <g>
+    <rect class="tool" x="384" y="1290" width="120" height="26" rx="6"/><text class="chip tt-tool" x="444" y="1308">list_directory</text>
+    <rect class="tool" x="516" y="1290" width="120" height="26" rx="6"/><text class="chip tt-tool" x="576" y="1308">read_file_text</text>
+    <rect class="tool" x="384" y="1322" width="120" height="26" rx="6"/><text class="chip tt-tool" x="444" y="1340">write_file_text*</text>
+    <rect class="tool" x="516" y="1322" width="120" height="26" rx="6"/><text class="chip tt-tool" x="576" y="1340">debug_wait</text>
+  </g>
+
+  <rect class="svc" x="666" y="1240" width="516" height="112" rx="10" fill="#eef1f8"/>
+  <text class="btitle tt-svc" x="678" y="1262">Services</text>
+  <text class="bsub" x="678" y="1278">src/main/services (+ workspace-state, permissions, window)</text>
+  <g>
+    <rect class="svc" x="678" y="1290" width="118" height="26" rx="6"/><text class="chip tt-svc" x="737" y="1308">storage-service</text>
+    <rect class="svc" x="806" y="1290" width="118" height="26" rx="6"/><text class="chip tt-svc" x="865" y="1308">fs-service</text>
+    <rect class="svc" x="934" y="1290" width="118" height="26" rx="6"/><text class="chip tt-svc" x="993" y="1308">whisper-service</text>
+    <rect class="svc" x="1062" y="1290" width="108" height="26" rx="6"/><text class="chip tt-svc" x="1116" y="1308">update-service</text>
+    <rect class="svc" x="678" y="1322" width="118" height="26" rx="6"/><text class="chip tt-svc" x="737" y="1340">workspace-state</text>
+    <rect class="svc" x="806" y="1322" width="118" height="26" rx="6"/><text class="chip tt-svc" x="865" y="1340">permissions</text>
+    <rect class="svc" x="934" y="1322" width="118" height="26" rx="6"/><text class="chip tt-svc" x="993" y="1340">window</text>
+    <rect class="svc" x="1062" y="1322" width="108" height="26" rx="6"/><text class="chip tt-svc" x="1116" y="1340">llm-raw-log</text>
+  </g>
+
+  <line class="flow" x1="163" y1="958" x2="163" y2="977" marker-end="url(#ah)" stroke-dasharray="5 4"/>
+  <line class="flow" x1="383" y1="958" x2="460" y2="977" marker-end="url(#ah)" stroke-dasharray="5 4"/>
+  <line class="flow" x1="603" y1="958" x2="260" y2="977" marker-end="url(#ah)" stroke-dasharray="5 4"/>
 
   <!-- ============ EXTERNAL SYSTEMS ============ -->
-  <text class="zlabel tt-ext" x="30" y="1218">EXTERNE SYSTEME</text>
+  <text class="zlabel tt-ext" x="30" y="1418">EXTERNE SYSTEME</text>
   <g>
-    <rect class="ext" x="220" y="1198" width="176" height="80" rx="9"/>
-    <text class="chip tt-ext" x="308" y="1231">LLM-APIs</text><text class="chipsub" x="308" y="1247">OpenAI · Anthropic</text><text class="chipsub" x="308" y="1260">Google · Ollama · MLX</text>
-    <rect class="ext" x="408" y="1198" width="176" height="80" rx="9"/>
-    <text class="chip tt-ext" x="496" y="1231">Whisper-API</text><text class="chipsub" x="496" y="1247">OpenAI Speech-to-Text</text>
-    <rect class="ext" x="596" y="1198" width="176" height="80" rx="9"/>
-    <text class="chip tt-ext" x="684" y="1231">App-Storage</text><text class="chipsub" x="684" y="1247">safeStorage (verschlüsselt)</text><text class="chipsub" x="684" y="1260">JSON auf Disk</text>
-    <rect class="ext" x="784" y="1198" width="176" height="80" rx="9"/>
-    <text class="chip tt-ext" x="872" y="1231">GitHub</text><text class="chipsub" x="872" y="1247">Releases-API</text><text class="chipsub" x="872" y="1260">(Update-Check)</text>
-    <rect class="ext" x="972" y="1198" width="176" height="80" rx="9"/>
-    <text class="chip tt-ext" x="1060" y="1231">Dateisystem</text><text class="chipsub" x="1060" y="1247">geöffneter</text><text class="chipsub" x="1060" y="1260">Workspace-Ordner</text>
+    <rect class="ext" x="220" y="1398" width="176" height="80" rx="9"/>
+    <text class="chip tt-ext" x="308" y="1431">LLM-APIs</text><text class="chipsub" x="308" y="1447">OpenAI · Anthropic</text><text class="chipsub" x="308" y="1460">Google · Ollama · MLX</text>
+    <rect class="ext" x="408" y="1398" width="176" height="80" rx="9"/>
+    <text class="chip tt-ext" x="496" y="1431">Whisper-API</text><text class="chipsub" x="496" y="1447">OpenAI Speech-to-Text</text>
+    <rect class="ext" x="596" y="1398" width="176" height="80" rx="9"/>
+    <text class="chip tt-ext" x="684" y="1431">App-Storage</text><text class="chipsub" x="684" y="1447">safeStorage (verschlüsselt)</text><text class="chipsub" x="684" y="1460">JSON auf Disk</text>
+    <rect class="ext" x="784" y="1398" width="176" height="80" rx="9"/>
+    <text class="chip tt-ext" x="872" y="1431">GitHub</text><text class="chipsub" x="872" y="1447">Releases-API</text><text class="chipsub" x="872" y="1460">(Update-Check)</text>
+    <rect class="ext" x="972" y="1398" width="176" height="80" rx="9"/>
+    <text class="chip tt-ext" x="1060" y="1431">Dateisystem</text><text class="chipsub" x="1060" y="1447">geöffneter</text><text class="chipsub" x="1060" y="1460">Workspace-Ordner</text>
   </g>
 
-  <!-- ============ SHARED CONTRACTS SPINE ============ -->
-  <rect class="spine" x="1224" y="96" width="186" height="1092" rx="14"/>
+  <!-- ============ SHARED SPINE ============ -->
+  <rect class="spine" x="1224" y="96" width="186" height="1312" rx="14"/>
   <text x="1317" y="124" text-anchor="middle" class="zlabel tt-contract">SHARED · src/shared</text>
-  <text x="1317" y="143" text-anchor="middle" font-size="11" fill="#8a5a12">von UI, Core &amp; Infra genutzt</text>
-  <g>
-    <rect class="contract" x="1240" y="160" width="154" height="56" rx="8"/>
-    <text class="btitle tt-contract" x="1317" y="182" text-anchor="middle">contracts/</text>
-    <text class="chipsub" x="1317" y="199" fill="#8a5a12">DTOs &amp; Events</text><text class="chipsub" x="1317" y="211" fill="#8a5a12">chat · usage · llm-target · raw-log</text>
-    <rect class="contract" x="1240" y="224" width="154" height="46" rx="8"/>
-    <text class="btitle tt-contract" x="1317" y="246" text-anchor="middle">Enums · Validatoren</text>
-    <text class="chipsub" x="1317" y="262" fill="#8a5a12">Phasen · Fehlercodes · settings</text>
-    <rect class="contract" x="1240" y="278" width="154" height="44" rx="8"/>
-    <text class="btitle tt-contract" x="1317" y="300" text-anchor="middle">ipc-channels.js</text>
-    <text class="chipsub" x="1317" y="316" fill="#8a5a12">Request- &amp; Push-Kanäle</text>
-    <rect class="contract" x="1240" y="330" width="154" height="38" rx="8"/>
-    <text class="btitle tt-contract" x="1317" y="354" text-anchor="middle">limits.js</text>
-    <rect class="contract" x="1240" y="376" width="154" height="46" rx="8"/>
-    <text class="btitle tt-contract" x="1317" y="398" text-anchor="middle">runtime/</text>
-    <text class="chipsub" x="1317" y="414" fill="#8a5a12">abort · fetch-errors</text>
-    <rect class="contract" x="1240" y="430" width="154" height="46" rx="8"/>
-    <text class="btitle tt-contract" x="1317" y="452" text-anchor="middle">presentation/</text>
-    <text class="chipsub" x="1317" y="468" fill="#8a5a12">tool-display</text>
-  </g>
-  <rect x="1240" y="490" width="154" height="150" rx="8" fill="#fff7e6" stroke="#c68a2e" stroke-width="1" stroke-dasharray="4 3"/>
-  <text x="1317" y="512" text-anchor="middle" font-size="11" font-weight="700" fill="#8a5a12">Single Source of Truth</text>
-  <text x="1248" y="534" font-size="10.5" fill="#8a5a12">Versioniert (CONTRACT_VERSION)</text>
-  <text x="1248" y="554" font-size="10.5" fill="#8a5a12">Main → require (CommonJS)</text>
-  <text x="1248" y="572" font-size="10.5" fill="#8a5a12">Renderer → ESM-Bundle</text>
-  <text x="1248" y="588" font-size="10.5" fill="#8a5a12">(esbuild-generiert)</text>
-  <text x="1248" y="612" font-size="10.5" font-weight="700" fill="#8a5a12">Contracts ≠ Ports:</text>
-  <text x="1248" y="628" font-size="10.5" fill="#8a5a12">Ports liegen im Core</text>
-  <text x="1248" y="644" font-size="9.5" fill="#8a5a12">(src/application/ports).</text>
+  <text x="1317" y="143" text-anchor="middle" font-size="11" fill="#8a5a12">drei getrennte Schichten — keine Ports</text>
+
+  <rect class="contract" x="1240" y="158" width="154" height="72" rx="8"/>
+  <text class="btitle tt-contract" x="1317" y="180" text-anchor="middle">contracts/</text>
+  <text class="chipsub" x="1317" y="197" fill="#8a5a12">DTOs · Events · Enums</text>
+  <text class="chipsub" x="1317" y="211" fill="#8a5a12">chat · settings · raw-log · usage</text>
+  <text class="chipsub" x="1317" y="225" fill="#8a5a12">llm-target · debug-wait</text>
+
+  <rect class="contract" x="1240" y="240" width="154" height="52" rx="8" fill="#fdf6e3"/>
+  <text class="btitle tt-contract" x="1317" y="262" text-anchor="middle">presentation/</text>
+  <text class="chipsub" x="1317" y="279" fill="#8a5a12">tool-display.js</text>
+  <text class="chipsub" x="1317" y="293" fill="#8a5a12">(Main-Adapter, nicht Core)</text>
+
+  <rect class="contract" x="1240" y="302" width="154" height="52" rx="8" fill="#eef2ff"/>
+  <text class="btitle tt-contract" x="1317" y="324" text-anchor="middle">runtime/</text>
+  <text class="chipsub" x="1317" y="341" fill="#8a5a12">abort · fetch-errors</text>
+  <text class="chipsub" x="1317" y="355" fill="#8a5a12">(transport-agnostisch)</text>
+
+  <rect class="contract" x="1240" y="364" width="154" height="38" rx="8"/>
+  <text class="btitle tt-contract" x="1317" y="388" text-anchor="middle">ipc-channels.js</text>
+
+  <rect class="contract" x="1240" y="410" width="154" height="34" rx="8"/>
+  <text class="btitle tt-contract" x="1317" y="432" text-anchor="middle">limits.js</text>
+
+  <rect x="1240" y="454" width="154" height="168" rx="8" fill="#fff7e6" stroke="#c68a2e" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="1317" y="476" text-anchor="middle" font-size="11" font-weight="700" fill="#8a5a12">Contracts ≠ Ports</text>
+  <text x="1248" y="498" font-size="10.5" fill="#8a5a12">Ports: src/application/ports</text>
+  <text x="1248" y="514" font-size="10.5" fill="#8a5a12">+ src/main/ports (Infra)</text>
+  <text x="1248" y="538" font-size="10.5" fill="#8a5a12">Contracts: versioniert</text>
+  <text x="1248" y="554" font-size="10.5" fill="#8a5a12">(CONTRACT_VERSION)</text>
+  <text x="1248" y="576" font-size="10.5" fill="#8a5a12">Main → require (CJS)</text>
+  <text x="1248" y="592" font-size="10.5" fill="#8a5a12">Renderer → ESM-Bundle</text>
+  <text x="1248" y="608" font-size="10.5" fill="#8a5a12">(esbuild-generiert)</text>
 
   <line class="cflow" x1="1224" y1="120" x2="1197" y2="120" marker-end="url(#ahc)" marker-start="url(#ahc)"/>
   <text class="arrlbl" x="1118" y="115" fill="#8a5a12">Vertrag → Renderer</text>
   <line class="cflow" x1="1224" y1="405" x2="1197" y2="405" marker-end="url(#ahc)" marker-start="url(#ahc)"/>
-  <text class="arrlbl" x="1108" y="400" fill="#8a5a12">Vertrag → Main &amp; Core</text>
+  <text class="arrlbl" x="1108" y="400" fill="#8a5a12">Shared → Main &amp; Core (modulabhängig)</text>
 
   <!-- ============ FOOTER / STAMP ============ -->
-  <text x="30" y="1305" font-size="11" fill="#8a97a6">docs/architecture-layers.svg</text>
-  <text x="1410" y="1305" text-anchor="end" font-size="11" fill="#8a97a6">Aktualisiert 2026-07-12 · Ports &amp; Adapter umgesetzt (Roadmap-Etappe 3–4)</text>
+  <text x="30" y="1525" font-size="11" fill="#8a97a6">docs/architecture-layers.svg</text>
+  <text x="1410" y="1525" text-anchor="end" font-size="11" fill="#8a97a6">Aktualisiert 2026-07-12 · Roadmap-Etappen 1–5 abgeschlossen</text>
 </svg>

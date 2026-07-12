@@ -1,6 +1,7 @@
 function createMockIpcMain() {
   const handlers = new Map();
   return {
+    handlers,
     handle(channel, fn) {
       handlers.set(channel, fn);
     },

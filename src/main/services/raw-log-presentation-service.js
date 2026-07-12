@@ -29,6 +29,9 @@ const AMNESIA_TOOLTIP =
 const CONTEXT_FOOT_TEXT =
   'Der graue Sockel kehrt jede Runde wieder — die LLM-API ist zustandslos.';
 
+const TOOL_SCHEMAS_PRETTY_MAX = 8_000;
+const EXEC_RESULT_TEXT_MAX = 600;
+
 function truncate(text, max) {
   const t = String(text ?? '');
   return t.length > max ? `${t.slice(0, max - 1)}…` : t;
@@ -74,6 +77,75 @@ function compactArgs(argStr) {
   } catch {
     return t;
   }
+}
+
+function prettyMaybeJson(text) {
+  const t = String(text ?? '');
+  const trimmed = t.trim();
+  if (trimmed && (trimmed[0] === '{' || trimmed[0] === '[')) {
+    try {
+      return JSON.stringify(JSON.parse(trimmed), null, 2);
+    } catch {
+      /* kein valides JSON */
+    }
+  }
+  return t;
+}
+
+function buildToolSchemasPretty(toolDefs) {
+  if (!Array.isArray(toolDefs) || toolDefs.length === 0) return '';
+  const names = toolDefs.map((t) => (t && t.name) || '?');
+  try {
+    const compact = JSON.stringify(toolDefs.map((t) => t.schema), null, 2);
+    if (compact.length <= TOOL_SCHEMAS_PRETTY_MAX) return compact;
+  } catch {
+    /* fall through to bounded sections */
+  }
+
+  const nameIndex = `Tools: ${names.join(', ')}\n`;
+  if (nameIndex.length >= TOOL_SCHEMAS_PRETTY_MAX) {
+    return truncate(nameIndex, TOOL_SCHEMAS_PRETTY_MAX);
+  }
+
+  const parts = [nameIndex];
+  let remaining = TOOL_SCHEMAS_PRETTY_MAX - nameIndex.length;
+
+  for (let i = 0; i < toolDefs.length; i += 1) {
+    const header = `\n--- ${names[i]} ---\n`;
+    let section;
+    try {
+      section = JSON.stringify(toolDefs[i].schema, null, 2);
+    } catch {
+      section = '{}';
+    }
+    const block = header + section;
+    if (block.length <= remaining) {
+      parts.push(block);
+      remaining -= block.length;
+      continue;
+    }
+    if (remaining > header.length) {
+      parts.push(header + truncate(section, remaining - header.length));
+    }
+    break;
+  }
+
+  return parts.join('');
+}
+
+function findToolResult(exchanges, callId, fromIndex) {
+  if (!callId) return null;
+  for (let j = fromIndex + 1; j < exchanges.length; j += 1) {
+    const msgs = Array.isArray(exchanges[j]?.messages) ? exchanges[j].messages : [];
+    const hit = msgs.find((m) => m && m.role === 'tool' && m.tool_call_id === callId);
+    if (hit) return normalizeMessageContent(hit.content);
+  }
+  return null;
+}
+
+function formatExecResultText(result) {
+  if (result == null) return '';
+  return truncate(prettyMaybeJson(result), EXEC_RESULT_TEXT_MAX);
 }
 
 function usageSummary(usage) {
@@ -317,6 +389,7 @@ function buildContextStackVm(exchanges) {
       toolLayer = {
         count: toolDefs.length,
         namesSnippet: toolDefs.map((t) => t.name).join(', '),
+        schemasPretty: buildToolSchemasPretty(toolDefs),
         title:
           'Die Tool-Definitionen reisen in jedem Request erneut mit — nur dadurch weiß das Modell, welche Tools es anfordern darf.',
         ariaLabel: `Tool-Definitionen: ${toolDefs.length} verfügbar. Enter für die Schemas.`,
@@ -397,11 +470,13 @@ function buildContextStackVm(exchanges) {
       const nextRound = i + 1 < rounds.length ? rounds[i + 1] : null;
       const added = nextRound && nextRound.approx === approx ? nextRound.value - value : null;
       for (const c of execCalls) {
+        const rawResult = findToolResult(exchanges, c.id, i);
         execStrips.push({
-          callId: c.id,
           summaryCall: `${c.name || 'tool'}(${truncate(compactArgs(c.arguments), 60)})`,
           bodyCall: `${c.name || 'tool'}(${truncate(compactArgs(c.arguments), 120)})`,
           resultLabel: `→ Ergebnis von ${c.name || 'tool'}`,
+          resultRecorded: rawResult != null,
+          resultText: formatExecResultText(rawResult),
           noteText:
             added != null && added > 0 && execCalls.length === 1
               ? `heftet ein · Kontext +${added} ${approx ? 'Zeichen' : 'Token'}`
@@ -604,6 +679,9 @@ function createRawLogPresentationService() {
     describeFinishReason,
     buildContextStackVm,
     buildRoundDetailVm,
+    buildToolSchemasPretty,
+    findToolResult,
+    formatExecResultText,
   };
 }
 

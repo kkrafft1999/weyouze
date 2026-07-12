@@ -8,15 +8,17 @@ const { createRawExchangeAdapter } = require('../adapters/raw-exchange-adapter')
 const { createWorkspaceToolAdapter } = require('../adapters/workspace-tool-adapter');
 
 function createChatApplication({
-  storage,
-  providers,
+  llmConfigStore,
+  providerRuntime,
+  providerSecrets,
+  uiPrefsStore,
   toolRegistry,
   path,
   maxToolRounds,
 }) {
-  const llm = createProviderLlmAdapter({ providers, storage });
+  const llm = createProviderLlmAdapter({ providerRuntime, llmConfigStore, providerSecrets });
   const tools = createWorkspaceToolAdapter(toolRegistry);
-  const preferences = createChatPreferencesAdapter({ storage });
+  const preferences = createChatPreferencesAdapter({ uiPrefsStore });
   const workspacePaths = createNodeWorkspacePathAdapter({ path });
   const rawExchange = createRawExchangeAdapter();
 

@@ -1,33 +1,33 @@
 const {
   createSettingsOk,
   createSettingsError,
-  createListModelsResult,
   normalizeListModelsRequest,
   normalizeUiPrefsPatch,
 } = require('../../shared/contracts/settings');
-const { createSettingsPresentationService } = require('../services/settings-presentation-service');
 
 function registerSettingsHandlers({
   ipcMain,
   safeStorage,
-  storage,
-  providers,
-  defaultProviderId,
+  llmConfigStore,
+  uiPrefsStore,
+  workspaceFolderStore,
+  providerCatalog,
+  providerModels,
   REQ,
   setActiveWorkspaceRoot,
   presentation,
 }) {
-  const presentationService = presentation || createSettingsPresentationService({
-    providers,
-    defaultProviderId,
-  });
+  if (!presentation || typeof presentation.buildLlmStateDto !== 'function') {
+    throw new Error('registerSettingsHandlers requires an injected settings presentation service.');
+  }
+  const presentationService = presentation;
 
   ipcMain.handle(REQ.SETTINGS_GET_LLM_STATE, async () => {
     const encryptionAvailable = safeStorage.isEncryptionAvailable();
-    const config = await storage.readLLMConfig();
-    const chatTarget = storage.resolveChatModelTarget(config);
+    const config = await llmConfigStore.readLLMConfig();
+    const chatTarget = llmConfigStore.resolveChatModelTarget(config);
     const presetsWire = Array.isArray(config.presets)
-      ? config.presets.map((row) => storage.normalizePresetEntry(row)).filter(Boolean)
+      ? config.presets.map((row) => llmConfigStore.normalizePresetEntry(row)).filter(Boolean)
       : [];
     return presentationService.buildLlmStateDto({
       encryptionAvailable,
@@ -37,7 +37,7 @@ function registerSettingsHandlers({
   });
 
   function mergeProviderPatchIntoConfig(config, providerId, patch) {
-    return mergeProviderPatchIntoConfigImpl({ safeStorage, providers }, config, providerId, patch);
+    return mergeProviderPatchIntoConfigImpl({ safeStorage, providerCatalog }, config, providerId, patch);
   }
 
   ipcMain.handle(REQ.SETTINGS_SET_ACTIVE_PRESET, async (_event, presetId) => {
@@ -45,15 +45,15 @@ function registerSettingsHandlers({
       return createSettingsError('Kein Eintrag gewählt.');
     }
     let validationError = null;
-    await storage.updateLLMConfig(async (config) => {
+    await llmConfigStore.updateLLMConfig(async (config) => {
       const preset = Array.isArray(config.presets)
         ? config.presets.find((p) => p && p.id === presetId.trim())
         : null;
-      if (!preset || !providers.getProvider(preset.providerId)) {
+      if (!preset || !providerCatalog.getProvider(preset.providerId)) {
         validationError = createSettingsError('Eintrag nicht gefunden.');
         return config;
       }
-      const meta = providers.getProvider(preset.providerId);
+      const meta = providerCatalog.getProvider(preset.providerId);
       const entry = (config.providers && config.providers[preset.providerId]) || {};
       const configured = meta.fields?.apiKey
         ? !!entry.apiKeyEnc
@@ -81,7 +81,7 @@ function registerSettingsHandlers({
   ipcMain.handle(REQ.SETTINGS_COMMIT_SETTINGS, async (_event, payload) => {
     const rawPresets = Array.isArray(payload?.presets) ? payload.presets : [];
     const presets = rawPresets
-      .map((row) => storage.normalizePresetEntry(row))
+      .map((row) => llmConfigStore.normalizePresetEntry(row))
       .filter(Boolean);
     if (presets.length === 0) {
       return createSettingsError('Mindestens ein Modell-Eintrag ist erforderlich.');
@@ -104,7 +104,7 @@ function registerSettingsHandlers({
         : {};
 
     for (const pr of presets) {
-      const meta = providers.getProvider(pr.providerId);
+      const meta = providerCatalog.getProvider(pr.providerId);
       if (!meta) continue;
       const patch = patches[pr.providerId];
       const incomingKey = typeof patch?.apiKey === 'string' ? patch.apiKey.trim() : '';
@@ -116,7 +116,7 @@ function registerSettingsHandlers({
     }
 
     let validationError = null;
-    await storage.updateLLMConfig(async (config) => {
+    await llmConfigStore.updateLLMConfig(async (config) => {
       const draft = cloneLlmConfig(config);
 
       for (const providerId of Object.keys(patches)) {
@@ -128,7 +128,7 @@ function registerSettingsHandlers({
       }
 
       for (const pr of presets) {
-        const meta = providers.getProvider(pr.providerId);
+        const meta = providerCatalog.getProvider(pr.providerId);
         const entry = (draft.providers && draft.providers[pr.providerId]) || {};
         if (!isProviderConfigured(meta, entry)) {
           validationError = createSettingsError(
@@ -149,10 +149,10 @@ function registerSettingsHandlers({
       draft.version = 3;
       draft.presets = presets;
       draft.activePresetId = activePresetId;
-      const target = storage.resolveChatModelTarget(draft);
+      const target = llmConfigStore.resolveChatModelTarget(draft);
       draft.activeProvider = target.providerId;
       const activeEntryPid = target.providerId;
-      if (activeEntryPid && providers.getProvider(activeEntryPid)) {
+      if (activeEntryPid && providerCatalog.getProvider(activeEntryPid)) {
         const pe = { ...(draft.providers[activeEntryPid] || {}) };
         pe.model = target.model;
         draft.providers[activeEntryPid] = pe;
@@ -164,7 +164,7 @@ function registerSettingsHandlers({
 
     const uiPatch = normalizeUiPrefsPatch(payload?.uiPrefs);
     if (Object.keys(uiPatch).length > 0) {
-      await storage.updateUIPrefs(async (out) => Object.assign(out, uiPatch));
+      await uiPrefsStore.updateUIPrefs(async (out) => Object.assign(out, uiPatch));
     }
 
     return createSettingsOk();
@@ -172,35 +172,16 @@ function registerSettingsHandlers({
 
   ipcMain.handle(REQ.SETTINGS_LIST_MODELS, async (_event, payload) => {
     const req = normalizeListModelsRequest(payload);
-    const provider = providers.getProvider(req.providerId);
-    if (!provider) return createListModelsResult({ error: 'Unbekannter Provider.' });
-
-    const stored = (await storage.getEffectiveProviderConfig(req.providerId)) || {};
-    const config = {
-      apiKey: req.apiKey || stored.apiKey || '',
-      baseUrl: req.baseUrl || stored.baseUrl || provider.defaultBaseUrl || '',
-      insecureTls: typeof req.insecureTls === 'boolean'
-        ? req.insecureTls
-        : (typeof stored.insecureTls === 'boolean'
-            ? stored.insecureTls
-            : provider.defaultInsecureTls === true),
-    };
-    try {
-      const result = await provider.listModels(config);
-      if (result?.error) return createListModelsResult({ error: result.error });
-      return createListModelsResult({ models: result?.models });
-    } catch (err) {
-      return createListModelsResult({ error: err.message || 'Modelle konnten nicht geladen werden.' });
-    }
+    return providerModels.listModels(req.providerId, req);
   });
 
   ipcMain.handle(REQ.SETTINGS_GET_LAST_FOLDER, async () => {
-    const folderPath = await storage.getValidatedLastFolder();
+    const folderPath = await workspaceFolderStore.getValidatedLastFolder();
     return { folderPath };
   });
 
   ipcMain.handle(REQ.SETTINGS_SET_LAST_FOLDER, async (_event, folderPath) => {
-    await storage.persistLastFolder(folderPath);
+    await workspaceFolderStore.persistLastFolder(folderPath);
     if (setActiveWorkspaceRoot) {
       setActiveWorkspaceRoot(folderPath);
     }
@@ -208,24 +189,24 @@ function registerSettingsHandlers({
   });
 
   ipcMain.handle(REQ.SETTINGS_GET_FOLDER_HISTORY, async () => {
-    const paths = await storage.getValidatedFolderHistory();
+    const paths = await workspaceFolderStore.getValidatedFolderHistory();
     return { paths };
   });
 
-  ipcMain.handle(REQ.SETTINGS_GET_UI_PREFS, async () => storage.readUIPrefs());
+  ipcMain.handle(REQ.SETTINGS_GET_UI_PREFS, async () => uiPrefsStore.readUIPrefs());
 
   ipcMain.handle(REQ.SETTINGS_SET_UI_PREFS, async (_event, partial) => {
     const patch = normalizeUiPrefsPatch(partial);
     if (Object.keys(patch).length === 0) {
-      return storage.readUIPrefs();
+      return uiPrefsStore.readUIPrefs();
     }
-    return storage.updateUIPrefs(async (out) => Object.assign(out, patch));
+    return uiPrefsStore.updateUIPrefs(async (out) => Object.assign(out, patch));
   });
 }
 
 function mergeProviderPatchIntoConfigImpl(deps, config, providerId, patch) {
-  const { safeStorage, providers } = deps;
-  const provider = providers.getProvider(providerId);
+  const { safeStorage, providerCatalog } = deps;
+  const provider = providerCatalog.getProvider(providerId);
   if (!provider) return createSettingsError('Unbekannter Provider.');
   const prevEntry = (config.providers && config.providers[providerId]) || {};
   const next = { ...prevEntry };

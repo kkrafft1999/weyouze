@@ -133,8 +133,8 @@
   <text class="eyebrow" x="530" y="178">KERNMODUL</text>
   <text class="heading" x="530" y="215">Chat-Orchestrierung</text>
   <text class="description" x="530" y="249">
-    <tspan x="530" dy="0">Tool-Loop und Streaming</tspan>
-    <tspan x="530" dy="26">Kontext- und Verlaufspflege</tspan>
+    <tspan x="530" dy="0">src/application/chat/</tspan>
+    <tspan x="530" dy="26">Tool-Loop · Streaming · Verlauf</tspan>
   </text>
 
   <rect class="module" x="950" y="120" width="330" height="146"/>

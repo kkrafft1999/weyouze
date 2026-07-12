@@ -8,7 +8,7 @@ const {
   filterDeclaredPresetOptions,
 } = require('../../shared/contracts/settings');
 
-function createProviderLlmAdapter({ providers, storage }) {
+function createProviderLlmAdapter({ providerRuntime, llmConfigStore, providerSecrets }) {
   function resolveProviderOptions(raw, provider) {
     if (raw.providerOptions && typeof raw.providerOptions === 'object') {
       return filterDeclaredPresetOptions(raw.providerOptions, provider);
@@ -17,7 +17,7 @@ function createProviderLlmAdapter({ providers, storage }) {
   }
 
   function toTarget(raw) {
-    const provider = providers.getProvider(raw.providerId);
+    const provider = providerRuntime.getProvider(raw.providerId);
     const model = typeof raw.model === 'string' ? raw.model.trim() : '';
     const providerOptions = resolveProviderOptions(raw, provider);
     return createChatModelTarget({
@@ -42,9 +42,9 @@ function createProviderLlmAdapter({ providers, storage }) {
   }
 
   async function resolveChatTarget() {
-    const config = await storage.readLLMConfig();
-    const raw = storage.resolveChatModelTarget(config);
-    const provider = providers.getProvider(raw.providerId);
+    const config = await llmConfigStore.readLLMConfig();
+    const raw = llmConfigStore.resolveChatModelTarget(config);
+    const provider = providerRuntime.getProvider(raw.providerId);
     if (!provider) {
       return createChatErrorResult({
         error: `Unbekannter Provider: ${raw.providerId}.`,
@@ -55,7 +55,7 @@ function createProviderLlmAdapter({ providers, storage }) {
   }
 
   async function validateTarget(target, { forSend = false } = {}) {
-    const provider = providers.getProvider(target.providerId);
+    const provider = providerRuntime.getProvider(target.providerId);
     if (!provider) {
       return createChatErrorResult({
         error: `Unbekannter Provider: ${target.providerId}.`,
@@ -63,7 +63,7 @@ function createProviderLlmAdapter({ providers, storage }) {
       });
     }
 
-    const providerConfig = await storage.getEffectiveProviderConfig(target.providerId);
+    const providerConfig = await providerSecrets.getEffectiveProviderConfig(target.providerId);
     if (provider.fields?.apiKey && !providerConfig?.apiKey) {
       const suffix = forSend ? ' Bitte in den Einstellungen speichern.' : '';
       return createChatErrorResult({
@@ -81,8 +81,8 @@ function createProviderLlmAdapter({ providers, storage }) {
   }
 
   async function prepareSendBundle(target) {
-    const provider = providers.getProvider(target.providerId);
-    const baseConfig = await storage.getEffectiveProviderConfig(target.providerId);
+    const provider = providerRuntime.getProvider(target.providerId);
+    const baseConfig = await providerSecrets.getEffectiveProviderConfig(target.providerId);
     const config = mergeProviderConfig(baseConfig, target, provider);
     const model = resolveModel(target, provider, baseConfig);
     return { config, model };
@@ -97,14 +97,14 @@ function createProviderLlmAdapter({ providers, storage }) {
     recorder,
     sendBundle,
   }) {
-    const provider = providers.getProvider(target.providerId);
+    const provider = providerRuntime.getProvider(target.providerId);
     let config;
     let model;
     if (sendBundle) {
       config = sendBundle.config;
       model = sendBundle.model;
     } else {
-      const baseConfig = await storage.getEffectiveProviderConfig(target.providerId);
+      const baseConfig = await providerSecrets.getEffectiveProviderConfig(target.providerId);
       config = mergeProviderConfig(baseConfig, target, provider);
       model = resolveModel(target, provider, baseConfig);
     }

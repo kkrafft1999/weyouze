@@ -33,44 +33,6 @@ existieren — z. B. weil in der aktuellen Arbeitsumgebung nur lesender
 
 ## Offene Einträge (noch kein GitHub Issue)
 
-### 💡 Anwendungs-Core aus dem Chat-IPC-Handler extrahieren (Roadmap-Etappe 2)
-
-**Label:** `enhancement`
-
-**Problem / Kontext**
-
-Die komplette Chat-Orchestrierung (Runden-Schleife, Tool-Dispatch, Abbruch,
-Usage-Summierung, RAW-Aufzeichnung, Fortschritts-Push) lebt heute im
-Electron-IPC-Handler `src/main/ipc/chat-handlers.js` und ist eng mit dem
-Transport verwoben (`event.sender`, `webContents.send`, Push-Kanäle). Dadurch
-lässt sich der Kernablauf nur mit Electron-Fakes testen, und die Logik ist nicht
-für andere Transporte (CLI, Tests, künftige Automationen) wiederverwendbar.
-Roadmap-Etappe 1 (gemeinsame Contract-Schicht unter `src/shared/contracts/`)
-ist umgesetzt und liefert bereits die stabilen DTOs/Events als Grundlage.
-
-**Vorschlag / Umsetzung**
-
-- Einen transport-agnostischen `createChatEngine({ providers, toolRegistry, storage, clock })`
-  extrahieren, der `messages` + Optionen entgegennimmt und über einen
-  injizierten **Event-Sink** (statt `webContents.send`) streamt sowie das
-  Ergebnis-DTO aus der Contract-Schicht zurückgibt.
-- `chat-handlers.js` wird zum dünnen Adapter: übersetzt IPC-`event`/Abort auf
-  Engine-Aufrufe und leitet die Engine-Events über die bestehenden
-  Push-Kanäle an den Renderer weiter.
-- Wire-Format unverändert lassen (Contract-DTOs/Events aus Etappe 1
-  wiederverwenden), damit der Renderer nicht angefasst werden muss.
-- Unit-Tests für die Engine **ohne** Electron ergänzen (Runden-Schleife,
-  Tool-Loop, Abbruch, Usage-Merge, Fehlerpfade); den vorhandenen
-  Handler-Integrationstest schlank halten.
-
-**Nutzen**
-
-Echte Testbarkeit des Kernablaufs ohne Electron, klare Grenze zwischen
-Anwendungslogik und Transport, Grundlage für die weiteren Etappen (Ports für
-Provider/Tools, Infrastruktur-Adapter, reine Präsentationsschicht).
-
----
-
 ## 🧰 Token-effizientes Datei-Toolset (Vorschlag vom 2026-07-12)
 
 Die folgenden neun Einträge gehören zusammen: Sie erweitern das bestehende
