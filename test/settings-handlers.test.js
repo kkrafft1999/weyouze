@@ -215,19 +215,22 @@ test('commitSettings rejects presets whose provider is not configured', async (t
 test('commitSettings does not persist provider patches when preset validation fails', async (t) => {
   const { ipcMain, storage } = await setupHandlers(t);
   await storage.updateLLMConfig(async (config) => {
-    config.providers = { ollama: { baseUrl: 'http://old:1' } };
+    config.providers = {
+      openai: { apiKeyEnc: 'stored-key' },
+      ollama: { baseUrl: 'http://old:1' },
+    };
     return config;
   });
 
   const res = await ipcMain.invoke(REQ.SETTINGS_COMMIT_SETTINGS, {
     presets: [{ id: 'p1', providerId: 'openai', model: 'gpt-4o' }],
-    providerPatches: { openai: { apiKey: 'sk-test' } },
+    providerPatches: { openai: { removeApiKey: true } },
   });
   assert.equal(res.ok, false);
   assert.match(res.error, /unvollständig/);
 
   const config = await storage.readLLMConfig();
-  assert.equal(config.providers.openai?.apiKeyEnc, undefined, 'provider patch must not persist');
+  assert.equal(config.providers.openai?.apiKeyEnc, 'stored-key', 'provider patch must not persist');
   assert.equal(config.providers.ollama?.baseUrl, 'http://old:1', 'existing provider entries must stay unchanged');
   assert.equal(config.presets.some((p) => p.id === 'p1'), false);
 });
