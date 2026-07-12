@@ -18,7 +18,7 @@ function createProviderLlmAdapter({ providers, storage }) {
 
   function toTarget(raw) {
     const provider = providers.getProvider(raw.providerId);
-    const model = raw.model || provider?.defaultModel || '';
+    const model = typeof raw.model === 'string' ? raw.model.trim() : '';
     const providerOptions = resolveProviderOptions(raw, provider);
     return createChatModelTarget({
       providerId: raw.providerId,
