@@ -146,10 +146,10 @@ function resolveSessionTitle(sessionRow, messages, existingTitle) {
   return inferChatTitle(messages);
 }
 
-function normalizeSessionForStore(sessionRow, { normalizeWorkspaceRoot, existingTitle } = {}) {
+function normalizeSessionForStore(sessionRow, { normalizeWorkspaceRoot, existingTitle, requireMessages = false } = {}) {
   if (!sessionRow || typeof sessionRow.id !== 'string' || !sessionRow.id.trim()) return null;
   const messages = sanitizeChatMessagesForStore(sessionRow.messages);
-  if (messages.length === 0) return null;
+  if (requireMessages && messages.length === 0) return null;
   const title = resolveSessionTitle(sessionRow, messages, existingTitle);
   const workspaceRoot =
     typeof normalizeWorkspaceRoot === 'function'
@@ -167,14 +167,12 @@ function normalizeSessionForStore(sessionRow, { normalizeWorkspaceRoot, existing
 
 function normalizeSessionForLoad(sessionRow) {
   if (!sessionRow || typeof sessionRow !== 'object') return null;
-  const messages = normalizeLoadedMessages(sessionRow.messages);
-  if (messages.length === 0) return null;
   return {
     id: sessionRow.id,
     workspaceRoot: sessionRow.workspaceRoot ?? null,
     title: sessionRow.title || 'Chat',
     updatedAt: sessionRow.updatedAt,
-    messages,
+    messages: normalizeLoadedMessages(sessionRow.messages),
     tokenUsage: normalizeTokenUsageForStore(sessionRow.tokenUsage),
   };
 }

@@ -21,6 +21,7 @@ function registerChatHistoryHandlers({ ipcMain, storage, REQ }) {
         typeof sessionRow?.title === 'string' && sessionRow.title.trim().length > 0;
       const normalized = storage.normalizeSessionForStore(sessionRow, {
         existingTitle: titleProvided ? undefined : existing?.title,
+        requireMessages: true,
       });
       if (!normalized) return { ok: false };
       const idx = store.sessions.findIndex((x) => x.id === normalized.id);

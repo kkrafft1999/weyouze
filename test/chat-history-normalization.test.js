@@ -108,14 +108,40 @@ test('normalizeLoadedMessages applies the same toolTrace precedence', () => {
   assert.deepEqual(loaded[0].toolTrace, ['l']);
 });
 
-test('normalizeSessionForStore returns null when sanitized messages are empty', () => {
+test('normalizeSessionForStore rejects empty sanitized messages only when requireMessages is set', () => {
   assert.equal(
     normalizeSessionForStore(
       { id: 'empty', messages: [{ role: 'user', content: '  ' }] },
-      { normalizeWorkspaceRoot: (p) => p }
+      { normalizeWorkspaceRoot: (p) => p, requireMessages: true }
     ),
     null
   );
+});
+
+test('normalizeSessionForStore preserves legacy sessions with empty message arrays', () => {
+  const session = normalizeSessionForStore(
+    {
+      id: 'legacy',
+      title: 'Legacy',
+      updatedAt: 1,
+      messages: [],
+    },
+    { normalizeWorkspaceRoot: (p) => p }
+  );
+  assert.equal(session.id, 'legacy');
+  assert.equal(session.title, 'Legacy');
+  assert.deepEqual(session.messages, []);
+});
+
+test('normalizeSessionForLoad keeps legacy sessions with empty messages readable', () => {
+  const loaded = normalizeSessionForLoad({
+    id: 'legacy',
+    title: 'Legacy',
+    updatedAt: 1,
+    messages: [],
+  });
+  assert.equal(loaded.title, 'Legacy');
+  assert.deepEqual(loaded.messages, []);
 });
 
 test('normalizeSessionForStore preserves existingTitle when payload omits title', () => {
