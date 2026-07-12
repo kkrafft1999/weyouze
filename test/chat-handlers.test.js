@@ -259,9 +259,42 @@ test('CHAT_SEND runs a full tool round-trip: tool call -> registry -> follow-up 
   assert.equal(toolMsg.tool_call_id, 'call_1');
   assert.deepEqual(JSON.parse(toolMsg.content), { relative_path: '.', items: [] });
 
-  // Start/Done-Ereignisse werden als Rohdaten an den Renderer gepusht.
+  // Start/Done-Ereignisse enthalten Anzeige-Zeilen und Rohdaten.
   const toolLineEvents = sent.filter((s) => s.channel === PUSH.CHAT_TOOL_LINE);
   assert.deepEqual(toolLineEvents.map((e) => e.payload.phase), ['start', 'done']);
+  assert.ok(toolLineEvents.every((e) => typeof e.payload.line === 'string' && e.payload.line.length > 0));
+  assert.equal(toolLineEvents[0].payload.tool, 'list_directory');
+  assert.equal(toolLineEvents[0].payload.line, 'Projektordner wird durchsucht …');
+  assert.equal(toolLineEvents[1].payload.line, 'Projektordner durchsucht');
+});
+
+test('CHAT_SEND emits a workspace fileWritten progress event after write_file_text', async () => {
+  const { provider } = makeScriptedProvider([
+    assistantToolCall([toolCall('call_1', 'write_file_text', { relative_path: 'notes/new.md', content: 'hi' })]),
+    assistantText('Geschrieben.'),
+  ]);
+  const toolRegistry = makeToolRegistryStub((toolName) =>
+    JSON.stringify(toolName === 'write_file_text' ? { ok: true } : { ok: true })
+  );
+  const storage = makeStorage({ readUIPrefs: async () => ({ allowWorkspaceWrite: true }) });
+  const { sendHandler } = setupChatHandlers({ provider, toolRegistry, storage });
+  const { event, sent } = makeFakeEvent();
+
+  const res = await sendHandler(event, {
+    messages: [{ role: 'user', content: 'Schreib eine Datei' }],
+    workspaceRoot: '/tmp/weyouze-project',
+  });
+
+  assert.equal(res.content, 'Geschrieben.');
+  const workspaceEvents = sent.filter(
+    (s) => s.channel === PUSH.CHAT_PROGRESS && s.payload.type === 'workspace'
+  );
+  assert.equal(workspaceEvents.length, 1);
+  assert.deepEqual(workspaceEvents[0].payload, {
+    type: 'workspace',
+    event: 'fileWritten',
+    relativePath: 'notes/new.md',
+  });
 });
 
 test('CHAT_SEND rejects tool calls with a synthetic error when no workspace is open', async () => {
@@ -302,6 +335,7 @@ test('CHAT_SEND attaches the clamped debug_wait duration to the tool trace entry
 
   // duration_seconds: 0.1 liegt unter dem Minimum (500ms) und wird geclampt.
   assert.equal(res.toolTrace[0].waitMs, 500);
+  assert.equal(res.toolTrace[0].line, '0,5 Sekunden gewartet');
 });
 
 test('CHAT_SEND stops with TOOL_LIMIT once the configured round limit is exhausted', async () => {

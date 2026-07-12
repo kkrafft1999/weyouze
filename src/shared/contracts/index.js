@@ -19,6 +19,7 @@ const {
   APP_LOCALES,
   PRESET_DETAIL_STYLES,
   PRESET_FIELD_TYPES,
+  WORKSPACE_PROGRESS_EVENTS,
 } = require('./enums');
 const {
   clampMaxToolRounds,
@@ -51,6 +52,7 @@ const {
   createToolLineEvent,
   createPhaseEvent,
   createReasoningEvent,
+  createWorkspaceFileWrittenEvent,
   isChatErrorCode,
   isChatPhase,
   isToolLinePhase,
@@ -62,6 +64,7 @@ module.exports = {
   CHAT_PHASES,
   TOOL_LINE_PHASES,
   CHAT_PROGRESS_TYPES,
+  WORKSPACE_PROGRESS_EVENTS,
   APP_LOCALES,
   PRESET_DETAIL_STYLES,
   PRESET_FIELD_TYPES,
@@ -98,6 +101,7 @@ module.exports = {
   createToolLineEvent,
   createPhaseEvent,
   createReasoningEvent,
+  createWorkspaceFileWrittenEvent,
   isChatErrorCode,
   isChatPhase,
   isToolLinePhase,

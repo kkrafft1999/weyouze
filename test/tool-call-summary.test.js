@@ -1,11 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const {
+  truncateToolLabel,
+  summarizeToolCall,
+  formatToolDisplayLine,
+} = require('../src/shared/presentation/tool-display');
 
-// Das Modul ist ESM (Renderer) — in der CJS-Test-Suite per dynamic import laden.
-const summaryModule = import('../src/renderer/chat/toolCallSummary.js');
-
-test('summarizeToolCall formats workspace tools with start and done labels', async () => {
-  const { summarizeToolCall } = await summaryModule;
+test('summarizeToolCall formats workspace tools with start and done labels', () => {
   assert.equal(
     summarizeToolCall('list_directory', { relative_path: 'src/main' }, 'start'),
     'Ordner src/main wird durchsucht …'
@@ -43,38 +44,33 @@ test('summarizeToolCall formats workspace tools with start and done labels', asy
   assert.equal(summarizeToolCall('unknown_tool', {}, 'done'), 'unknown_tool ausgeführt');
 });
 
-test('truncateToolLabel shortens long labels', async () => {
-  const { truncateToolLabel } = await summaryModule;
+test('truncateToolLabel shortens long labels', () => {
   const long = 'a'.repeat(60);
   const out = truncateToolLabel(long, 20);
   assert.equal(out.length, 20);
   assert.match(out, /…$/);
 });
 
-test('summarizeToolEvent formats raw main-process entries', async () => {
-  const { summarizeToolEvent } = await summaryModule;
+test('formatToolDisplayLine formats raw tool trace entries', () => {
   assert.equal(
-    summarizeToolEvent({ tool: 'read_file_text', args: { relative_path: 'a.js' } }, 'done'),
+    formatToolDisplayLine({ tool: 'read_file_text', args: { relative_path: 'a.js' } }, 'done'),
     'Datei a.js gelesen'
   );
   assert.equal(
-    summarizeToolEvent({ tool: 'list_directory', args: {}, noWorkspace: true }, 'start'),
+    formatToolDisplayLine({ tool: 'list_directory', args: {}, noWorkspace: true }, 'start'),
     'Projektordner wird durchsucht … · kein Ordner geöffnet'
   );
   // Persistierte Alt-Sessions enthalten bereits formatierte Strings.
-  assert.equal(summarizeToolEvent('Datei x gelesen', 'done'), 'Datei x gelesen');
+  assert.equal(formatToolDisplayLine('Datei x gelesen', 'done'), 'Datei x gelesen');
 });
 
-test('summarizeToolEvent uses main-supplied waitMs for debug_wait', async () => {
-  const { summarizeToolEvent } = await summaryModule;
-  // Der Main reicht die bereits geclampte Wartezeit mit; sie hat Vorrang vor
-  // einer Rekonstruktion aus den Rohargs.
+test('formatToolDisplayLine uses main-supplied waitMs for debug_wait', () => {
   assert.equal(
-    summarizeToolEvent({ tool: 'debug_wait', args: {}, waitMs: 1200 }, 'start'),
+    formatToolDisplayLine({ tool: 'debug_wait', args: {}, waitMs: 1200 }, 'start'),
     'Warte 1,2 Sekunden …'
   );
   assert.equal(
-    summarizeToolEvent({ tool: 'debug_wait', args: {}, waitMs: 1000 }, 'done'),
+    formatToolDisplayLine({ tool: 'debug_wait', args: {}, waitMs: 1000 }, 'done'),
     '1 Sekunde gewartet'
   );
 });

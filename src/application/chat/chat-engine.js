@@ -6,7 +6,7 @@ const {
   CHAT_ERROR_CODES,
   CHAT_PHASES,
   TOOL_LINE_PHASES,
-  resolveDebugWaitMs,
+  APP_LOCALES,
   createChatResult,
   createCancelledChatResult,
   createChatErrorResult,
@@ -41,10 +41,8 @@ function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirecto
   return prompt;
 }
 
-function buildToolEntry(toolName, args, extra) {
-  const entry = { tool: toolName, args, ...extra };
-  if (toolName === 'debug_wait') entry.waitMs = resolveDebugWaitMs(args);
-  return entry;
+function resolveAppLocale(uiPrefs) {
+  return uiPrefs?.appLocale === APP_LOCALES.EN ? APP_LOCALES.EN : APP_LOCALES.DE;
 }
 
 function summarizeToolCall(toolCall) {
@@ -243,6 +241,7 @@ function createChatEngine({
       }
 
       const uiPrefs = await preferences.read();
+      const appLocale = resolveAppLocale(uiPrefs);
       const extraSystem = typeof uiPrefs.baseSystemPrompt === 'string' ? uiPrefs.baseSystemPrompt.trim() : '';
       const allowWrite = uiPrefs.allowWorkspaceWrite === true;
       const toolOptions = { allowWrite };
@@ -272,7 +271,17 @@ function createChatEngine({
       const callbacks = makeStreamCallbacks(onEvent);
       const toolRoundLimit = resolveToolRoundLimit(uiPrefs, maxToolRounds);
       const emitToolLine = (phase, entry) => {
-        emit(onEvent, CHAT_ENGINE_EVENTS.TOOL_LINE, createToolLineEvent(phase, entry));
+        const line = tools.formatDisplayLine(entry, phase, appLocale);
+        entry.line = line;
+        emit(onEvent, CHAT_ENGINE_EVENTS.TOOL_LINE, createToolLineEvent(phase, { ...entry, line }));
+      };
+      const emitProgressPayloads = (progressEvents) => {
+        if (!Array.isArray(progressEvents)) return;
+        for (const payload of progressEvents) {
+          if (payload && typeof payload === 'object') {
+            emit(onEvent, CHAT_ENGINE_EVENTS.PROGRESS, payload);
+          }
+        }
       };
 
       for (let round = 0; round < toolRoundLimit; round += 1) {
@@ -346,7 +355,11 @@ function createChatEngine({
           }
           const toolName = toolCall.function?.name || 'tool';
           const args = parseToolArguments(toolCall.function?.arguments);
-          const entry = buildToolEntry(toolName, args, workspaceRoot ? undefined : { noWorkspace: true });
+          const entry = tools.buildTraceEntry(
+            toolName,
+            args,
+            workspaceRoot ? undefined : { noWorkspace: true }
+          );
           toolTrace.push(entry);
           emitToolLine(TOOL_LINE_PHASES.START, entry);
 
@@ -362,7 +375,9 @@ function createChatEngine({
 
           let output;
           try {
-            output = await tools.execute(toolName, args, { workspaceRoot, abortSignal, allowWrite });
+            const execution = await tools.execute(toolName, args, { workspaceRoot, abortSignal, allowWrite });
+            output = execution.output;
+            emitProgressPayloads(execution.progressEvents);
           } catch (error) {
             if (isAbortError(error)) {
               return returnCancelledChat(onEvent, toolTrace, '', requestUsage, rawExchanges);

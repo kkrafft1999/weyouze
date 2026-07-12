@@ -20,6 +20,7 @@ const {
   createToolLineEvent,
   createPhaseEvent,
   createReasoningEvent,
+  createWorkspaceFileWrittenEvent,
   isChatErrorCode,
   isChatPhase,
   isToolLinePhase,
@@ -108,9 +109,18 @@ test('event factories match the push payload shapes', () => {
   assert.deepEqual(createDeltaEvent(undefined), { text: '' });
   assert.deepEqual(createPhaseEvent(CHAT_PHASES.WAITING), { type: 'phase', phase: 'waiting' });
   assert.deepEqual(createReasoningEvent('r'), { type: 'reasoning', text: 'r' });
+  assert.deepEqual(createWorkspaceFileWrittenEvent('src/a.js'), {
+    type: 'workspace',
+    event: 'fileWritten',
+    relativePath: 'src/a.js',
+  });
   assert.deepEqual(
-    createToolLineEvent(TOOL_LINE_PHASES.START, { tool: 'read_file_text', args: { relative_path: 'a' } }),
-    { phase: 'start', tool: 'read_file_text', args: { relative_path: 'a' } }
+    createToolLineEvent(TOOL_LINE_PHASES.START, {
+      tool: 'read_file_text',
+      args: { relative_path: 'a' },
+      line: 'Datei a wird gelesen …',
+    }),
+    { phase: 'start', tool: 'read_file_text', args: { relative_path: 'a' }, line: 'Datei a wird gelesen …' }
   );
 });
 

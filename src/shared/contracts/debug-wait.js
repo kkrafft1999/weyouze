@@ -2,8 +2,8 @@
  * debug_wait-Contract (Roadmap-Etappe 1).
  *
  * Einzige Quelle der Wahrheit für die Clamp-Logik der (nur zu UI-Tests
- * genutzten) Wartezeit. Vorher lag sie doppelt vor (src/main/debug-wait.js und
- * src/renderer/chat/toolCallSummary.js), was ein Divergenz-Risiko war.
+ * genutzten) Wartezeit. Die Anzeige-Zeilen nutzen dieselbe Logik über
+ * src/shared/presentation/tool-display.js.
  */
 'use strict';
 

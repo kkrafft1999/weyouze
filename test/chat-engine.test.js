@@ -2,6 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const { createChatEngine, CHAT_ENGINE_EVENTS } = require('../src/application/chat/chat-engine');
+const { formatToolDisplayLine } = require('../src/shared/presentation/tool-display');
+const { TOOL_LINE_PHASES } = require('../src/shared/contracts/enums');
+const { sleepAbortable } = require('../src/shared/runtime/abort');
 
 function makeMockRecorder() {
   return {
@@ -19,9 +22,18 @@ function makeToolPort(execute) {
     calls,
     getTools: () => [{ type: 'function', function: { name: 'list_directory' } }],
     buildSystemPrompt: () => 'Tools: list_directory',
+    buildTraceEntry(toolName, args, extra = {}) {
+      const entry = { tool: toolName, args, ...extra };
+      if (toolName === 'debug_wait') entry.waitMs = 500;
+      return entry;
+    },
+    formatDisplayLine(entry, phase) {
+      return formatToolDisplayLine(entry, phase);
+    },
     async execute(toolName, args, context) {
       calls.push({ toolName, args, context });
-      return execute ? execute(toolName, args, context) : JSON.stringify({ ok: true });
+      const output = execute ? await execute(toolName, args, context) : JSON.stringify({ ok: true });
+      return { output, progressEvents: [] };
     },
   };
 }
@@ -255,6 +267,14 @@ test('engine runs the tool loop and emits tool events through its event sink', a
   assert.equal(calls[1].messages.find((message) => message.role === 'tool').tool_call_id, 'call_1');
   const toolEvents = events.filter((event) => event.type === CHAT_ENGINE_EVENTS.TOOL_LINE);
   assert.deepEqual(toolEvents.map((event) => event.payload.phase), ['start', 'done']);
+  assert.ok(toolEvents.every((event) => typeof event.payload.line === 'string' && event.payload.line.length > 0));
+  assert.equal(
+    toolEvents[0].payload.line,
+    formatToolDisplayLine(
+      { tool: 'list_directory', args: { relative_path: '.' } },
+      TOOL_LINE_PHASES.START
+    )
+  );
 });
 
 test('engine supplies a synthetic tool error when no workspace is open', async () => {
@@ -292,6 +312,7 @@ test('engine preserves debug_wait metadata in its tool trace', async () => {
 
   assert.equal(result.content, 'Fertig.');
   assert.equal(result.toolTrace[0].waitMs, 500);
+  assert.equal(result.toolTrace[0].line, '0,5 Sekunden gewartet');
 });
 
 test('engine stops at its configured tool-round limit', async () => {
@@ -360,6 +381,34 @@ test('engine passes the write preference to its tool registry', async () => {
 
   assert.deepEqual(getToolsCalls, [{ allowWrite: true }]);
   assert.equal(calls[0].tools[0].function.name, 'write_file_text');
+});
+
+test('engine preserves start display lines on tool trace when aborted during execution', async () => {
+  const tools = makeToolPort(async (_toolName, _args, context) => {
+    await sleepAbortable(30_000, context.abortSignal);
+    return JSON.stringify({ ok: true });
+  });
+  const { engine } = makeEngine([
+    assistantToolCall('call_1', 'list_directory', { relative_path: 'src' }),
+    assistantText('unused'),
+  ], { tools });
+
+  const pending = engine.send({
+    sessionId: 'renderer-1',
+    payload: {
+      messages: [{ role: 'user', content: 'Liste' }],
+      workspaceRoot: '/tmp/weyouze-project',
+    },
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  engine.abort('renderer-1');
+
+  const result = await pending;
+  assert.equal(result.cancelled, true);
+  assert.equal(result.toolTrace.length, 1);
+  assert.equal(result.toolTrace[0].tool, 'list_directory');
+  assert.equal(result.toolTrace[0].line, 'Ordner src wird durchsucht …');
 });
 
 test('engine aborts only the targeted in-flight session', async () => {

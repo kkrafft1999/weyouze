@@ -14,6 +14,7 @@ const {
   CHAT_PHASES,
   TOOL_LINE_PHASES,
   CHAT_PROGRESS_TYPES,
+  WORKSPACE_PROGRESS_EVENTS,
 } = require('./enums');
 
 // --- Ergebnis-DTOs (Rückgabe von CHAT_SEND) --------------------------------
@@ -48,11 +49,21 @@ function createDeltaEvent(text) {
 }
 
 /**
- * chat:tool-line — Rohdaten eines Tool-Ereignisses; die Lokalisierung baut der
- * Renderer. entry = { tool, args, waitMs?, noWorkspace? }.
+ * chat:tool-line — Tool-Ereignis mit Anzeige-Zeile und optionalen Rohdaten.
+ * entry = { line, tool?, args?, waitMs?, noWorkspace? }.
+ * `line` ist die fertige UI-Zeile; tool/args bleiben für Debugging/Kompatibilität.
  */
 function createToolLineEvent(phase, entry) {
   return { phase, ...entry };
+}
+
+/** chat:progress mit type='workspace' nach erfolgreichem Dateischreiben. */
+function createWorkspaceFileWrittenEvent(relativePath) {
+  return {
+    type: CHAT_PROGRESS_TYPES.WORKSPACE,
+    event: WORKSPACE_PROGRESS_EVENTS.FILE_WRITTEN,
+    relativePath: String(relativePath ?? ''),
+  };
 }
 
 /** chat:progress mit type='phase'. */
@@ -87,6 +98,7 @@ module.exports = {
   createToolLineEvent,
   createPhaseEvent,
   createReasoningEvent,
+  createWorkspaceFileWrittenEvent,
   isChatErrorCode,
   isChatPhase,
   isToolLinePhase,

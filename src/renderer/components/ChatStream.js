@@ -4,7 +4,6 @@ import {
   serializeChatMessagesForStorage,
   normalizeLoadedMessages,
 } from '../chat/messageUtils.js';
-import { summarizeToolEvent } from '../chat/toolCallSummary.js';
 // Token-Usage-Normalisierung/-Summierung aus der gemeinsamen Contract-Schicht,
 // damit Anzeige (Renderer) und Provider-Seite (Main) nicht auseinanderlaufen.
 import contracts from '../generated/contracts.js';
@@ -497,23 +496,27 @@ export function initChatStream({
               typeof payload === 'object' && payload !== null && payload.phase
                 ? payload.phase
                 : 'start';
-            // Main pusht Rohdaten ({ tool, args, … }); die Anzeige-Zeile
-            // entsteht hier. Strings (alte Sessions) gehen unverändert durch.
+            // Main liefert fertige Anzeige-Zeilen in payload.line (Rohdaten optional für Debug).
+            // Strings in toolTrace sind persistierte Alt-Sessions.
             const line =
               typeof payload === 'string'
                 ? payload
                 : typeof payload?.line === 'string'
                   ? payload.line
-                  : payload?.tool
-                    ? summarizeToolEvent(payload, phase)
-                    : '';
+                  : '';
             if (!line) return;
 
             const wrap = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type .chat-tool-log');
             if (!wrap) {
+              if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
               if (phase === 'start') {
-                if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
                 last.toolTrace.push(line);
+              } else if (phase === 'done') {
+                if (last.toolTrace.length > 0) {
+                  last.toolTrace[last.toolTrace.length - 1] = line;
+                } else {
+                  last.toolTrace.push(line);
+                }
               }
               renderChatMessages();
               return;
@@ -532,13 +535,6 @@ export function initChatStream({
               setToolLineDone(target, line);
               if (target && Array.isArray(last.toolTrace) && last.toolTrace.length > 0) {
                 last.toolTrace[last.toolTrace.length - 1] = line;
-              }
-              if (
-                payload?.tool === 'write_file_text'
-                && typeof payload?.args?.relative_path === 'string'
-                && typeof onWorkspaceFileWritten === 'function'
-              ) {
-                onWorkspaceFileWritten(payload.args.relative_path);
               }
             } else {
               if (!Array.isArray(last.toolTrace)) last.toolTrace = [];
@@ -566,6 +562,14 @@ export function initChatStream({
             if (p.type === 'reasoning' && p.text) {
               last.reasoningText = (last.reasoningText || '') + p.text;
               updateStreamingChrome();
+            }
+            if (
+              p.type === 'workspace'
+              && p.event === 'fileWritten'
+              && typeof p.relativePath === 'string'
+              && typeof onWorkspaceFileWritten === 'function'
+            ) {
+              onWorkspaceFileWritten(p.relativePath);
             }
           })
         : () => {};
@@ -610,7 +614,7 @@ export function initChatStream({
             last.content = result.content;
           }
           last.toolTrace = Array.isArray(result?.toolTrace)
-            ? result.toolTrace.map((e) => summarizeToolEvent(e, 'done'))
+            ? result.toolTrace.map((e) => toolLineText(e))
             : last.toolTrace || [];
           const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
           if (bubble) {
@@ -633,7 +637,7 @@ export function initChatStream({
       last.streaming = false;
       last.content = result.content ?? '';
       last.toolTrace = Array.isArray(result.toolTrace)
-        ? result.toolTrace.map((e) => summarizeToolEvent(e, 'done'))
+        ? result.toolTrace.map((e) => toolLineText(e))
         : last.toolTrace || [];
       const bubble = chatMessagesEl.querySelector('.chat-msg.assistant:last-of-type');
       if (bubble) {
