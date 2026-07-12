@@ -8,6 +8,18 @@ const {
   mergeProviderPatchIntoConfigImpl,
 } = require('../src/main/ipc/settings-handlers');
 const { createStorageService } = require('../src/main/services/storage-service');
+const {
+  createLlmConfigStorePort,
+  createUiPrefsStorePort,
+  createWorkspaceFolderStorePort,
+} = require('../src/main/adapters/persistence-store-adapters');
+const {
+  createMockProviderRuntime,
+  createMockProviderCatalog,
+} = require('./helpers/provider-ports');
+const { createProviderModelListingAdapter } = require('../src/main/adapters/provider-model-listing-adapter');
+const { createProviderSecretsPort } = require('../src/main/adapters/provider-secrets-adapter');
+const { createSettingsPresentationService } = require('../src/main/services/settings-presentation-service');
 const { REQUEST_CHANNELS: REQ } = require('../src/shared/ipc-channels');
 const { createMockIpcMain } = require('./helpers/mock-ipc');
 
@@ -24,6 +36,7 @@ const mockProviders = {
 };
 
 function makeDeps(encryptionAvailable = true) {
+  const runtime = createMockProviderRuntime((id) => mockProviders.getProvider(id));
   return {
     safeStorage: {
       isEncryptionAvailable: () => encryptionAvailable,
@@ -31,7 +44,7 @@ function makeDeps(encryptionAvailable = true) {
         return Buffer.from(`enc:${plaintext}`, 'utf8');
       },
     },
-    providers: mockProviders,
+    providerCatalog: createMockProviderCatalog((id) => mockProviders.getProvider(id)),
   };
 }
 
@@ -145,28 +158,66 @@ async function setupHandlers(t, { encryptionAvailable = true, listModelsImpl } =
     },
   };
   const providers = makeHandlerProviders({ listModelsImpl });
+  const providerRuntime = createMockProviderRuntime(
+    (id) => providers.getProvider(id),
+    { listMeta: () => providers.listProviderMeta() }
+  );
+  const providerCatalog = createMockProviderCatalog(
+    (id) => providers.getProvider(id),
+    { listMeta: () => providers.listProviderMeta() }
+  );
   const storage = createStorageService({
     app: { getPath: () => tmpDir },
     safeStorage,
     fs,
     path,
-    providers,
+    providerCatalog,
     maxChatSessions: 10,
     maxFolderHistory: 5,
+    defaultProviderId: 'openai',
+  });
+  const llmConfigStore = createLlmConfigStorePort(storage);
+  const providerSecrets = createProviderSecretsPort(storage);
+  const uiPrefsStore = createUiPrefsStorePort(storage);
+  const workspaceFolderStore = createWorkspaceFolderStorePort(storage);
+  const providerModels = createProviderModelListingAdapter({ providerRuntime, providerSecrets });
+  const presentation = createSettingsPresentationService({
+    providerCatalog,
     defaultProviderId: 'openai',
   });
   const ipcMain = createMockIpcMain();
   registerSettingsHandlers({
     ipcMain,
     safeStorage,
-    storage,
-    providers,
-    defaultProviderId: 'openai',
+    llmConfigStore,
+    uiPrefsStore,
+    workspaceFolderStore,
+    providerCatalog,
+    providerModels,
     REQ,
     setActiveWorkspaceRoot: () => {},
+    presentation,
   });
-  return { ipcMain, storage };
+  return { ipcMain, storage, llmConfigStore };
 }
+
+test('registerSettingsHandlers requires injected presentation service', () => {
+  const ipcMain = createMockIpcMain();
+  assert.throws(
+    () => registerSettingsHandlers({
+      ipcMain,
+      safeStorage: { isEncryptionAvailable: () => false },
+      llmConfigStore: {},
+      uiPrefsStore: {},
+      workspaceFolderStore: {},
+      providerCatalog: { getProvider: () => null, listProviderMeta: () => [] },
+      providerModels: { listModels: async () => ({ models: [] }) },
+      REQ,
+      setActiveWorkspaceRoot: () => {},
+    }),
+    /requires an injected settings presentation service/
+  );
+});
 
 test('commitSettings rejects an empty preset list', async (t) => {
   const { ipcMain } = await setupHandlers(t);

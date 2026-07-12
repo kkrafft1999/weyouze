@@ -1,5 +1,13 @@
 const { app, ipcMain, dialog, safeStorage, Menu, shell } = require('electron');
 const path = require('path');
+const fs = require('fs/promises');
+const providers = require('./providers');
+const { createWindow, getMainWindow } = require('./window');
+const { registerMediaCapturePermissions } = require('./permissions');
+const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('../shared/ipc-channels');
+const workspaceState = require('./workspace-state');
+const { LIMITS } = require('../shared/limits');
+const { createApplication } = require('./composition/create-application');
 
 // macOS: damit in der Menue-Bar ueber dem Bildschirm "Weyouze Anything" statt
 // "Electron" erscheint (zumindest in den Submenus: "Ueber Weyouze Anything",
@@ -10,113 +18,10 @@ const path = require('path');
 // app.setName() weiterhin "Electron" stehen. Das ist ein bekanntes macOS-
 // Limit, kein Bug der App.
 app.setName('Weyouze Anything');
-const fs = require('fs/promises');
-const providers = require('./providers');
-const { createWindow, getMainWindow } = require('./window');
-const { registerMediaCapturePermissions } = require('./permissions');
-const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('../shared/ipc-channels');
-const { createStorageService } = require('./services/storage-service');
-const { createFsService } = require('./services/fs-service');
-const { createWhisperService } = require('./services/whisper-service');
-const { createUpdateService } = require('./services/update-service');
-const { createWorkspaceToolRegistry } = require('./tools/workspace-tool-registry');
-const { registerDialogHandlers } = require('./ipc/dialog-handlers');
-const { registerFsHandlers } = require('./ipc/fs-handlers');
-const { registerWhisperHandlers } = require('./ipc/whisper-handlers');
-const { registerSettingsHandlers } = require('./ipc/settings-handlers');
-const { createSettingsPresentationService } = require('./services/settings-presentation-service');
-const { registerChatHistoryHandlers } = require('./ipc/chat-history-handlers');
-const { createChatApplication } = require('./composition/create-chat-application');
-const { registerChatHandlers } = require('./ipc/chat-handlers');
-const { registerUpdateHandlers } = require('./ipc/update-handlers');
-const workspaceState = require('./workspace-state');
-const { LIMITS } = require('../shared/limits');
 
 const DEFAULT_PROVIDER = 'openai';
 
-const storage = createStorageService({
-  app,
-  safeStorage,
-  fs,
-  path,
-  providers,
-  maxChatSessions: LIMITS.MAX_CHAT_SESSIONS,
-  maxFolderHistory: LIMITS.MAX_FOLDER_HISTORY,
-  defaultProviderId: DEFAULT_PROVIDER,
-});
-
-const fsService = createFsService({
-  fs,
-  path,
-  maxReadFileBytes: LIMITS.MAX_READ_FILE_BYTES,
-  maxWriteFileBytes: LIMITS.MAX_WRITE_FILE_BYTES,
-});
-const toolRegistry = createWorkspaceToolRegistry({ fsService });
-
-const whisperService = createWhisperService({
-  fetchImpl: fetch,
-  getOpenAIApiKey: () => storage.getOpenAIApiKey(),
-  getAppLocale: async () => {
-    const prefs = await storage.readUIPrefs();
-    return prefs.appLocale;
-  },
-});
-
-const updateService = createUpdateService({ app, storage });
-
-registerDialogHandlers({ ipcMain, dialog, getMainWindow, REQ });
-registerFsHandlers({
-  ipcMain,
-  fsService,
-  REQ,
-  getActiveWorkspaceRoot: workspaceState.getActiveWorkspaceRoot,
-});
-registerWhisperHandlers({ ipcMain, whisperService, storage, REQ });
-const settingsPresentation = createSettingsPresentationService({
-  providers,
-  defaultProviderId: DEFAULT_PROVIDER,
-});
-
-registerSettingsHandlers({
-  ipcMain,
-  safeStorage,
-  storage,
-  providers,
-  defaultProviderId: DEFAULT_PROVIDER,
-  REQ,
-  setActiveWorkspaceRoot: workspaceState.setActiveWorkspaceRoot,
-  presentation: settingsPresentation,
-});
-registerChatHistoryHandlers({ ipcMain, storage, REQ });
-registerUpdateHandlers({ ipcMain, updateService, REQ });
-
-const { engine: chatEngine } = createChatApplication({
-  storage,
-  providers,
-  toolRegistry,
-  path,
-  maxToolRounds: LIMITS.MAX_TOOL_ROUNDS,
-});
-
-registerChatHandlers({
-  ipcMain,
-  chatEngine,
-  REQ,
-  PUSH,
-});
-
-// Fragt den Update-Service und schickt das Ergebnis an den Renderer. silent=true
-// (Auto-Check beim Start) respektiert eine zuvor uebersprungene Version und
-// meldet sich nur bei einem echten Treffer; bei silent=false (manueller Check
-// ueber das Menue) kommt das Ergebnis immer, damit der Renderer auch
-// "Du bist aktuell" oder einen Fehler anzeigen kann.
-async function runUpdateCheck({ silent }) {
-  const result = await updateService.checkForUpdate({ respectIgnored: silent });
-  const win = getMainWindow();
-  if (!win || win.isDestroyed()) return;
-  if (silent && !result.updateAvailable) return;
-  win.webContents.send(PUSH.UPDATE_AVAILABLE, { ...result, manual: !silent });
-}
+let application = null;
 
 function buildApplicationMenu() {
   // Auf macOS muss das ERSTE Submenu den App-Namen als label tragen — das ist
@@ -184,7 +89,7 @@ function buildApplicationMenu() {
     submenu: [
       {
         label: 'Nach Updates suchen…',
-        click: () => { void runUpdateCheck({ silent: false }); },
+        click: () => { void application.runUpdateCheck({ silent: false }); },
       },
       { type: 'separator' },
       {
@@ -208,9 +113,26 @@ function buildApplicationMenu() {
 app.whenReady().then(async () => {
   registerMediaCapturePermissions();
 
+  application = createApplication({
+    app,
+    ipcMain,
+    dialog,
+    safeStorage,
+    fs,
+    path,
+    fetchImpl: fetch,
+    providersModule: providers,
+    workspaceState,
+    getMainWindow,
+    REQ,
+    PUSH,
+    LIMITS,
+    defaultProviderId: DEFAULT_PROVIDER,
+  });
+
   Menu.setApplicationMenu(buildApplicationMenu());
 
-  const lastFolder = await storage.getValidatedLastFolder();
+  const lastFolder = await application.getValidatedLastFolder();
   if (lastFolder) {
     workspaceState.setActiveWorkspaceRoot(lastFolder);
   }
@@ -218,7 +140,7 @@ app.whenReady().then(async () => {
   createWindow();
 
   // Verzoegerter Auto-Check, damit der Start nicht auf das Netzwerk wartet.
-  setTimeout(() => { void runUpdateCheck({ silent: true }); }, 4000);
+  setTimeout(() => { void application.runUpdateCheck({ silent: true }); }, 4000);
 
   app.on('activate', () => {
     if (!getMainWindow()) {
@@ -234,5 +156,5 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
-  providers.disposeAll();
+  application?.dispose();
 });

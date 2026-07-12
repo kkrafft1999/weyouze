@@ -6,9 +6,9 @@ const {
   buildProviderFormView,
 } = require('../../shared/contracts/settings');
 
-function createSettingsPresentationService({ providers, defaultProviderId }) {
+function createSettingsPresentationService({ providerCatalog, defaultProviderId }) {
   function getProvider(id) {
-    return providers.getProvider(id);
+    return providerCatalog.getProvider(id);
   }
 
   function resolveConfigured(meta, entry) {
@@ -91,7 +91,7 @@ function createSettingsPresentationService({ providers, defaultProviderId }) {
     connectionOverrides,
   }) {
     const active = config.activeProvider || defaultProviderId;
-    const providerMetaList = providers.listProviderMeta();
+    const providerMetaList = providerCatalog.listProviderMeta();
     const providerViews = providerMetaList.map((meta) => {
       const entry = (config.providers && config.providers[meta.id]) || {};
       return buildProviderView(meta, entry, {

@@ -21,7 +21,7 @@ function createStorageService({
   safeStorage,
   fs,
   path,
-  providers,
+  providerCatalog,
   maxChatSessions,
   maxFolderHistory,
   defaultProviderId,
@@ -83,7 +83,7 @@ function createStorageService({
   }
 
   function normalizePresetEntry(raw) {
-    return normalizePresetWire(raw, (id) => providers.getProvider(id));
+    return normalizePresetWire(raw, (id) => providerCatalog.getProvider(id));
   }
 
   function buildProviderOptionsFromPreset(preset, provider) {
@@ -104,8 +104,8 @@ function createStorageService({
   function resolveChatModelTarget(llmConfig) {
     const list = Array.isArray(llmConfig.presets) ? llmConfig.presets : [];
     const preset = list.find((p) => p && p.id === llmConfig.activePresetId);
-    if (preset && providers.getProvider(preset.providerId)) {
-      const pMeta = providers.getProvider(preset.providerId);
+    if (preset && providerCatalog.getProvider(preset.providerId)) {
+      const pMeta = providerCatalog.getProvider(preset.providerId);
       const providerOptions = buildProviderOptionsFromPreset(preset, pMeta);
       const target = {
         providerId: preset.providerId,
@@ -117,7 +117,7 @@ function createStorageService({
       return withLegacyReasoningEffort(target, providerOptions);
     }
     const ap = llmConfig.activeProvider || DEFAULT_PROVIDER;
-    const pMeta = providers.getProvider(ap);
+    const pMeta = providerCatalog.getProvider(ap);
     const entry = (llmConfig.providers && llmConfig.providers[ap]) || {};
     return withLegacyReasoningEffort({
       providerId: ap,
@@ -135,10 +135,10 @@ function createStorageService({
     if (
       (!out.presets || out.presets.length === 0)
       && typeof out.activeProvider === 'string'
-      && providers.getProvider(out.activeProvider)
+      && providerCatalog.getProvider(out.activeProvider)
     ) {
       const ap = out.activeProvider;
-      const pMeta = providers.getProvider(ap);
+      const pMeta = providerCatalog.getProvider(ap);
       const entry = (out.providers && out.providers[ap]) || {};
       const model =
         typeof entry.model === 'string' && entry.model.trim()
@@ -212,7 +212,7 @@ function createStorageService({
     if (legacy && legacy.apiKeyEnc) {
       migrated.providers.openai = {
         apiKeyEnc: legacy.apiKeyEnc,
-        model: legacy.model || providers.getProvider('openai').defaultModel,
+        model: legacy.model || providerCatalog.getProvider('openai').defaultModel,
       };
       migrated.activeProvider = 'openai';
     }
@@ -253,7 +253,7 @@ function createStorageService({
   }
 
   async function getEffectiveProviderConfig(providerId) {
-    const provider = providers.getProvider(providerId);
+    const provider = providerCatalog.getProvider(providerId);
     if (!provider) return null;
     const config = await readLLMConfig();
     const entry = (config.providers && config.providers[providerId]) || {};
@@ -273,11 +273,6 @@ function createStorageService({
         : (provider.defaultInsecureTls === true);
     }
     return out;
-  }
-
-  async function getOpenAIApiKey() {
-    const cfg = await getEffectiveProviderConfig('openai');
-    return cfg?.apiKey || null;
   }
 
   function getLastFolderConfigPath() {
@@ -552,7 +547,6 @@ function createStorageService({
     normalizePresetEntry,
     migrateLLMConfigToV3,
     getEffectiveProviderConfig,
-    getOpenAIApiKey,
     getValidatedLastFolder,
     clampSidebarWidth: clampSidebarWidthLocal,
     clampChatPanelWidth: clampChatPanelWidthLocal,

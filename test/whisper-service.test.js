@@ -14,7 +14,8 @@ function makeFetchStub(t, impl) {
 test('transcribeAudio returns an error when no OpenAI key is stored', async () => {
   const svc = createWhisperService({
     fetchImpl: async () => { throw new Error('must not be called'); },
-    getOpenAIApiKey: async () => '',
+    credentials: { getApiKey: async () => '' },
+    speechProviderId: 'openai',
     getAppLocale: async () => 'de',
   });
   const res = await svc.transcribeAudio(Buffer.from('audio'));
@@ -28,7 +29,8 @@ test('transcribeAudio sends a multipart body with the resolved language and API 
   }));
   const svc = createWhisperService({
     fetchImpl,
-    getOpenAIApiKey: async () => 'sk-test-123',
+    credentials: { getApiKey: async () => 'sk-test-123' },
+    speechProviderId: 'openai',
     getAppLocale: async () => 'de',
   });
 
@@ -57,7 +59,8 @@ test('transcribeAudio prefers an explicit language option over the app locale', 
   }));
   const svc = createWhisperService({
     fetchImpl,
-    getOpenAIApiKey: async () => 'sk-test',
+    credentials: { getApiKey: async () => 'sk-test' },
+    speechProviderId: 'openai',
     getAppLocale: async () => 'de',
   });
 
@@ -72,7 +75,8 @@ test('transcribeAudio falls back to "de" when no locale getter is provided and n
   }));
   const svc = createWhisperService({
     fetchImpl,
-    getOpenAIApiKey: async () => 'sk-test',
+    credentials: { getApiKey: async () => 'sk-test' },
+    speechProviderId: 'openai',
   });
 
   await svc.transcribeAudio(Buffer.from('x'));
@@ -86,7 +90,8 @@ test('transcribeAudio maps a non-"en" app locale to "de"', async (t) => {
   }));
   const svc = createWhisperService({
     fetchImpl,
-    getOpenAIApiKey: async () => 'sk-test',
+    credentials: { getApiKey: async () => 'sk-test' },
+    speechProviderId: 'openai',
     getAppLocale: async () => 'fr',
   });
 
@@ -101,7 +106,8 @@ test('transcribeAudio returns an empty string when the API omits text', async (t
   }));
   const svc = createWhisperService({
     fetchImpl,
-    getOpenAIApiKey: async () => 'sk-test',
+    credentials: { getApiKey: async () => 'sk-test' },
+    speechProviderId: 'openai',
     getAppLocale: async () => 'de',
   });
 
@@ -117,7 +123,8 @@ test('transcribeAudio surfaces a JSON error message from a failed HTTP response'
   }));
   const svc = createWhisperService({
     fetchImpl,
-    getOpenAIApiKey: async () => 'sk-test',
+    credentials: { getApiKey: async () => 'sk-test' },
+    speechProviderId: 'openai',
     getAppLocale: async () => 'de',
   });
 
@@ -133,7 +140,8 @@ test('transcribeAudio falls back to statusText when the error body is not JSON',
   }));
   const svc = createWhisperService({
     fetchImpl,
-    getOpenAIApiKey: async () => 'sk-test',
+    credentials: { getApiKey: async () => 'sk-test' },
+    speechProviderId: 'openai',
     getAppLocale: async () => 'de',
   });
 
@@ -144,7 +152,8 @@ test('transcribeAudio falls back to statusText when the error body is not JSON',
 test('transcribeAudio reports network failures as an error instead of throwing', async () => {
   const svc = createWhisperService({
     fetchImpl: async () => { throw new Error('fetch failed: ECONNRESET'); },
-    getOpenAIApiKey: async () => 'sk-test',
+    credentials: { getApiKey: async () => 'sk-test' },
+    speechProviderId: 'openai',
     getAppLocale: async () => 'de',
   });
 

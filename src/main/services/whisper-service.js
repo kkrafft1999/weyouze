@@ -1,4 +1,4 @@
-function createWhisperService({ fetchImpl, getOpenAIApiKey, getAppLocale }) {
+function createWhisperService({ fetchImpl, credentials, speechProviderId = 'openai', getAppLocale }) {
   const fetchFn = fetchImpl;
 
   async function resolveLanguage(options) {
@@ -11,8 +11,10 @@ function createWhisperService({ fetchImpl, getOpenAIApiKey, getAppLocale }) {
   }
 
   async function transcribeAudio(audioBuffer, options) {
-    const apiKey = await getOpenAIApiKey();
-    if (!apiKey) return { error: 'Kein OpenAI-Key hinterlegt (Whisper benötigt einen).' };
+    const apiKey = await credentials.getApiKey(speechProviderId);
+    if (!apiKey) {
+      return { error: 'Kein OpenAI-Key hinterlegt (Whisper benötigt einen).' };
+    }
 
     const language = await resolveLanguage(options);
     const boundary = `----ElectronWhisper${Date.now()}`;

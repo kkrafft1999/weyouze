@@ -1,10 +1,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const providers = require('../src/main/providers');
+const {
+  createProviderRuntimeAdapter,
+  createProviderCatalogAdapter,
+} = require('../src/main/adapters/provider-catalog-adapter');
 const { createSettingsPresentationService } = require('../src/main/services/settings-presentation-service');
 
+const providerCatalog = createProviderCatalogAdapter(createProviderRuntimeAdapter(providers));
+
 const presentation = createSettingsPresentationService({
-  providers,
+  providerCatalog,
   defaultProviderId: 'openai',
 });
 
