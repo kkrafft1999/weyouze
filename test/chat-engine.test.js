@@ -42,7 +42,7 @@ function assistantToolCall(id, name, args) {
   };
 }
 
-function makeEngine(results, { storage, toolRegistry, provider } = {}) {
+function makeEngine(results, { storage, toolRegistry, provider, providers } = {}) {
   let resultIndex = 0;
   const calls = [];
   const scriptedProvider = provider || {
@@ -62,7 +62,7 @@ function makeEngine(results, { storage, toolRegistry, provider } = {}) {
     toolRegistry: toolRegistry || makeToolRegistry(),
     engine: createChatEngine({
       storage: storage || makeStorage(),
-      providers: { getProvider: () => scriptedProvider },
+      providers: providers || { getProvider: () => scriptedProvider },
       toolRegistry: toolRegistry || makeToolRegistry(),
       path,
       maxToolRounds: 3,
@@ -99,6 +99,7 @@ test('engine validates provider configuration before streaming', async () => {
     storage: makeStorage({
       resolveChatModelTarget: () => ({ providerId: 'ghost' }),
     }),
+    providers: { getProvider: () => null },
   });
 
   const result = await engine.send({
@@ -177,10 +178,11 @@ test('engine supplies a synthetic tool error when no workspace is open', async (
   assert.match(toolMessage.content, /Kein Arbeitsordner geöffnet/);
 });
 
-test('engine preserves debug_wait metadata and stops at its tool-round limit', async () => {
-  const { engine } = makeEngine(() =>
-    assistantToolCall('call_1', 'debug_wait', { duration_seconds: 0.1 })
-  );
+test('engine preserves debug_wait metadata in its tool trace', async () => {
+  const { engine } = makeEngine([
+    assistantToolCall('call_1', 'debug_wait', { duration_seconds: 0.1 }),
+    assistantText('Fertig.'),
+  ]);
 
   const result = await engine.send({
     sessionId: 'renderer-1',
@@ -190,9 +192,25 @@ test('engine preserves debug_wait metadata and stops at its tool-round limit', a
     },
   });
 
-  assert.equal(result.code, 'TOOL_LIMIT');
-  assert.equal(result.toolTrace.length, 3);
-  assert.ok(result.toolTrace.every((entry) => entry.waitMs === 500));
+  assert.equal(result.content, 'Fertig.');
+  assert.equal(result.toolTrace[0].waitMs, 500);
+});
+
+test('engine stops at its configured tool-round limit', async () => {
+  const { engine } = makeEngine(() =>
+    assistantToolCall('call_1', 'list_directory', { relative_path: '.' })
+  );
+
+  const result = await engine.send({
+    sessionId: 'renderer-1',
+    payload: {
+      messages: [{ role: 'user', content: 'Liste endlos' }],
+      workspaceRoot: '/tmp/weyouze-project',
+    },
+  });
+
+  assert.equal(result.code, 'TOOL_LIMIT', result.error);
+  assert.equal(result.rawExchanges.length, 3);
 });
 
 test('engine emits delta and reasoning events from provider callbacks', async () => {
