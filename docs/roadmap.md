@@ -31,13 +31,19 @@ wieder entfernt.
   `read_file_text`, optional `write_file_text`, …)
 - 🔔 Update-Notifier (Stufe 1) über GitHub Releases
 - 🖥️ Builds für macOS (Apple Silicon) und Windows über Electron Forge
+- 📜 Gemeinsame **Contract-Schicht** (`src/shared/contracts/`): versionierte
+  DTOs/Events, Enums und Validatoren für Chat, Streaming, Tools und Token-Usage
+  — Single Source of Truth für Main (require) und Renderer (generiertes
+  ESM-Bundle); beseitigt die doppelte Usage-/`debug_wait`-Logik (Etappe 1)
 
 ## 🚧 Jetzt / als Nächstes
 
 - 🏗️ **Saubere, frontend-unabhängige Anwendungsarchitektur** als Grundlage
   für Provider, Tools, Skills und weitere funktionale Module:
-  1. **Stabile Verträge definieren:** versionierte DTOs und Events für Chat,
-     Streaming, Tools und Einstellungen in einer gemeinsamen Contract-Schicht
+  1. ✅ **Stabile Verträge definieren:** versionierte DTOs und Events für Chat,
+     Streaming, Tools und Token-Usage liegen als gemeinsame Contract-Schicht
+     (`src/shared/contracts/`) vor; Main und Renderer sind daran gebunden.
+     Offen: DTOs für die Einstellungen (Provider-/Preset-/UI-Prefs) ergänzen.
   2. **Anwendungs-Core extrahieren:** Chat-Orchestrierung, Tool-Schleife und
      Workspace-Kontext aus Electron-IPC lösen und ohne UI-/Electron-Abhängigkeit
      testbar machen
