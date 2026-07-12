@@ -150,8 +150,9 @@
   <text class="note" x="90" y="768" fill="#204b3d">Usage-Aggregation, RAW-Protokoll, Abbruch</text>
   <text class="note" x="78" y="788" fill="#204b3d">• chat-history-trim.js — Kontextfenster (Trim)</text>
   <text class="note" x="78" y="808" fill="#204b3d">• API: send() · explain() · abort()</text>
-  <rect x="78" y="822" width="398" height="36" rx="8" fill="#eaf7f0" stroke="#0e7a5b" stroke-width="1" stroke-dasharray="4 3"/>
-  <text x="90" y="844" font-size="10.5" fill="#356b58">Importiert nur src/application/*, shared/contracts und shared/runtime — nie Adapter, Provider oder Electron.</text>
+  <rect x="78" y="822" width="398" height="42" rx="8" fill="#eaf7f0" stroke="#0e7a5b" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="90" y="840" font-size="10.5" fill="#356b58">Nur src/application/*, shared/contracts und shared/runtime.</text>
+  <text x="90" y="856" font-size="10.5" fill="#356b58">Keine Adapter-, Provider-, Electron- oder Node-Imports.</text>
 
   <text class="bsub" x="510" y="722" font-weight="700" fill="#0b5b44">ANWENDUNGS-PORTS — src/application/ports (≠ Contracts)</text>
   <g>
