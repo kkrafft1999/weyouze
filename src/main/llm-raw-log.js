@@ -96,7 +96,7 @@ function serializeBody(body) {
 
 /**
  * Recorder fuer genau eine LLM-Runde. Der Provider meldet seinen Request und
- * (ueber onRawLine) jede empfangene Stream-Zeile; chat-handlers ruft am Ende
+ * (ueber onRawLine) jede empfangene Stream-Zeile; der Chat-Core ruft am Ende
  * toExchange() mit Metadaten auf.
  */
 function createRoundRecorder() {

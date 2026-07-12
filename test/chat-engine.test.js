@@ -42,7 +42,7 @@ function assistantToolCall(id, name, args) {
   };
 }
 
-function makeEngine(results, { storage, toolRegistry, provider } = {}) {
+function makeEngine(results, { storage, toolRegistry, provider, providers } = {}) {
   let resultIndex = 0;
   const calls = [];
   const scriptedProvider = provider || {
@@ -62,7 +62,7 @@ function makeEngine(results, { storage, toolRegistry, provider } = {}) {
     toolRegistry: toolRegistry || makeToolRegistry(),
     engine: createChatEngine({
       storage: storage || makeStorage(),
-      providers: { getProvider: () => scriptedProvider },
+      providers: providers || { getProvider: () => scriptedProvider },
       toolRegistry: toolRegistry || makeToolRegistry(),
       path,
       maxToolRounds: 3,
@@ -94,6 +94,45 @@ test('engine streams contract events and returns a chat result without Electron'
   assert.deepEqual(events.map((event) => event.payload.phase), ['waiting', 'idle']);
 });
 
+test('engine validates provider configuration before streaming', async () => {
+  const { engine, calls } = makeEngine([assistantText('unused')], {
+    storage: makeStorage({
+      resolveChatModelTarget: () => ({ providerId: 'ghost' }),
+    }),
+    providers: { getProvider: () => null },
+  });
+
+  const result = await engine.send({
+    sessionId: 'renderer-1',
+    payload: { messages: [{ role: 'user', content: 'Hi' }] },
+  });
+
+  assert.equal(result.code, 'INVALID');
+  assert.match(result.error, /Unbekannter Provider: ghost/);
+  assert.equal(calls.length, 0);
+});
+
+test('engine rejects a missing required API key without streaming', async () => {
+  const { engine, calls } = makeEngine([assistantText('unused')], {
+    provider: {
+      defaultModel: 'test-model',
+      fields: { apiKey: true },
+      async streamChatRound() {
+        calls.push('called');
+      },
+    },
+    storage: makeStorage({ getEffectiveProviderConfig: async () => ({}) }),
+  });
+
+  const result = await engine.send({
+    sessionId: 'renderer-1',
+    payload: { messages: [{ role: 'user', content: 'Hi' }] },
+  });
+
+  assert.equal(result.code, 'NO_API_KEY');
+  assert.equal(calls.length, 0);
+});
+
 test('engine runs the tool loop and emits tool events through its event sink', async () => {
   const toolRegistry = makeToolRegistry(() => JSON.stringify({ items: ['README.md'] }));
   const { engine, calls } = makeEngine([
@@ -118,6 +157,114 @@ test('engine runs the tool loop and emits tool events through its event sink', a
   assert.equal(calls[1].messages.find((message) => message.role === 'tool').tool_call_id, 'call_1');
   const toolEvents = events.filter((event) => event.type === CHAT_ENGINE_EVENTS.TOOL_LINE);
   assert.deepEqual(toolEvents.map((event) => event.payload.phase), ['start', 'done']);
+});
+
+test('engine supplies a synthetic tool error when no workspace is open', async () => {
+  const toolRegistry = makeToolRegistry();
+  const { engine, calls } = makeEngine([
+    assistantToolCall('call_1', 'list_directory', { relative_path: '.' }),
+    assistantText('Kein Arbeitsordner offen.'),
+  ], { toolRegistry });
+
+  const result = await engine.send({
+    sessionId: 'renderer-1',
+    payload: { messages: [{ role: 'user', content: 'Liste Dateien' }] },
+  });
+
+  assert.equal(result.content, 'Kein Arbeitsordner offen.');
+  assert.equal(toolRegistry.calls.length, 0);
+  assert.equal(result.toolTrace[0].noWorkspace, true);
+  const toolMessage = calls[1].messages.find((message) => message.role === 'tool');
+  assert.match(toolMessage.content, /Kein Arbeitsordner geöffnet/);
+});
+
+test('engine preserves debug_wait metadata in its tool trace', async () => {
+  const { engine } = makeEngine([
+    assistantToolCall('call_1', 'debug_wait', { duration_seconds: 0.1 }),
+    assistantText('Fertig.'),
+  ]);
+
+  const result = await engine.send({
+    sessionId: 'renderer-1',
+    payload: {
+      messages: [{ role: 'user', content: 'Warte' }],
+      workspaceRoot: '/tmp/weyouze-project',
+    },
+  });
+
+  assert.equal(result.content, 'Fertig.');
+  assert.equal(result.toolTrace[0].waitMs, 500);
+});
+
+test('engine stops at its configured tool-round limit', async () => {
+  const { engine } = makeEngine(() =>
+    assistantToolCall('call_1', 'list_directory', { relative_path: '.' })
+  );
+
+  const result = await engine.send({
+    sessionId: 'renderer-1',
+    payload: {
+      messages: [{ role: 'user', content: 'Liste endlos' }],
+      workspaceRoot: '/tmp/weyouze-project',
+    },
+  });
+
+  assert.equal(result.code, 'TOOL_LIMIT', result.error);
+  assert.equal(result.rawExchanges.length, 3);
+});
+
+test('engine emits delta and reasoning events from provider callbacks', async () => {
+  const provider = {
+    defaultModel: 'test-model',
+    fields: {},
+    async streamChatRound({ callbacks }) {
+      callbacks.onTextDelta('Teil');
+      callbacks.onReasoningDelta('Gedanke');
+      return assistantText('Teil');
+    },
+  };
+  const { engine } = makeEngine([], { provider });
+  const events = [];
+
+  await engine.send({
+    sessionId: 'renderer-1',
+    payload: { messages: [{ role: 'user', content: 'Hi' }] },
+    onEvent: (event) => events.push(event),
+  });
+
+  assert.deepEqual(events.filter((event) => event.type === CHAT_ENGINE_EVENTS.DELTA).map((event) => event.payload), [
+    { text: 'Teil' },
+  ]);
+  assert.deepEqual(events.filter((event) => event.type === CHAT_ENGINE_EVENTS.PROGRESS).map((event) => event.payload), [
+    { type: 'phase', phase: 'waiting' },
+    { type: 'phase', phase: 'generating' },
+    { type: 'reasoning', text: 'Gedanke' },
+    { type: 'phase', phase: 'idle' },
+  ]);
+});
+
+test('engine passes the write preference to its tool registry', async () => {
+  const getToolsCalls = [];
+  const toolRegistry = makeToolRegistry();
+  toolRegistry.getTools = (options) => {
+    getToolsCalls.push(options);
+    return [{ type: 'function', function: { name: options.allowWrite ? 'write_file_text' : 'list_directory' } }];
+  };
+  const { engine, calls } = makeEngine([assistantText('ok')], {
+    toolRegistry,
+    storage: makeStorage({ readUIPrefs: async () => ({ allowWorkspaceWrite: true }) }),
+  });
+
+  await engine.send({
+    sessionId: 'renderer-1',
+    payload: {
+      messages: [{ role: 'user', content: 'Hi' }],
+      workspaceRoot: '/tmp/weyouze-project',
+    },
+  });
+
+  assert.deepEqual(getToolsCalls, [{ allowWrite: true }]);
+  assert.equal(calls[0].tools[0].function.name, 'write_file_text');
 });
 
 test('engine aborts only the targeted in-flight session', async () => {

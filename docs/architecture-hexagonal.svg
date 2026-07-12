@@ -81,8 +81,8 @@
   <text x="464" y="618" font-size="11" font-weight="700" fill="#0b5b44">Regel der Hexagonal-Architektur</text>
   <text x="464" y="637" font-size="10.5" fill="#356b58">Der Kern kennt keine Adapter — er spricht mit</text>
   <text x="464" y="653" font-size="10.5" fill="#356b58">der Außenwelt ausschließlich über Ports (Verträge).</text>
-  <text x="464" y="676" font-size="10.5" font-style="italic" fill="#8a5a12">Zielbild — aktuell noch in chat-handlers.js (IPC-Schicht);</text>
-  <text x="464" y="692" font-size="10.5" font-style="italic" fill="#8a5a12">Extraktion = Roadmap-Etappe 2/3.</text>
+  <text x="464" y="676" font-size="10.5" font-style="italic" fill="#0b5b44">Etappe 2 umgesetzt: chat-engine.js ist der</text>
+  <text x="464" y="692" font-size="10.5" font-style="italic" fill="#0b5b44">UI-/Electron-freie Kern; Ports folgen in Etappe 3.</text>
 
   <!-- ============ PORTS (on hexagon boundary) ============ -->
   <!-- driving ports (left edge) -->

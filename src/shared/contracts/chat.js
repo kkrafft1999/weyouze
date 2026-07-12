@@ -3,8 +3,9 @@
  *
  * Factories für die Ergebnis-Objekte von CHAT_SEND und für die Push-Events
  * (chat:delta, chat:tool-line, chat:progress). Sie erzeugen exakt die Formen,
- * die bisher inline in src/main/ipc/chat-handlers.js gebaut wurden — so bleibt
- * das Wire-Format stabil, während Erzeugung und Validierung zentral liegen.
+ * die vom Chat-Core erzeugt und vom IPC-Adapter an den Renderer weitergeleitet
+ * werden — so bleibt das Wire-Format stabil, während Erzeugung und Validierung
+ * zentral liegen.
  */
 'use strict';
 
