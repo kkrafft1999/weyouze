@@ -66,6 +66,31 @@ function createListModelsResult({ models, error } = {}) {
   return { models: out };
 }
 
+/** Erlaubte Preset-Options-Keys laut Provider-Präsentation. */
+function allowedPresetOptionKeys(provider) {
+  const fields = provider?.presentation?.presetFields;
+  if (!Array.isArray(fields)) return new Set();
+  const out = new Set();
+  for (const field of fields) {
+    if (typeof field?.key === 'string' && field.key.trim()) out.add(field.key.trim());
+  }
+  return out;
+}
+
+/** Filtert ein Options-Objekt auf deklarierte presetFields-Keys. */
+function filterDeclaredPresetOptions(options, provider) {
+  if (!options || typeof options !== 'object') return undefined;
+  const allowed = allowedPresetOptionKeys(provider);
+  if (allowed.size === 0) return undefined;
+  const out = {};
+  for (const [key, value] of Object.entries(options)) {
+    if (!allowed.has(key)) continue;
+    if (typeof value === 'string' && value.trim()) out[key] = value.trim();
+    else if (value != null && value !== '') out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /** Extrahiert provider-spezifische Preset-Optionen aus Wire- oder Legacy-Feldern. */
 function extractPresetOptions(raw, provider) {
   const fields = provider?.presentation?.presetFields;
@@ -407,4 +432,6 @@ module.exports = {
   buildPresetFieldViews,
   buildProviderFormView,
   extractPresetOptions,
+  allowedPresetOptionKeys,
+  filterDeclaredPresetOptions,
 };

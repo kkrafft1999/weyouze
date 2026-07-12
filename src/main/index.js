@@ -26,6 +26,7 @@ const { registerWhisperHandlers } = require('./ipc/whisper-handlers');
 const { registerSettingsHandlers } = require('./ipc/settings-handlers');
 const { createSettingsPresentationService } = require('./services/settings-presentation-service');
 const { registerChatHistoryHandlers } = require('./ipc/chat-history-handlers');
+const { createChatApplication } = require('./composition/create-chat-application');
 const { registerChatHandlers } = require('./ipc/chat-handlers');
 const { registerUpdateHandlers } = require('./ipc/update-handlers');
 const workspaceState = require('./workspace-state');
@@ -88,14 +89,18 @@ registerSettingsHandlers({
 });
 registerChatHistoryHandlers({ ipcMain, storage, REQ });
 registerUpdateHandlers({ ipcMain, updateService, REQ });
-registerChatHandlers({
-  ipcMain,
+
+const { engine: chatEngine } = createChatApplication({
   storage,
   providers,
   toolRegistry,
   path,
-  defaultProviderId: DEFAULT_PROVIDER,
   maxToolRounds: LIMITS.MAX_TOOL_ROUNDS,
+});
+
+registerChatHandlers({
+  ipcMain,
+  chatEngine,
   REQ,
   PUSH,
 });

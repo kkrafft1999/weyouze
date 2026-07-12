@@ -2,6 +2,14 @@
 // Source of Truth); hier nur re-exportiert, damit die Provider sie weiterhin
 // aus stream-helpers beziehen können.
 const { createEmptyUsage, normalizeUsage, mergeUsage } = require('../../shared/contracts/usage');
+const {
+  isAbortError,
+  createChatAbortError,
+  abortIfRequested,
+  bindAbortSignalToReader,
+  sleepAbortable,
+} = require('../../shared/runtime/abort');
+const { describeFetchError } = require('../../shared/runtime/fetch-errors');
 
 // onRawLine (optional) erhaelt jede rohe Stream-Zeile, bevor sie geyieldet
 // wird — genutzt vom RAW-LLM-Protokoll, das hier alle Provider zentral abgreift.
@@ -61,19 +69,6 @@ async function* iterSseEvents(reader, abortSignal, onRawLine) {
   }
 }
 
-// Reichert fetch-Fehler um die undici-cause (ECONNREFUSED, ENOTFOUND, …) an,
-// damit lokale Verbindungsprobleme (Ollama, MLX-LM) diagnostizierbar bleiben.
-function describeFetchError(err, baseUrl) {
-  const cause = err?.cause;
-  const causeCode = cause?.code || cause?.errno;
-  const causeMsg = cause?.message;
-  const main = err?.message || `Verbindung zu ${baseUrl} fehlgeschlagen.`;
-  if (causeCode || causeMsg) {
-    return `${main} (${[causeCode, causeMsg].filter(Boolean).join(': ')})`;
-  }
-  return main;
-}
-
 async function readErrorMessage(res) {
   const errText = await res.text().catch(() => '');
   let msg = res.statusText || `HTTP ${res.status}`;
@@ -96,68 +91,8 @@ function safeJsonParse(s, fallback = {}) {
   }
 }
 
-function isAbortError(err) {
-  return err?.name === 'AbortError' || err?.code === 'ABORT_ERR';
-}
-
-function createChatAbortError(message = 'Chat abgebrochen.') {
-  const err = new Error(message);
-  err.name = 'AbortError';
-  return err;
-}
-
-function bindAbortSignalToReader(reader, abortSignal) {
-  if (!abortSignal || !reader) return () => {};
-  const cancelReader = () => {
-    if (typeof reader.cancel === 'function') {
-      reader.cancel('Chat abgebrochen.').catch(() => {});
-    }
-  };
-  if (abortSignal.aborted) {
-    cancelReader();
-    return () => {};
-  }
-  abortSignal.addEventListener('abort', cancelReader, { once: true });
-  return () => abortSignal.removeEventListener('abort', cancelReader);
-}
-
-function abortIfRequested(abortSignal) {
-  if (!abortSignal?.aborted) return;
-  const reason = abortSignal.reason;
-  if (reason instanceof Error) throw reason;
-  const err = new Error('Aborted');
-  err.name = 'AbortError';
-  throw err;
-}
-
 function cancelledChatRound(message) {
   return { cancelled: true, message };
-}
-
-async function sleepAbortable(ms, abortSignal) {
-  abortIfRequested(abortSignal);
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      cleanup();
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      cleanup();
-      const reason = abortSignal?.reason;
-      if (reason instanceof Error) {
-        reject(reason);
-        return;
-      }
-      const err = new Error('Aborted');
-      err.name = 'AbortError';
-      reject(err);
-    };
-    const cleanup = () => {
-      clearTimeout(timer);
-      abortSignal?.removeEventListener('abort', onAbort);
-    };
-    abortSignal?.addEventListener('abort', onAbort, { once: true });
-  });
 }
 
 module.exports = {

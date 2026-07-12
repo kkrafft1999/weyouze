@@ -5,6 +5,7 @@ const {
   clampChatPanelWidth,
   normalizePresetWire,
   normalizeUiPrefs,
+  extractPresetOptions,
 } = require('../../shared/contracts/settings');
 
 function createStorageService({
@@ -77,31 +78,46 @@ function createStorageService({
     return normalizePresetWire(raw, (id) => providers.getProvider(id));
   }
 
+  function buildProviderOptionsFromPreset(preset, provider) {
+    const opts = extractPresetOptions(preset, provider);
+    return Object.keys(opts).length > 0 ? opts : undefined;
+  }
+
+  function withLegacyReasoningEffort(target, providerOptions) {
+    if (providerOptions?.reasoningEffort) {
+      target.reasoningEffort = providerOptions.reasoningEffort;
+    } else {
+      target.reasoningEffort = null;
+    }
+    return target;
+  }
+
   /** Chat-Ziel aus LLM-Konfiguration (Preset-first, Fallback aktiv/Provider-Modell). */
   function resolveChatModelTarget(llmConfig) {
     const list = Array.isArray(llmConfig.presets) ? llmConfig.presets : [];
     const preset = list.find((p) => p && p.id === llmConfig.activePresetId);
     if (preset && providers.getProvider(preset.providerId)) {
       const pMeta = providers.getProvider(preset.providerId);
-      return {
+      const providerOptions = buildProviderOptionsFromPreset(preset, pMeta);
+      const target = {
         providerId: preset.providerId,
         model: typeof preset.model === 'string' && preset.model.trim()
           ? preset.model.trim()
           : pMeta.defaultModel,
-        reasoningEffort: preset.reasoningEffort || null,
       };
+      if (providerOptions) target.providerOptions = providerOptions;
+      return withLegacyReasoningEffort(target, providerOptions);
     }
     const ap = llmConfig.activeProvider || DEFAULT_PROVIDER;
     const pMeta = providers.getProvider(ap);
     const entry = (llmConfig.providers && llmConfig.providers[ap]) || {};
-    return {
+    return withLegacyReasoningEffort({
       providerId: ap,
       model:
         typeof entry.model === 'string' && entry.model.trim()
           ? entry.model.trim()
           : (pMeta && pMeta.defaultModel) || '',
-      reasoningEffort: null,
-    };
+    }, undefined);
   }
 
   async function migrateLLMConfigToV3(existing, { persist = true } = {}) {

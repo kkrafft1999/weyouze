@@ -93,7 +93,7 @@ test('resolveChatModelTarget prefers active preset', () => {
     activePresetId: 'p1',
     activeProvider: 'openai',
     presets: [
-      { id: 'p1', providerId: 'anthropic', model: 'claude-custom', reasoningEffort: null, menuVisible: true },
+      { id: 'p1', providerId: 'anthropic', model: 'claude-custom', menuVisible: true },
     ],
     providers: {},
   });
@@ -102,6 +102,24 @@ test('resolveChatModelTarget prefers active preset', () => {
     model: 'claude-custom',
     reasoningEffort: null,
   });
+});
+
+test('resolveChatModelTarget emits providerOptions from declared preset fields', () => {
+  const storage = makeStorage('/tmp/unused');
+  const openai = storage.normalizePresetEntry({
+    id: 'p1',
+    providerId: 'openai',
+    model: 'gpt-4o-mini',
+    reasoningEffort: 'high',
+  });
+  const target = storage.resolveChatModelTarget({
+    activePresetId: 'p1',
+    presets: [openai],
+    providers: { openai: { apiKeyEnc: 'x' } },
+  });
+  assert.equal(target.providerId, 'openai');
+  assert.deepEqual(target.providerOptions, { reasoningEffort: 'high' });
+  assert.equal(target.reasoningEffort, 'high');
 });
 
 test('normalizeSessionForStore strips invalid roles and caps title', () => {

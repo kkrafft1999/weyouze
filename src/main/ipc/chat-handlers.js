@@ -1,21 +1,12 @@
-const { createChatEngine, CHAT_ENGINE_EVENTS, resolveToolRoundLimit } = require('../chat-engine');
+const { CHAT_ENGINE_EVENTS, resolveToolRoundLimit } = require('../chat-engine');
+
 function registerChatHandlers({
   ipcMain,
-  storage,
-  providers,
-  toolRegistry,
-  path,
-  maxToolRounds,
+  chatEngine,
   REQ,
   PUSH,
 }) {
-  const engine = createChatEngine({
-    storage,
-    providers,
-    toolRegistry,
-    path,
-    maxToolRounds,
-  });
+  const engine = chatEngine;
 
   const eventChannels = {
     [CHAT_ENGINE_EVENTS.DELTA]: PUSH.CHAT_DELTA,

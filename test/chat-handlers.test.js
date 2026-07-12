@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const { registerChatHandlers, resolveToolRoundLimit } = require('../src/main/ipc/chat-handlers');
+const { createChatApplication } = require('../src/main/composition/create-chat-application');
 const { REQUEST_CHANNELS: REQ, PUSH_CHANNELS: PUSH } = require('../src/shared/ipc-channels');
 
 test('resolveToolRoundLimit clamps to configured bounds', () => {
@@ -108,21 +109,42 @@ function toolCall(id, name, args) {
   return { id, type: 'function', function: { name, arguments: JSON.stringify(args) } };
 }
 
+function buildTestChatEngine({
+  provider,
+  storage = makeStorage(),
+  toolRegistry = makeToolRegistryStub(),
+  maxToolRounds = 5,
+  providers,
+} = {}) {
+  const providerRegistry = providers || { getProvider: () => provider };
+  const { engine } = createChatApplication({
+    storage,
+    providers: providerRegistry,
+    toolRegistry,
+    path,
+    maxToolRounds,
+  });
+  return engine;
+}
+
 function setupChatHandlers({
   provider,
   storage = makeStorage(),
   toolRegistry = makeToolRegistryStub(),
   maxToolRounds = 5,
+  providers,
 } = {}) {
   const ipcMain = makeIpcMain();
+  const chatEngine = buildTestChatEngine({
+    provider,
+    storage,
+    toolRegistry,
+    maxToolRounds,
+    providers,
+  });
   registerChatHandlers({
     ipcMain,
-    storage,
-    providers: { getProvider: () => provider },
-    toolRegistry,
-    path,
-    defaultProviderId: 'test',
-    maxToolRounds,
+    chatEngine,
     REQ,
     PUSH,
   });
@@ -131,6 +153,7 @@ function setupChatHandlers({
     explainHandler: ipcMain.handlers.get(REQ.CHAT_EXPLAIN),
     abortHandler: ipcMain.onHandlers.get(REQ.CHAT_ABORT),
     toolRegistry,
+    chatEngine,
   };
 }
 
@@ -145,16 +168,17 @@ test('CHAT_SEND rejects an empty messages payload', async () => {
 
 test('CHAT_SEND reports an unknown provider without calling streamChatRound', async () => {
   const { provider, calls } = makeScriptedProvider([assistantText('unused')]);
-  const storage = makeStorage({ resolveChatModelTarget: () => ({ providerId: 'ghost' }) });
+  const storage = makeStorage({ resolveChatModelTarget: () => ({ providerId: 'ghost', model: 'x' }) });
   const ipcMain = makeIpcMain();
+  const chatEngine = buildTestChatEngine({
+    provider,
+    storage,
+    toolRegistry: makeToolRegistryStub(),
+    providers: { getProvider: () => null },
+  });
   registerChatHandlers({
     ipcMain,
-    storage,
-    providers: { getProvider: () => null },
-    toolRegistry: makeToolRegistryStub(),
-    path,
-    defaultProviderId: 'test',
-    maxToolRounds: 5,
+    chatEngine,
     REQ,
     PUSH,
   });
@@ -350,14 +374,14 @@ test('CHAT_EXPLAIN returns the provider content without recording tools or a raw
   const { provider, calls } = makeScriptedProvider([assistantText('Erklärung des Ablaufs.')]);
   const storage = makeStorage();
   const ipcMain = makeIpcMain();
+  const chatEngine = buildTestChatEngine({
+    provider,
+    storage,
+    toolRegistry: makeToolRegistryStub(),
+  });
   registerChatHandlers({
     ipcMain,
-    storage,
-    providers: { getProvider: () => provider },
-    toolRegistry: makeToolRegistryStub(),
-    path,
-    defaultProviderId: 'test',
-    maxToolRounds: 5,
+    chatEngine,
     REQ,
     PUSH,
   });

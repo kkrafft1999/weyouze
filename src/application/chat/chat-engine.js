@@ -1,0 +1,408 @@
+'use strict';
+
+const { isAbortError, createChatAbortError } = require('../../shared/runtime/abort');
+const { mergeUsage } = require('../../shared/contracts/usage');
+const {
+  CHAT_ERROR_CODES,
+  CHAT_PHASES,
+  TOOL_LINE_PHASES,
+  resolveDebugWaitMs,
+  createChatResult,
+  createCancelledChatResult,
+  createChatErrorResult,
+  createDeltaEvent,
+  createToolLineEvent,
+  createPhaseEvent,
+  createReasoningEvent,
+} = require('../../shared/contracts');
+const {
+  resolveHistoryCharLimit,
+  trimHistoryMessages,
+  truncateStaleToolOutputs,
+} = require('./chat-history-trim');
+
+const CHAT_ENGINE_EVENTS = Object.freeze({
+  DELTA: 'delta',
+  PROGRESS: 'progress',
+  TOOL_LINE: 'tool-line',
+});
+
+function workspaceSystemPrompt(workspaceRoot, selectedRelPath, selectedIsDirectory, basename, toolsPrompt) {
+  const name = basename(workspaceRoot);
+  let prompt = `Du hilfst beim Durchsuchen des in der App geöffneten Ordners („${name}“).`;
+  if (toolsPrompt) prompt += `\n\n${toolsPrompt}`;
+  prompt += `\n\nAntworte auf Deutsch, sachlich und knapp.`;
+  if (selectedRelPath) {
+    const kind = selectedIsDirectory ? 'Ordner' : 'Datei';
+    prompt +=
+      `\n\nDer Nutzer hat gerade folgende ${kind} im Baum ausgewählt: „${selectedRelPath}“. ` +
+      `Beziehe dich bei Fragen ohne expliziten Pfad auf diese Auswahl.`;
+  }
+  return prompt;
+}
+
+function buildToolEntry(toolName, args, extra) {
+  const entry = { tool: toolName, args, ...extra };
+  if (toolName === 'debug_wait') entry.waitMs = resolveDebugWaitMs(args);
+  return entry;
+}
+
+function summarizeToolCall(toolCall) {
+  return {
+    id: toolCall?.id || null,
+    name: toolCall?.function?.name || null,
+    arguments: typeof toolCall?.function?.arguments === 'string' ? toolCall.function.arguments : '',
+  };
+}
+
+function snapshotMessages(apiMessages) {
+  return apiMessages.map((message) => {
+    const row = {
+      role: message.role,
+      content: typeof message.content === 'string' ? message.content : message.content == null ? '' : String(message.content),
+    };
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length) {
+      row.tool_calls = message.tool_calls.map(summarizeToolCall);
+    }
+    if (message.tool_call_id) row.tool_call_id = message.tool_call_id;
+    return row;
+  });
+}
+
+function parseResponseMessage(message) {
+  if (!message) return null;
+  return {
+    text: typeof message.content === 'string' ? message.content : '',
+    toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls.map(summarizeToolCall) : [],
+  };
+}
+
+function resolveToolRoundLimit(uiPrefs, mainDefault) {
+  const MIN = 1;
+  const MAX_CAP = 500;
+  let value =
+    typeof uiPrefs?.maxToolRounds === 'number' && Number.isFinite(uiPrefs.maxToolRounds)
+      ? Math.round(uiPrefs.maxToolRounds)
+      : mainDefault;
+  if (!Number.isFinite(value)) value = mainDefault;
+  return Math.min(MAX_CAP, Math.max(MIN, value));
+}
+
+function parseToolArguments(rawArguments) {
+  try {
+    return JSON.parse(rawArguments || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function createChatEngine({
+  llm,
+  tools,
+  preferences,
+  workspacePaths,
+  rawExchange,
+  maxToolRounds,
+  clock = () => Date.now(),
+}) {
+  /** @type {Map<string | number, AbortController>} */
+  const activeChatAborts = new Map();
+
+  function emit(onEvent, type, payload) {
+    onEvent?.({ type, payload });
+  }
+
+  function emitPhase(onEvent, phase) {
+    emit(onEvent, CHAT_ENGINE_EVENTS.PROGRESS, createPhaseEvent(phase));
+  }
+
+  function returnCancelledChat(onEvent, toolTrace, content = '', usage = null, rawExchanges = []) {
+    emitPhase(onEvent, CHAT_PHASES.IDLE);
+    return createCancelledChatResult({ content, toolTrace, usage, rawExchanges });
+  }
+
+  function makeStreamCallbacks(onEvent) {
+    let started = false;
+    const markGenerating = () => {
+      if (started) return;
+      started = true;
+      emitPhase(onEvent, CHAT_PHASES.GENERATING);
+    };
+    return {
+      reset() {
+        started = false;
+      },
+      onMarkGenerating: markGenerating,
+      onTextDelta(text) {
+        if (!text) return;
+        markGenerating();
+        emit(onEvent, CHAT_ENGINE_EVENTS.DELTA, createDeltaEvent(text));
+      },
+      onReasoningDelta(text) {
+        if (!text) return;
+        markGenerating();
+        emit(onEvent, CHAT_ENGINE_EVENTS.PROGRESS, createReasoningEvent(text));
+      },
+    };
+  }
+
+  async function resolveTarget(forSend) {
+    const target = await llm.resolveChatTarget();
+    if (target.error) return { error: target };
+    const validation = await llm.validateTarget(target, { forSend });
+    if (validation) return { error: validation };
+    return { target };
+  }
+
+  function abort(sessionId) {
+    const controller = activeChatAborts.get(sessionId);
+    if (controller && !controller.signal.aborted) controller.abort(createChatAbortError());
+  }
+
+  async function explain({ payload }) {
+    const messages = payload?.messages;
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return createChatErrorResult({ error: 'Keine Nachrichten übergeben.', code: CHAT_ERROR_CODES.INVALID });
+    }
+
+    try {
+      const resolved = await resolveTarget(false);
+      if (resolved.error) return resolved.error;
+      const { target } = resolved;
+
+      const apiMessages = messages
+        .filter((message) => message.role === 'user' || message.role === 'assistant')
+        .map((message) => ({ role: message.role, content: message.content ?? '' }));
+      if (apiMessages.length === 0) {
+        return createChatErrorResult({ error: 'Keine gültigen Nachrichten.', code: CHAT_ERROR_CODES.INVALID });
+      }
+
+      const explainBundle = await llm.prepareSendBundle(target);
+      const streamed = await llm.streamRound({
+        target,
+        sendBundle: explainBundle,
+        messages: apiMessages,
+        tools: undefined,
+        callbacks: {
+          reset() {},
+          onMarkGenerating() {},
+          onTextDelta() {},
+          onReasoningDelta() {},
+        },
+        abortSignal: new AbortController().signal,
+      });
+      if (streamed.error) {
+        return createChatErrorResult({ error: streamed.error, code: streamed.code || CHAT_ERROR_CODES.API });
+      }
+      return { content: streamed.message?.content ?? '' };
+    } catch (error) {
+      return createChatErrorResult({
+        error: llm.formatRoundError(error),
+        code: CHAT_ERROR_CODES.NETWORK,
+      });
+    }
+  }
+
+  async function send({ sessionId, payload, onEvent }) {
+    const abortController = new AbortController();
+    const abortSignal = abortController.signal;
+    const previous = activeChatAborts.get(sessionId);
+    if (previous && previous !== abortController && !previous.signal.aborted) {
+      previous.abort(createChatAbortError());
+    }
+    activeChatAborts.set(sessionId, abortController);
+
+    const toolTrace = [];
+    const rawExchanges = [];
+    let requestUsage = null;
+
+    try {
+      const messages = payload?.messages;
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return createChatErrorResult({ error: 'Keine Nachrichten übergeben.', code: CHAT_ERROR_CODES.INVALID });
+      }
+
+      const resolved = await resolveTarget(true);
+      if (resolved.error) return resolved.error;
+      const { target } = resolved;
+      const sendBundle = await llm.prepareSendBundle(target);
+
+      const workspaceRoot = workspacePaths.resolveRoot(payload?.workspaceRoot);
+      let selectedRelPath = null;
+      let selectedIsDirectory = false;
+      if (workspaceRoot) {
+        const selection = workspacePaths.resolveSelection(
+          workspaceRoot,
+          payload?.selectedPath,
+          payload?.selectedIsDirectory
+        );
+        if (selection) {
+          selectedRelPath = selection.relativePath;
+          selectedIsDirectory = selection.isDirectory;
+        }
+      }
+
+      const uiPrefs = await preferences.read();
+      const extraSystem = typeof uiPrefs.baseSystemPrompt === 'string' ? uiPrefs.baseSystemPrompt.trim() : '';
+      const allowWrite = uiPrefs.allowWorkspaceWrite === true;
+      const toolOptions = { allowWrite };
+      const workspaceSystem = workspaceRoot
+        ? workspaceSystemPrompt(
+            workspaceRoot,
+            selectedRelPath,
+            selectedIsDirectory,
+            workspacePaths.basename.bind(workspacePaths),
+            tools.buildSystemPrompt(toolOptions)
+          )
+        : '';
+      const combinedSystem = extraSystem && workspaceSystem
+        ? `${extraSystem}\n\n${workspaceSystem}`
+        : extraSystem || workspaceSystem;
+
+      const apiMessages = [];
+      if (combinedSystem) apiMessages.push({ role: 'system', content: combinedSystem });
+      const historyCharLimit = resolveHistoryCharLimit(uiPrefs);
+      const historyRows = messages
+        .filter((message) => message.role === 'user' || message.role === 'assistant')
+        .map((message) => ({ role: message.role, content: message.content ?? '' }));
+      const { messages: windowedHistory } = trimHistoryMessages(historyRows, historyCharLimit);
+      apiMessages.push(...windowedHistory);
+
+      const toolDefs = workspaceRoot ? tools.getTools(toolOptions) : undefined;
+      const callbacks = makeStreamCallbacks(onEvent);
+      const toolRoundLimit = resolveToolRoundLimit(uiPrefs, maxToolRounds);
+      const emitToolLine = (phase, entry) => {
+        emit(onEvent, CHAT_ENGINE_EVENTS.TOOL_LINE, createToolLineEvent(phase, entry));
+      };
+
+      for (let round = 0; round < toolRoundLimit; round += 1) {
+        if (abortSignal.aborted) {
+          return returnCancelledChat(onEvent, toolTrace, '', requestUsage, rawExchanges);
+        }
+
+        emitPhase(onEvent, CHAT_PHASES.WAITING);
+        callbacks.reset();
+        truncateStaleToolOutputs(apiMessages, historyCharLimit);
+
+        const recorder = rawExchange.createRoundRecorder();
+        const sentMessages = snapshotMessages(apiMessages);
+        const streamed = await llm.streamRound({
+          target,
+          sendBundle,
+          messages: apiMessages,
+          tools: toolDefs,
+          callbacks,
+          abortSignal,
+          recorder,
+        });
+
+        rawExchanges.push(recorder.toExchange({
+          providerId: target.providerId,
+          model: sendBundle.model,
+          round,
+          ts: clock(),
+          finishReason: streamed.finishReason,
+          cancelled: !!streamed.cancelled,
+          error: streamed.error || null,
+          usage: streamed.usage || null,
+          messages: sentMessages,
+          response: parseResponseMessage(streamed.message),
+        }));
+        requestUsage = mergeUsage(requestUsage, streamed.usage);
+
+        if (streamed.cancelled) {
+          return returnCancelledChat(onEvent, toolTrace, streamed.message?.content ?? '', requestUsage, rawExchanges);
+        }
+        if (streamed.error) {
+          emitPhase(onEvent, CHAT_PHASES.IDLE);
+          return createChatErrorResult({
+            error: streamed.error,
+            code: streamed.code || CHAT_ERROR_CODES.API,
+            usage: requestUsage,
+            rawExchanges,
+          });
+        }
+
+        const assistantMessage = streamed.message;
+        if (!assistantMessage) {
+          return createChatErrorResult({ error: 'Ungültige Antwort der API.', code: CHAT_ERROR_CODES.INVALID });
+        }
+        apiMessages.push(assistantMessage);
+
+        const toolCalls = assistantMessage.tool_calls;
+        if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+          emitPhase(onEvent, CHAT_PHASES.IDLE);
+          return createChatResult({
+            content: assistantMessage.content ?? '',
+            toolTrace,
+            usage: requestUsage,
+            rawExchanges,
+          });
+        }
+
+        for (const toolCall of toolCalls) {
+          if (abortSignal.aborted) {
+            return returnCancelledChat(onEvent, toolTrace, '', requestUsage, rawExchanges);
+          }
+          const toolName = toolCall.function?.name || 'tool';
+          const args = parseToolArguments(toolCall.function?.arguments);
+          const entry = buildToolEntry(toolName, args, workspaceRoot ? undefined : { noWorkspace: true });
+          toolTrace.push(entry);
+          emitToolLine(TOOL_LINE_PHASES.START, entry);
+
+          if (!workspaceRoot) {
+            emitToolLine(TOOL_LINE_PHASES.DONE, entry);
+            apiMessages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ error: 'Kein Arbeitsordner geöffnet; Tools nicht verfügbar.' }),
+            });
+            continue;
+          }
+
+          let output;
+          try {
+            output = await tools.execute(toolName, args, { workspaceRoot, abortSignal, allowWrite });
+          } catch (error) {
+            if (isAbortError(error)) {
+              return returnCancelledChat(onEvent, toolTrace, '', requestUsage, rawExchanges);
+            }
+            throw error;
+          }
+          emitToolLine(TOOL_LINE_PHASES.DONE, entry);
+          apiMessages.push({ role: 'tool', tool_call_id: toolCall.id, content: output });
+        }
+      }
+
+      emitPhase(onEvent, CHAT_PHASES.IDLE);
+      return createChatErrorResult({
+        error:
+          `Zu viele Tool-Runden (aktuell ${toolRoundLimit}). ` +
+          'Erhöhe das Limit unter Einstellungen › Allgemein oder formuliere die Frage enger.',
+        code: CHAT_ERROR_CODES.TOOL_LIMIT,
+        usage: requestUsage,
+        rawExchanges,
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        return returnCancelledChat(onEvent, toolTrace, '', requestUsage, rawExchanges);
+      }
+      emitPhase(onEvent, CHAT_PHASES.IDLE);
+      return createChatErrorResult({
+        error: llm.formatRoundError(error),
+        code: CHAT_ERROR_CODES.NETWORK,
+        rawExchanges,
+      });
+    } finally {
+      if (activeChatAborts.get(sessionId) === abortController) activeChatAborts.delete(sessionId);
+    }
+  }
+
+  return { send, explain, abort };
+}
+
+module.exports = {
+  CHAT_ENGINE_EVENTS,
+  createChatEngine,
+  resolveToolRoundLimit,
+};
