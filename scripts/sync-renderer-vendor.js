@@ -18,6 +18,22 @@ esbuild.buildSync({
   outfile: path.join(root, 'src', 'preload', 'bundle.js'),
 });
 
+// ── Contract-Schicht als ESM fuer den Renderer bereitstellen ────────────────
+// Die Verträge (src/shared/contracts, CommonJS) sind die Single Source of Truth
+// für Main und Renderer. Der Renderer lädt native ES-Module ohne Bundler, kann
+// CommonJS also nicht direkt importieren — daher hier ein ESM-Bundle erzeugen
+// (analog zum Preload-Bundle). esbuild wrappt CJS als Default-Export, der
+// Renderer importiert entsprechend `import contracts from '…/contracts.js'`.
+const generatedDir = path.join(root, 'src', 'renderer', 'generated');
+fs.mkdirSync(generatedDir, { recursive: true });
+esbuild.buildSync({
+  entryPoints: [path.join(root, 'src', 'shared', 'contracts', 'index.js')],
+  bundle: true,
+  format: 'esm',
+  platform: 'neutral',
+  outfile: path.join(generatedDir, 'contracts.js'),
+});
+
 // ── JS-Vendor-Bibliotheken ──────────────────────────────────────────────────
 fs.copyFileSync(
   path.join(root, 'node_modules', 'marked', 'lib', 'marked.umd.js'),

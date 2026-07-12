@@ -1,4 +1,4 @@
-const { resolveDebugWaitMs } = require('../debug-wait');
+const { resolveDebugWaitMs } = require('../../shared/contracts/debug-wait');
 const { sleepAbortable } = require('../providers/stream-helpers');
 
 function toAllowedNameSet(allowedNames) {

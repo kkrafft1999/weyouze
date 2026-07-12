@@ -1,10 +1,13 @@
 // Formatiert Tool-Call-Ereignisse aus dem Main-Prozess zu Anzeige-Zeilen
 // (Review 2026-05-23, G5): Main pusht nur Rohdaten ({ tool, args, phase,
 // noWorkspace }), die Lokalisierung lebt hier im Renderer.
+//
+// Die Clamp-Logik der debug_wait-Wartezeit kommt aus der gemeinsamen
+// Contract-Schicht (Single Source of Truth), damit sie nicht vom Main
+// abweichen kann. contracts ist der Default-Export des generierten ESM-Bundles.
+import contracts from '../generated/contracts.js';
 
-const DEBUG_WAIT_MIN_MS = 500;
-const DEBUG_WAIT_MAX_MS = 20000;
-const DEBUG_WAIT_DEFAULT_MS = 5000;
+const { resolveDebugWaitMs } = contracts;
 
 export function truncateToolLabel(s, max = 48) {
   const t = String(s ?? '');
@@ -16,23 +19,6 @@ function formatRelativePathForLabel(relativePath) {
   const raw = typeof relativePath === 'string' ? relativePath.trim() : '';
   if (!raw || raw === '.') return null;
   return truncateToolLabel(raw);
-}
-
-// Fallback: Normalerweise reicht der Main die bereits geclampte Wartezeit als
-// entry.waitMs mit (siehe summarizeToolEvent), sodass die Live-Anzeige auf dem
-// autoritativen Wert des Main basiert. Diese Rekonstruktion aus den Rohargs
-// greift nur, wenn summarizeToolCall ohne waitMs aufgerufen wird (z. B. in
-// Unit-Tests). Sie muss dann zur Clamp-Logik in src/main/debug-wait.js passen.
-function resolveDebugWaitMs(args) {
-  let ms;
-  if (Number.isFinite(args?.duration_seconds)) {
-    ms = Math.round(args.duration_seconds * 1000);
-  } else if (Number.isFinite(args?.duration_ms)) {
-    ms = Math.round(args.duration_ms);
-  } else {
-    ms = DEBUG_WAIT_DEFAULT_MS;
-  }
-  return Math.min(DEBUG_WAIT_MAX_MS, Math.max(DEBUG_WAIT_MIN_MS, ms));
 }
 
 function formatPauseDurationLabel(ms, phase) {

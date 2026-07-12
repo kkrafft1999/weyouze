@@ -16,6 +16,9 @@ build/
 src/renderer/vendor/*.js
 src/preload/bundle.js
 
+# Auto-generated ESM-Bundle der Contract-Schicht fuer den Renderer
+src/renderer/generated/
+
 # Logs
 *.log
 npm-debug.log*

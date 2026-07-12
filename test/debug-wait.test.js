@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveDebugWaitMs } = require('../src/main/debug-wait');
+const { resolveDebugWaitMs } = require('../src/shared/contracts/debug-wait');
 
 test('resolveDebugWaitMs defaults to 5000ms without args', () => {
   assert.equal(resolveDebugWaitMs(), 5000);

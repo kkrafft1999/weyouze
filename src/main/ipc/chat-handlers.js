@@ -1,6 +1,18 @@
 const { isAbortError, createChatAbortError, mergeUsage, describeFetchError } = require('../providers/stream-helpers');
 const { createRoundRecorder } = require('../llm-raw-log');
-const { resolveDebugWaitMs } = require('../debug-wait');
+const {
+  CHAT_ERROR_CODES,
+  CHAT_PHASES,
+  TOOL_LINE_PHASES,
+  resolveDebugWaitMs,
+  createChatResult,
+  createCancelledChatResult,
+  createChatErrorResult,
+  createDeltaEvent,
+  createToolLineEvent,
+  createPhaseEvent,
+  createReasoningEvent,
+} = require('../../shared/contracts');
 const {
   resolveHistoryCharLimit,
   trimHistoryMessages,
@@ -32,8 +44,8 @@ function abortActiveChat(webContentsId) {
 }
 
 function returnCancelledChat(wc, PUSH, toolTrace, content = '', usage = null, rawExchanges = []) {
-  emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-  return { cancelled: true, content, toolTrace, usage, rawExchanges };
+  emitChatProgress(wc, PUSH, createPhaseEvent(CHAT_PHASES.IDLE));
+  return createCancelledChatResult({ content, toolTrace, usage, rawExchanges });
 }
 
 function workspaceSystemPrompt(
@@ -124,7 +136,7 @@ function makeStreamCallbacks(webContents, PUSH) {
   const markGenerating = () => {
     if (started) return;
     started = true;
-    emitChatProgress(webContents, PUSH, { type: 'phase', phase: 'generating' });
+    emitChatProgress(webContents, PUSH, createPhaseEvent(CHAT_PHASES.GENERATING));
   };
   return {
     reset() {
@@ -135,13 +147,13 @@ function makeStreamCallbacks(webContents, PUSH) {
       if (!text) return;
       markGenerating();
       if (webContents && !webContents.isDestroyed()) {
-        webContents.send(PUSH.CHAT_DELTA, { text });
+        webContents.send(PUSH.CHAT_DELTA, createDeltaEvent(text));
       }
     },
     onReasoningDelta(text) {
       if (!text) return;
       markGenerating();
-      emitChatProgress(webContents, PUSH, { type: 'reasoning', text });
+      emitChatProgress(webContents, PUSH, createReasoningEvent(text));
     },
   };
 }
@@ -168,7 +180,7 @@ function registerChatHandlers({
   ipcMain.handle(REQ.CHAT_EXPLAIN, async (_event, payload) => {
     const messages = payload?.messages;
     if (!Array.isArray(messages) || messages.length === 0) {
-      return { error: 'Keine Nachrichten übergeben.', code: 'INVALID' };
+      return createChatErrorResult({ error: 'Keine Nachrichten übergeben.', code: CHAT_ERROR_CODES.INVALID });
     }
 
     const config = await storage.readLLMConfig();
@@ -176,7 +188,7 @@ function registerChatHandlers({
     const activeId = chatTarget.providerId;
     const provider = providers.getProvider(activeId);
     if (!provider) {
-      return { error: `Unbekannter Provider: ${activeId}.`, code: 'INVALID' };
+      return createChatErrorResult({ error: `Unbekannter Provider: ${activeId}.`, code: CHAT_ERROR_CODES.INVALID });
     }
     const providerConfig = await storage.getEffectiveProviderConfig(activeId);
     const model = chatTarget.model || providerConfig?.model || provider.defaultModel;
@@ -186,17 +198,17 @@ function registerChatHandlers({
         : providerConfig;
 
     if (provider.fields?.apiKey && !providerConfig?.apiKey) {
-      return { error: `Kein API-Key für ${provider.name} hinterlegt.`, code: 'NO_API_KEY' };
+      return createChatErrorResult({ error: `Kein API-Key für ${provider.name} hinterlegt.`, code: CHAT_ERROR_CODES.NO_API_KEY });
     }
     if (provider.fields?.baseUrl && !providerConfig?.baseUrl) {
-      return { error: `Keine Server-URL für ${provider.name} hinterlegt.`, code: 'NO_BASE_URL' };
+      return createChatErrorResult({ error: `Keine Server-URL für ${provider.name} hinterlegt.`, code: CHAT_ERROR_CODES.NO_BASE_URL });
     }
 
     const apiMessages = messages
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({ role: m.role, content: m.content ?? '' }));
     if (apiMessages.length === 0) {
-      return { error: 'Keine gültigen Nachrichten.', code: 'INVALID' };
+      return createChatErrorResult({ error: 'Keine gültigen Nachrichten.', code: CHAT_ERROR_CODES.INVALID });
     }
 
     const noopCallbacks = {
@@ -216,10 +228,10 @@ function registerChatHandlers({
         abortSignal: controller.signal,
         // kein recorder → keine RAW-Aufzeichnung
       });
-      if (streamed.error) return { error: streamed.error, code: streamed.code || 'API' };
+      if (streamed.error) return createChatErrorResult({ error: streamed.error, code: streamed.code || CHAT_ERROR_CODES.API });
       return { content: streamed.message?.content ?? '' };
     } catch (err) {
-      return { error: describeFetchError(err, 'dem Provider'), code: 'NETWORK' };
+      return createChatErrorResult({ error: describeFetchError(err, 'dem Provider'), code: CHAT_ERROR_CODES.NETWORK });
     }
   });
 
@@ -236,7 +248,7 @@ function registerChatHandlers({
     try {
       const messages = payload?.messages;
       if (!Array.isArray(messages) || messages.length === 0) {
-        return { error: 'Keine Nachrichten übergeben.', code: 'INVALID' };
+        return createChatErrorResult({ error: 'Keine Nachrichten übergeben.', code: CHAT_ERROR_CODES.INVALID });
       }
 
     const config = await storage.readLLMConfig();
@@ -244,7 +256,7 @@ function registerChatHandlers({
     const activeId = chatTarget.providerId;
     const provider = providers.getProvider(activeId);
     if (!provider) {
-      return { error: `Unbekannter Provider: ${activeId}.`, code: 'INVALID' };
+      return createChatErrorResult({ error: `Unbekannter Provider: ${activeId}.`, code: CHAT_ERROR_CODES.INVALID });
     }
     const providerConfig = await storage.getEffectiveProviderConfig(activeId);
     const model = chatTarget.model || providerConfig?.model || provider.defaultModel;
@@ -254,16 +266,16 @@ function registerChatHandlers({
         : providerConfig;
 
     if (provider.fields?.apiKey && !providerConfig?.apiKey) {
-      return {
+      return createChatErrorResult({
         error: `Kein API-Key für ${provider.name} hinterlegt. Bitte in den Einstellungen speichern.`,
-        code: 'NO_API_KEY',
-      };
+        code: CHAT_ERROR_CODES.NO_API_KEY,
+      });
     }
     if (provider.fields?.baseUrl && !providerConfig?.baseUrl) {
-      return {
+      return createChatErrorResult({
         error: `Keine Server-URL für ${provider.name} hinterlegt.`,
-        code: 'NO_BASE_URL',
-      };
+        code: CHAT_ERROR_CODES.NO_BASE_URL,
+      });
     }
 
     const rawRoot = payload?.workspaceRoot;
@@ -325,7 +337,7 @@ function registerChatHandlers({
       // der Renderer (toolCallSummary.js), der die App-Locale kennt.
       const emitToolLine = (phase, entry) => {
         if (wc && !wc.isDestroyed()) {
-          wc.send(PUSH.CHAT_TOOL_LINE, { phase, ...entry });
+          wc.send(PUSH.CHAT_TOOL_LINE, createToolLineEvent(phase, entry));
         }
       };
 
@@ -334,7 +346,7 @@ function registerChatHandlers({
           return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage, rawExchanges);
         }
 
-        emitChatProgress(wc, PUSH, { type: 'phase', phase: 'waiting' });
+        emitChatProgress(wc, PUSH, createPhaseEvent(CHAT_PHASES.WAITING));
         callbacks.reset();
         truncateStaleToolOutputs(apiMessages, historyCharLimit);
 
@@ -375,13 +387,18 @@ function registerChatHandlers({
         }
 
         if (streamed.error) {
-          emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-          return { error: streamed.error, code: streamed.code || 'API', usage: requestUsage, rawExchanges };
+          emitChatProgress(wc, PUSH, createPhaseEvent(CHAT_PHASES.IDLE));
+          return createChatErrorResult({
+            error: streamed.error,
+            code: streamed.code || CHAT_ERROR_CODES.API,
+            usage: requestUsage,
+            rawExchanges,
+          });
         }
 
         const assistantMsg = streamed.message;
         if (!assistantMsg) {
-          return { error: 'Ungültige Antwort der API.', code: 'INVALID' };
+          return createChatErrorResult({ error: 'Ungültige Antwort der API.', code: CHAT_ERROR_CODES.INVALID });
         }
 
         apiMessages.push(assistantMsg);
@@ -403,8 +420,8 @@ function registerChatHandlers({
               }
               const entry = buildToolEntry(toolName, args, { noWorkspace: true });
               toolTrace.push(entry);
-              emitToolLine('start', entry);
-              emitToolLine('done', entry);
+              emitToolLine(TOOL_LINE_PHASES.START, entry);
+              emitToolLine(TOOL_LINE_PHASES.DONE, entry);
               apiMessages.push({
                 role: 'tool',
                 tool_call_id: tc.id,
@@ -429,7 +446,7 @@ function registerChatHandlers({
             }
             const entry = buildToolEntry(toolName, args);
             toolTrace.push(entry);
-            emitToolLine('start', entry);
+            emitToolLine(TOOL_LINE_PHASES.START, entry);
             let out;
             try {
               out = await toolRegistry.execute(toolName, args, {
@@ -443,7 +460,7 @@ function registerChatHandlers({
               }
               throw err;
             }
-            emitToolLine('done', entry);
+            emitToolLine(TOOL_LINE_PHASES.DONE, entry);
             apiMessages.push({
               role: 'tool',
               tool_call_id: tc.id,
@@ -453,29 +470,33 @@ function registerChatHandlers({
           continue;
         }
 
-        emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-        return {
+        emitChatProgress(wc, PUSH, createPhaseEvent(CHAT_PHASES.IDLE));
+        return createChatResult({
           content: assistantMsg.content ?? '',
           toolTrace,
           usage: requestUsage,
           rawExchanges,
-        };
+        });
       }
-      emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-      return {
+      emitChatProgress(wc, PUSH, createPhaseEvent(CHAT_PHASES.IDLE));
+      return createChatErrorResult({
         error:
           `Zu viele Tool-Runden (aktuell ${toolRoundLimit}). ` +
           'Erhöhe das Limit unter Einstellungen › Allgemein oder formuliere die Frage enger.',
-        code: 'TOOL_LIMIT',
+        code: CHAT_ERROR_CODES.TOOL_LIMIT,
         usage: requestUsage,
         rawExchanges,
-      };
+      });
     } catch (err) {
       if (isAbortError(err)) {
         return returnCancelledChat(wc, PUSH, toolTrace, '', requestUsage, rawExchanges);
       }
-      emitChatProgress(wc, PUSH, { type: 'phase', phase: 'idle' });
-      return { error: describeFetchError(err, 'dem Provider'), code: 'NETWORK', rawExchanges };
+      emitChatProgress(wc, PUSH, createPhaseEvent(CHAT_PHASES.IDLE));
+      return createChatErrorResult({
+        error: describeFetchError(err, 'dem Provider'),
+        code: CHAT_ERROR_CODES.NETWORK,
+        rawExchanges,
+      });
     } finally {
       clearActiveChatAbort(wc.id, abortController);
     }

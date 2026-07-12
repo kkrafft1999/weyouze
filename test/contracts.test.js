@@ -1,0 +1,124 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const contracts = require('../src/shared/contracts');
+const {
+  CONTRACT_VERSION,
+  CHAT_ERROR_CODES,
+  CHAT_PHASES,
+  TOOL_LINE_PHASES,
+  CHAT_PROGRESS_TYPES,
+  createEmptyUsage,
+  normalizeUsage,
+  coerceUsage,
+  mergeUsage,
+  DEBUG_WAIT,
+  resolveDebugWaitMs,
+  createChatResult,
+  createCancelledChatResult,
+  createChatErrorResult,
+  createDeltaEvent,
+  createToolLineEvent,
+  createPhaseEvent,
+  createReasoningEvent,
+  isChatErrorCode,
+  isChatPhase,
+  isToolLinePhase,
+} = contracts;
+
+test('CONTRACT_VERSION is a positive integer', () => {
+  assert.equal(Number.isInteger(CONTRACT_VERSION), true);
+  assert.ok(CONTRACT_VERSION >= 1);
+});
+
+test('enums are frozen and carry the wire values used at the IPC boundary', () => {
+  assert.equal(Object.isFrozen(CHAT_ERROR_CODES), true);
+  assert.equal(Object.isFrozen(CHAT_PHASES), true);
+  assert.equal(CHAT_PHASES.IDLE, 'idle');
+  assert.equal(CHAT_PHASES.WAITING, 'waiting');
+  assert.equal(CHAT_PHASES.GENERATING, 'generating');
+  assert.equal(TOOL_LINE_PHASES.START, 'start');
+  assert.equal(TOOL_LINE_PHASES.DONE, 'done');
+  assert.equal(CHAT_PROGRESS_TYPES.PHASE, 'phase');
+  assert.equal(CHAT_PROGRESS_TYPES.REASONING, 'reasoning');
+});
+
+test('normalizeUsage maps provider fields and coerceUsage never returns null', () => {
+  assert.deepEqual(normalizeUsage({ input_tokens: 10, output_tokens: 5 }), {
+    prompt: 10,
+    completion: 5,
+    total: 15,
+  });
+  assert.equal(normalizeUsage({}), null);
+  assert.deepEqual(createEmptyUsage(), { prompt: 0, completion: 0, total: 0 });
+  assert.deepEqual(coerceUsage({}), { prompt: 0, completion: 0, total: 0 });
+  assert.deepEqual(coerceUsage({ prompt_tokens: 3 }), { prompt: 3, completion: 0, total: 3 });
+});
+
+test('mergeUsage sums rounds and tolerates null inputs', () => {
+  assert.deepEqual(
+    mergeUsage({ prompt: 10, completion: 5, total: 15 }, { prompt: 3, completion: 2, total: 5 }),
+    { prompt: 13, completion: 7, total: 20 }
+  );
+  assert.deepEqual(mergeUsage({ prompt: 1, completion: 1, total: 2 }, null), {
+    prompt: 1,
+    completion: 1,
+    total: 2,
+  });
+  assert.equal(mergeUsage(null, null), null);
+});
+
+test('resolveDebugWaitMs clamps to the shared bounds', () => {
+  assert.equal(resolveDebugWaitMs(), DEBUG_WAIT.DEFAULT_MS);
+  assert.equal(resolveDebugWaitMs({ duration_seconds: 0 }), DEBUG_WAIT.MIN_MS);
+  assert.equal(resolveDebugWaitMs({ duration_seconds: 999 }), DEBUG_WAIT.MAX_MS);
+  assert.equal(resolveDebugWaitMs({ duration_ms: 1234 }), 1234);
+});
+
+test('createChatResult / createCancelledChatResult produce the stable success shapes', () => {
+  assert.deepEqual(createChatResult({ content: 'hi', toolTrace: [], usage: null, rawExchanges: [] }), {
+    content: 'hi',
+    toolTrace: [],
+    usage: null,
+    rawExchanges: [],
+  });
+  assert.deepEqual(createCancelledChatResult({ content: 'partial' }), {
+    cancelled: true,
+    content: 'partial',
+    toolTrace: [],
+    usage: null,
+    rawExchanges: [],
+  });
+});
+
+test('createChatErrorResult omits usage/rawExchanges unless provided', () => {
+  assert.deepEqual(createChatErrorResult({ error: 'x', code: CHAT_ERROR_CODES.INVALID }), {
+    error: 'x',
+    code: 'INVALID',
+  });
+  assert.deepEqual(
+    createChatErrorResult({ error: 'y', code: CHAT_ERROR_CODES.TOOL_LIMIT, usage: null, rawExchanges: [] }),
+    { error: 'y', code: 'TOOL_LIMIT', usage: null, rawExchanges: [] }
+  );
+  // Default-Code ist INVALID.
+  assert.equal(createChatErrorResult({ error: 'z' }).code, 'INVALID');
+});
+
+test('event factories match the push payload shapes', () => {
+  assert.deepEqual(createDeltaEvent('abc'), { text: 'abc' });
+  assert.deepEqual(createDeltaEvent(undefined), { text: '' });
+  assert.deepEqual(createPhaseEvent(CHAT_PHASES.WAITING), { type: 'phase', phase: 'waiting' });
+  assert.deepEqual(createReasoningEvent('r'), { type: 'reasoning', text: 'r' });
+  assert.deepEqual(
+    createToolLineEvent(TOOL_LINE_PHASES.START, { tool: 'read_file_text', args: { relative_path: 'a' } }),
+    { phase: 'start', tool: 'read_file_text', args: { relative_path: 'a' } }
+  );
+});
+
+test('validators accept known values and reject unknown ones', () => {
+  assert.equal(isChatErrorCode('NO_API_KEY'), true);
+  assert.equal(isChatErrorCode('NOPE'), false);
+  assert.equal(isChatPhase('idle'), true);
+  assert.equal(isChatPhase('busy'), false);
+  assert.equal(isToolLinePhase('done'), true);
+  assert.equal(isToolLinePhase('finished'), false);
+});
