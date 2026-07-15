@@ -26,7 +26,32 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run make
+      # 'npm run make' scheitert gelegentlich beim DMG-Schritt an einem flaky
+      # 'hdiutil detach' (appdmg-Race: Volume ist beim Unmount schon weg ->
+      # "No such file or directory"). Kein Config-Bug (identische Config baute
+      # fruehere Releases erfolgreich), daher hier gegen die Flakiness haerten:
+      # bis zu 3 Versuche, dazwischen Alt-Volumes zwangsweise loesen und
+      # partielle Outputs entfernen.
+      - name: Build distributables (retry flaky hdiutil detach)
+        shell: bash
+        run: |
+          set -uo pipefail
+          attempts=3
+          for i in $(seq 1 "$attempts"); do
+            echo "::group::npm run make (Versuch $i/$attempts)"
+            if npm run make; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "make-Versuch $i fehlgeschlagen; raeume vor Retry auf"
+            for vol in "/Volumes/Weyouze Anything"*; do
+              [ -d "$vol" ] && hdiutil detach "$vol" -force || true
+            done
+            rm -rf out/make || true
+          done
+          echo "npm run make nach $attempts Versuchen fehlgeschlagen" >&2
+          exit 1
       - name: Collect DMG
         run: |
           set -euo pipefail
