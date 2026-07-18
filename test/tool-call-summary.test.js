@@ -36,6 +36,20 @@ test('summarizeToolCall formats workspace tools with start and done labels', () 
   );
   assert.equal(summarizeToolCall('write_file_text', {}, 'start'), 'Datei wird geschrieben …');
   assert.equal(summarizeToolCall('write_file_text', {}, 'done'), 'Datei geschrieben');
+  assert.equal(
+    summarizeToolCall('search_in_files', { query: 'createFsService' }, 'start'),
+    'Suche nach „createFsService“ …'
+  );
+  assert.equal(
+    summarizeToolCall('search_in_files', { query: 'createFsService' }, 'done'),
+    'Nach „createFsService“ gesucht'
+  );
+  assert.equal(
+    summarizeToolCall('search_in_files', { query: 'x'.repeat(60) }, 'done'),
+    `Nach „${'x'.repeat(31)}…“ gesucht`
+  );
+  assert.equal(summarizeToolCall('search_in_files', {}, 'start'), 'Dateien werden durchsucht …');
+  assert.equal(summarizeToolCall('search_in_files', {}, 'done'), 'Dateien durchsucht');
   assert.equal(summarizeToolCall('debug_wait', {}, 'start'), 'Warte 5 Sekunden …');
   assert.equal(summarizeToolCall('debug_wait', {}, 'done'), '5 Sekunden gewartet');
   assert.equal(summarizeToolCall('debug_wait', { duration_seconds: 1.2 }, 'start'), 'Warte 1,2 Sekunden …');

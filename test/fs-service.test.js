@@ -354,6 +354,300 @@ test('write_file_text enforces the max content size', async () => {
   await fs.rm(tmpRoot, { recursive: true, force: true });
 });
 
+test('search_in_files finds matches with line numbers and context through the registry', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(
+    path.join(tmpRoot, 'a.txt'),
+    'zeile eins\nzeile zwei\nTREFFER hier\nzeile vier\nzeile fünf',
+    'utf8'
+  );
+  await fs.mkdir(path.join(tmpRoot, 'sub'));
+  await fs.writeFile(path.join(tmpRoot, 'sub', 'b.txt'), 'auch ein treffer', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute('search_in_files', { query: 'treffer' }, { workspaceRoot: tmpRoot })
+  );
+
+  assert.equal(out.error, undefined);
+  // Groß-/Kleinschreibung wird standardmäßig ignoriert; Dateien vor Unterordnern.
+  assert.deepEqual(out.matches, [
+    {
+      file: 'a.txt',
+      line: 3,
+      text: 'TREFFER hier',
+      before: ['zeile eins', 'zeile zwei'],
+      after: ['zeile vier', 'zeile fünf'],
+    },
+    {
+      file: 'sub/b.txt',
+      line: 1,
+      text: 'auch ein treffer',
+      before: [],
+      after: [],
+    },
+  ]);
+  assert.equal(out.files_scanned, 2);
+  assert.equal(out.truncated, false);
+  assert.equal(out.scan_limit_reached, false);
+});
+
+test('search_in_files supports regex, case_sensitive and context_lines', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), 'foo1\nFOO2\nbar', 'utf8');
+
+  const regex = JSON.parse(
+    await registry.execute(
+      'search_in_files',
+      { query: 'foo\\d+', is_regex: true, case_sensitive: true, context_lines: 0 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.deepEqual(regex.matches, [
+    { file: 'a.txt', line: 1, text: 'foo1', before: [], after: [] },
+  ]);
+
+  const literal = JSON.parse(
+    await registry.execute(
+      'search_in_files',
+      { query: 'foo\\d+' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.deepEqual(literal.matches, []);
+});
+
+test('search_in_files rejects missing query and invalid regex', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+
+  const missing = JSON.parse(
+    await registry.execute('search_in_files', {}, { workspaceRoot: tmpRoot })
+  );
+  assert.match(missing.error, /query/);
+
+  const invalid = JSON.parse(
+    await registry.execute(
+      'search_in_files',
+      { query: '(unclosed', is_regex: true },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.match(invalid.error, /regulärer Ausdruck/i);
+});
+
+test('search_in_files respects workspace bounds', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+
+  const out = JSON.parse(
+    await registry.execute(
+      'search_in_files',
+      { query: 'x', relative_path: '../outside' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.match(out.error, /außerhalb/);
+});
+
+test('search_in_files skips hidden entries by default, include_hidden enables them, .git stays excluded', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.mkdir(path.join(tmpRoot, '.hidden'));
+  await fs.writeFile(path.join(tmpRoot, '.hidden', 'h.txt'), 'geheimer treffer', 'utf8');
+  await fs.mkdir(path.join(tmpRoot, '.git'));
+  await fs.writeFile(path.join(tmpRoot, '.git', 'config'), 'git treffer', 'utf8');
+
+  const withoutHidden = JSON.parse(
+    await registry.execute('search_in_files', { query: 'treffer' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(withoutHidden.matches, []);
+
+  const withHidden = JSON.parse(
+    await registry.execute(
+      'search_in_files',
+      { query: 'treffer', include_hidden: true },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.deepEqual(
+    withHidden.matches.map((m) => m.file),
+    ['.hidden/h.txt']
+  );
+});
+
+test('search_in_files respects the root .gitignore including negation', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(
+    path.join(tmpRoot, '.gitignore'),
+    '# Kommentar\nignored-dir/\n*.log\n!keep.log\n',
+    'utf8'
+  );
+  await fs.mkdir(path.join(tmpRoot, 'ignored-dir'));
+  await fs.writeFile(path.join(tmpRoot, 'ignored-dir', 'x.txt'), 'treffer', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'debug.log'), 'treffer', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'keep.log'), 'treffer', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'normal.txt'), 'treffer', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute('search_in_files', { query: 'treffer' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(
+    out.matches.map((m) => m.file),
+    ['keep.log', 'normal.txt']
+  );
+});
+
+test('search_in_files skips binary and oversized files', async (t) => {
+  const svc = createFsService({ fs, path, maxReadFileBytes: 64, maxWriteFileBytes: 64 });
+  const registry = makeToolRegistry(svc);
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'binary.bin'), Buffer.from('tref\0fer treffer'));
+  await fs.writeFile(path.join(tmpRoot, 'big.txt'), `treffer ${'x'.repeat(100)}`, 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'small.txt'), 'treffer', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute('search_in_files', { query: 'treffer' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(
+    out.matches.map((m) => m.file),
+    ['small.txt']
+  );
+  assert.equal(out.files_scanned, 1);
+});
+
+test('search_in_files caps results at max_results and reports truncated', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(
+    path.join(tmpRoot, 'a.txt'),
+    Array.from({ length: 10 }, (_, i) => `treffer ${i}`).join('\n'),
+    'utf8'
+  );
+
+  const out = JSON.parse(
+    await registry.execute(
+      'search_in_files',
+      { query: 'treffer', max_results: 3 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(out.matches.length, 3);
+  assert.equal(out.truncated, true);
+});
+
+test('search_in_files stops after the scan limit and reports it', async (t) => {
+  const svc = createFsService({
+    fs,
+    path,
+    maxReadFileBytes: 1024 * 1024,
+    maxWriteFileBytes: 1024 * 1024,
+    maxSearchScannedFiles: 1,
+  });
+  const registry = makeToolRegistry(svc);
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), 'treffer', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'b.txt'), 'treffer', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute('search_in_files', { query: 'treffer' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(
+    out.matches.map((m) => m.file),
+    ['a.txt']
+  );
+  assert.equal(out.scan_limit_reached, true);
+});
+
+test('search_in_files applies include and exclude globs', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.mkdir(path.join(tmpRoot, 'src'));
+  await fs.mkdir(path.join(tmpRoot, 'dist'));
+  await fs.writeFile(path.join(tmpRoot, 'src', 'a.js'), 'treffer', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'src', 'a.md'), 'treffer', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'dist', 'b.js'), 'treffer', 'utf8');
+
+  const included = JSON.parse(
+    await registry.execute(
+      'search_in_files',
+      { query: 'treffer', include: '*.js' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.deepEqual(
+    included.matches.map((m) => m.file),
+    ['dist/b.js', 'src/a.js']
+  );
+
+  const excluded = JSON.parse(
+    await registry.execute(
+      'search_in_files',
+      { query: 'treffer', include: '*.js', exclude: 'dist' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.deepEqual(
+    excluded.matches.map((m) => m.file),
+    ['src/a.js']
+  );
+});
+
+test('search_in_files searches a single file when relative_path is a file', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), 'treffer', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'b.txt'), 'treffer', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute(
+      'search_in_files',
+      { query: 'treffer', relative_path: 'a.txt' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.deepEqual(
+    out.matches.map((m) => m.file),
+    ['a.txt']
+  );
+});
+
+test('search_in_files does not follow symlinks out of the workspace', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const workspace = path.join(tmpRoot, 'workspace');
+  const outside = path.join(tmpRoot, 'outside');
+  await fs.mkdir(workspace);
+  await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, 'secret.txt'), 'geheimer treffer', 'utf8');
+  const linked = await createSymlinkOrSkip(
+    t,
+    outside,
+    path.join(workspace, 'outside-link'),
+    process.platform === 'win32' ? 'junction' : 'dir'
+  );
+  if (!linked) return;
+
+  const out = JSON.parse(
+    await registry.execute('search_in_files', { query: 'treffer' }, { workspaceRoot: workspace })
+  );
+  assert.deepEqual(out.matches, []);
+});
+
 test('containsPath accepts the root itself and children, rejects siblings and traversal', () => {
   const path = require('path');
   const fs = require('fs/promises');

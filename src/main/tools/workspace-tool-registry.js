@@ -136,6 +136,66 @@ function createWorkspaceToolRegistry({ fsService }) {
         fsService.runReadFileTextTool(args, workspaceRoot),
     },
     {
+      name: 'search_in_files',
+      description:
+        'Durchsucht Textdateien im Projektordner rekursiv nach einem Suchtext oder regulären Ausdruck ' +
+        'und liefert nur Trefferzeilen mit Zeilennummer und Kontext zurück — statt ganzer Dateien. ' +
+        'Überspringt versteckte Einträge, Muster aus der .gitignore des Projektroots sowie binäre und zu große Dateien.',
+      promptDescription:
+        'Sucht Text oder Regex in Dateien des Projektordners und liefert Datei, Zeile und Kontext der Treffer.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description:
+              'Suchtext; bei is_regex=true ein regulärer Ausdruck in JavaScript-Syntax.',
+          },
+          is_regex: {
+            type: 'boolean',
+            description:
+              'true, um query als regulären Ausdruck zu interpretieren (Standard false = wörtliche Suche).',
+          },
+          relative_path: {
+            type: 'string',
+            description:
+              'Startordner (oder einzelne Datei) relativ zum Projektroot; leer oder "." für das gesamte Projekt.',
+          },
+          context_lines: {
+            type: 'integer',
+            description:
+              'Anzahl Kontextzeilen vor und nach jeder Trefferzeile (Standard 2, Maximum 10).',
+          },
+          max_results: {
+            type: 'integer',
+            description: 'Maximale Anzahl Treffer (Standard 50, Obergrenze 200).',
+          },
+          case_sensitive: {
+            type: 'boolean',
+            description: 'true, um Groß-/Kleinschreibung zu beachten (Standard false).',
+          },
+          include: {
+            type: 'string',
+            description:
+              'Optionales Glob-Muster (gitignore-Syntax); nur passende Dateien werden durchsucht, z. B. "*.js" oder "src/**/*.md".',
+          },
+          exclude: {
+            type: 'string',
+            description:
+              'Optionales Glob-Muster (gitignore-Syntax); passende Dateien und Ordner werden übersprungen, z. B. "dist" oder "*.min.js".',
+          },
+          include_hidden: {
+            type: 'boolean',
+            description:
+              'true, um auch versteckte Einträge (Punkt-Präfix) zu durchsuchen (Standard false; .git bleibt immer ausgenommen).',
+          },
+        },
+        required: ['query'],
+      },
+      handler: (args, { workspaceRoot }) =>
+        fsService.runSearchInFilesTool(args, workspaceRoot),
+    },
+    {
       name: 'debug_wait',
       description:
         'Nur zum UI-Test: wartet eine konfigurierbare Zeit und liefert danach OK zurück. Kein Dateizugriff.',

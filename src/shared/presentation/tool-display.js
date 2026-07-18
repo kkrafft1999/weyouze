@@ -57,6 +57,14 @@ function summarizeToolCall(toolName, args, phase = 'start', locale = APP_LOCALES
     }
     return isDone ? 'Datei geschrieben' : 'Datei wird geschrieben …';
   }
+  if (toolName === 'search_in_files') {
+    const raw = typeof args?.query === 'string' ? args.query.trim() : '';
+    if (raw) {
+      const queryLabel = `„${truncateToolLabel(raw, 32)}“`;
+      return isDone ? `Nach ${queryLabel} gesucht` : `Suche nach ${queryLabel} …`;
+    }
+    return isDone ? 'Dateien durchsucht' : 'Dateien werden durchsucht …';
+  }
   if (toolName === 'debug_wait') {
     return formatPauseDurationLabel(resolveDebugWaitMs(args), phase, locale);
   }

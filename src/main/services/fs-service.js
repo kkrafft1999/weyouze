@@ -1,6 +1,107 @@
-function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
+const SEARCH_DEFAULT_CONTEXT_LINES = 2;
+const SEARCH_MAX_CONTEXT_LINES = 10;
+const SEARCH_DEFAULT_MAX_RESULTS = 50;
+const SEARCH_MAX_RESULTS = 200;
+const SEARCH_MAX_LINE_CHARS = 400;
+const SEARCH_BINARY_PROBE_BYTES = 8192;
+const SEARCH_DEFAULT_MAX_SCANNED_FILES = 5000;
+
+function escapeRegExpLiteral(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Übersetzt ein Glob-Muster in gitignore-Syntax (`*`, `?`, `**`, führendes `/`
+ * verankert, abschließendes `/` = nur Ordner) in eine RegExp über den
+ * posix-relativen Pfad. Muster ohne `/` matchen auf jeder Ebene.
+ */
+function globToRegExp(pattern) {
+  let p = pattern;
+  let dirOnly = false;
+  if (p.endsWith('/')) {
+    dirOnly = true;
+    p = p.slice(0, -1);
+  }
+  let anchored = false;
+  if (p.startsWith('/')) {
+    anchored = true;
+    p = p.slice(1);
+  } else if (p.includes('/')) {
+    anchored = true;
+  }
+  let source = '';
+  let i = 0;
+  while (i < p.length) {
+    const c = p[i];
+    if (c === '*') {
+      if (p[i + 1] === '*') {
+        if (p[i + 2] === '/') {
+          source += '(?:[^/]+/)*';
+          i += 3;
+        } else {
+          source += '.*';
+          i += 2;
+        }
+      } else {
+        source += '[^/]*';
+        i += 1;
+      }
+    } else if (c === '?') {
+      source += '[^/]';
+      i += 1;
+    } else {
+      source += escapeRegExpLiteral(c);
+      i += 1;
+    }
+  }
+  const prefix = anchored ? '^' : '^(?:.*/)?';
+  return { regex: new RegExp(`${prefix}${source}$`), dirOnly };
+}
+
+/**
+ * Baut aus einem .gitignore-Text einen Matcher (relPath, isDirectory) → ignoriert?
+ * Unterstützte Teilmenge: Kommentare, Negation (!), Ordner-Muster (…/),
+ * verankerte Muster sowie *, ?, **. Die letzte passende Regel gewinnt.
+ */
+function createGitignoreMatcher(text) {
+  const rules = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.replace(/\s+$/, '');
+    if (!line || line.startsWith('#')) continue;
+    let body = line;
+    let negated = false;
+    if (body.startsWith('!')) {
+      negated = true;
+      body = body.slice(1);
+    }
+    if (!body) continue;
+    const { regex, dirOnly } = globToRegExp(body);
+    rules.push({ regex, dirOnly, negated });
+  }
+  if (!rules.length) return null;
+  return (relPath, isDirectory) => {
+    let ignored = false;
+    for (const rule of rules) {
+      if (rule.dirOnly && !isDirectory) continue;
+      if (rule.regex.test(relPath)) ignored = !rule.negated;
+    }
+    return ignored;
+  };
+}
+
+function isBinaryBuffer(buf) {
+  return buf.subarray(0, SEARCH_BINARY_PROBE_BYTES).includes(0);
+}
+
+function clipSearchLine(line) {
+  if (line.length <= SEARCH_MAX_LINE_CHARS) return line;
+  return `${line.slice(0, SEARCH_MAX_LINE_CHARS)}…`;
+}
+
+function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes, maxSearchScannedFiles }) {
   const MAX_READ_FILE_BYTES = maxReadFileBytes;
   const MAX_WRITE_FILE_BYTES = maxWriteFileBytes || maxReadFileBytes;
+  const MAX_SEARCH_SCANNED_FILES = maxSearchScannedFiles || SEARCH_DEFAULT_MAX_SCANNED_FILES;
 
   /** true, wenn candidate (aufgelöst) innerhalb von root liegt — Root selbst zählt mit. */
   function containsPath(root, candidate) {
@@ -192,6 +293,152 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
     }
   }
 
+  async function runSearchInFilesTool(args, workspaceRoot) {
+    const query = typeof args.query === 'string' ? args.query : '';
+    if (!query) {
+      return JSON.stringify({ error: 'query ist erforderlich.' });
+    }
+    let matcher;
+    try {
+      matcher = new RegExp(
+        args.is_regex === true ? query : escapeRegExpLiteral(query),
+        args.case_sensitive === true ? '' : 'i'
+      );
+    } catch (e) {
+      return JSON.stringify({ error: `Ungültiger regulärer Ausdruck: ${e.message}` });
+    }
+    let contextLines = Number.isFinite(args.context_lines)
+      ? Math.floor(args.context_lines)
+      : SEARCH_DEFAULT_CONTEXT_LINES;
+    contextLines = Math.min(Math.max(0, contextLines), SEARCH_MAX_CONTEXT_LINES);
+    let maxResults = Number.isFinite(args.max_results)
+      ? Math.floor(args.max_results)
+      : SEARCH_DEFAULT_MAX_RESULTS;
+    maxResults = Math.min(Math.max(1, maxResults), SEARCH_MAX_RESULTS);
+    const includeHidden = args.include_hidden === true;
+    const include =
+      typeof args.include === 'string' && args.include.trim()
+        ? globToRegExp(args.include.trim())
+        : null;
+    const exclude =
+      typeof args.exclude === 'string' && args.exclude.trim()
+        ? globToRegExp(args.exclude.trim())
+        : null;
+
+    const rel = typeof args.relative_path === 'string' ? args.relative_path.trim() : '';
+    const { absPath, error } = await resolveWorkspacePathForAccess(workspaceRoot, rel);
+    if (error) return JSON.stringify({ error });
+
+    const root = path.resolve(workspaceRoot);
+    let isIgnored = null;
+    try {
+      const gitignore = await fs.readFile(path.join(root, '.gitignore'), 'utf8');
+      isIgnored = createGitignoreMatcher(gitignore);
+    } catch {
+      // keine lesbare .gitignore — nichts auszuschließen
+    }
+
+    const state = {
+      matches: [],
+      filesScanned: 0,
+      filesVisited: 0,
+      matchLimitReached: false,
+      scanLimitReached: false,
+    };
+    const toRelPosix = (abs) => path.relative(root, abs).split(path.sep).join('/');
+
+    async function scanFile(fileAbs, size) {
+      if (state.filesVisited >= MAX_SEARCH_SCANNED_FILES) {
+        state.scanLimitReached = true;
+        return;
+      }
+      state.filesVisited += 1;
+      if (size > MAX_READ_FILE_BYTES) return;
+      let buf;
+      try {
+        buf = await fs.readFile(fileAbs);
+      } catch {
+        return;
+      }
+      if (isBinaryBuffer(buf)) return;
+      state.filesScanned += 1;
+      const relFile = toRelPosix(fileAbs);
+      const lines = buf.toString('utf8').split(/\r\n|\r|\n/);
+      for (let i = 0; i < lines.length; i++) {
+        if (!matcher.test(lines[i])) continue;
+        state.matches.push({
+          file: relFile,
+          line: i + 1,
+          text: clipSearchLine(lines[i]),
+          before: lines.slice(Math.max(0, i - contextLines), i).map(clipSearchLine),
+          after: lines.slice(i + 1, i + 1 + contextLines).map(clipSearchLine),
+        });
+        if (state.matches.length >= maxResults) {
+          state.matchLimitReached = true;
+          return;
+        }
+      }
+    }
+
+    async function walk(dirAbs) {
+      let entries;
+      try {
+        entries = await fs.readdir(dirAbs, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      entries.sort((a, b) => {
+        if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? 1 : -1;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      });
+      for (const entry of entries) {
+        if (state.matchLimitReached || state.scanLimitReached) return;
+        if (entry.name === '.git') continue;
+        if (!includeHidden && entry.name.startsWith('.')) continue;
+        const entryAbs = path.join(dirAbs, entry.name);
+        const relEntry = toRelPosix(entryAbs);
+        if (entry.isDirectory()) {
+          if (isIgnored && isIgnored(relEntry, true)) continue;
+          if (exclude && exclude.regex.test(relEntry)) continue;
+          await walk(entryAbs);
+        } else if (entry.isFile()) {
+          // Symlinks sind an Dirents weder isFile noch isDirectory und werden
+          // bewusst übersprungen (kein Verfolgen aus dem Workspace hinaus).
+          if (isIgnored && isIgnored(relEntry, false)) continue;
+          if (exclude && exclude.regex.test(relEntry)) continue;
+          if (include && !include.regex.test(relEntry)) continue;
+          let st;
+          try {
+            st = await fs.stat(entryAbs);
+          } catch {
+            continue;
+          }
+          await scanFile(entryAbs, st.size);
+        }
+      }
+    }
+
+    try {
+      const st = await fs.stat(absPath);
+      if (st.isDirectory()) {
+        await walk(absPath);
+      } else {
+        await scanFile(absPath, st.size);
+      }
+    } catch (e) {
+      return JSON.stringify({ error: e.message });
+    }
+
+    return JSON.stringify({
+      relative_path: rel || '.',
+      query,
+      matches: state.matches,
+      files_scanned: state.filesScanned,
+      truncated: state.matchLimitReached,
+      scan_limit_reached: state.scanLimitReached,
+    });
+  }
+
   async function readDirectory(dirPath) {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const items = await Promise.all(
@@ -279,6 +526,7 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes }) {
     runListDirectoryTool,
     runReadFileTextTool,
     runWriteFileTextTool,
+    runSearchInFilesTool,
     readDirectory,
     moveItem,
     readFilePreview,
