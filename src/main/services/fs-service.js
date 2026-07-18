@@ -1,3 +1,8 @@
+const READ_LINES_DEFAULT_COUNT = 200;
+const READ_LINES_MAX_COUNT = 1000;
+const READ_SLICE_DEFAULT_MAX_CHARS = 32000;
+const READ_BYTES_DEFAULT_LENGTH = 16000;
+
 const SEARCH_DEFAULT_CONTEXT_LINES = 2;
 const SEARCH_MAX_CONTEXT_LINES = 10;
 const SEARCH_DEFAULT_MAX_RESULTS = 50;
@@ -89,6 +94,101 @@ function createGitignoreMatcher(text) {
   };
 }
 
+function readIntegerArg(args, name) {
+  const value = args[name];
+  if (value === undefined || value === null) return { value: undefined };
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return { error: `${name} muss eine Ganzzahl sein.` };
+  }
+  return { value: Math.floor(value) };
+}
+
+/** Teilt Text in Zeilen; eine einzelne Leerzeile durch abschließenden Umbruch zählt nicht mit. */
+function splitFileLines(text) {
+  const lines = text.split(/\r\n|\r|\n/);
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  return lines;
+}
+
+function buildLineSliceResult(rel, text, startLineArg, endLineArg, maxChars) {
+  const startLine = startLineArg === undefined ? 1 : startLineArg;
+  if (startLine < 1) return { error: 'start_line muss mindestens 1 sein.' };
+  const endLine = endLineArg === undefined ? startLine + READ_LINES_DEFAULT_COUNT - 1 : endLineArg;
+  if (endLine < startLine) return { error: 'end_line darf nicht kleiner als start_line sein.' };
+
+  const lines = splitFileLines(text);
+  const totalLines = lines.length;
+  if (totalLines === 0 && startLine === 1) {
+    return { relative_path: rel, total_lines: 0, start_line: 1, end_line: 0, truncated: false, content: '' };
+  }
+  if (startLine > totalLines) {
+    return {
+      error: `start_line (${startLine}) liegt hinter dem Dateiende — die Datei hat ${totalLines} Zeilen.`,
+    };
+  }
+
+  const wantedEnd = Math.min(endLine, totalLines);
+  const spanEnd = Math.min(wantedEnd, startLine + READ_LINES_MAX_COUNT - 1);
+  const numbered = [];
+  let chars = 0;
+  let lastLine = startLine - 1;
+  let clipped = false;
+  for (let n = startLine; n <= spanEnd; n++) {
+    const lineText = `${n}\t${lines[n - 1]}`;
+    if (numbered.length && chars + lineText.length + 1 > maxChars) {
+      clipped = true;
+      break;
+    }
+    if (lineText.length > maxChars) {
+      // Erste Zeile sprengt allein das Budget — hart kappen statt leer zurückgeben.
+      numbered.push(`${lineText.slice(0, maxChars)}…`);
+      lastLine = n;
+      clipped = true;
+      break;
+    }
+    numbered.push(lineText);
+    chars += lineText.length + 1;
+    lastLine = n;
+  }
+
+  return {
+    relative_path: rel,
+    total_lines: totalLines,
+    start_line: startLine,
+    end_line: lastLine,
+    truncated: clipped || lastLine < wantedEnd,
+    content: numbered.join('\n'),
+  };
+}
+
+function buildByteSliceResult(rel, buf, startByteArg, lengthArg, maxChars) {
+  const startByte = startByteArg === undefined ? 0 : startByteArg;
+  if (startByte < 0) return { error: 'start_byte darf nicht negativ sein.' };
+  const requested = lengthArg === undefined ? READ_BYTES_DEFAULT_LENGTH : lengthArg;
+  if (requested < 1) return { error: 'length muss mindestens 1 sein.' };
+  if (startByte >= buf.length && !(startByte === 0 && buf.length === 0)) {
+    return {
+      error: `start_byte (${startByte}) liegt hinter dem Dateiende — die Datei hat ${buf.length} Bytes.`,
+    };
+  }
+
+  const end = Math.min(startByte + Math.min(requested, maxChars), buf.length);
+  let firstLine = 1;
+  for (let i = 0; i < startByte; i++) {
+    if (buf[i] === 0x0a || (buf[i] === 0x0d && buf[i + 1] !== 0x0a)) firstLine += 1;
+  }
+
+  return {
+    relative_path: rel,
+    size_bytes: buf.length,
+    start_byte: startByte,
+    length: end - startByte,
+    first_line: firstLine,
+    truncated: end < Math.min(startByte + requested, buf.length),
+    content: buf.subarray(startByte, end).toString('utf8'),
+  };
+}
+
 function isBinaryBuffer(buf) {
   return buf.subarray(0, SEARCH_BINARY_PROBE_BYTES).includes(0);
 }
@@ -98,10 +198,19 @@ function clipSearchLine(line) {
   return `${line.slice(0, SEARCH_MAX_LINE_CHARS)}…`;
 }
 
-function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes, maxSearchScannedFiles }) {
+function createFsService({
+  fs,
+  path,
+  maxReadFileBytes,
+  maxWriteFileBytes,
+  maxSearchScannedFiles,
+  maxReadSliceChars,
+}) {
   const MAX_READ_FILE_BYTES = maxReadFileBytes;
   const MAX_WRITE_FILE_BYTES = maxWriteFileBytes || maxReadFileBytes;
   const MAX_SEARCH_SCANNED_FILES = maxSearchScannedFiles || SEARCH_DEFAULT_MAX_SCANNED_FILES;
+  // Budget pro Ausschnitt: Zeichen im Zeilenmodus, Bytes im Byte-Modus.
+  const MAX_READ_SLICE_CHARS = maxReadSliceChars || READ_SLICE_DEFAULT_MAX_CHARS;
 
   /** true, wenn candidate (aufgelöst) innerhalb von root liegt — Root selbst zählt mit. */
   function containsPath(root, candidate) {
@@ -248,6 +357,54 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes, maxSea
     } catch (e) {
       return JSON.stringify({ error: e.message });
     }
+  }
+
+  async function runReadFileLinesTool(args, workspaceRoot) {
+    const rel = typeof args.relative_path === 'string' ? args.relative_path.trim() : '';
+    if (!rel) {
+      return JSON.stringify({ error: 'relative_path ist erforderlich.' });
+    }
+    const hasLineRange = args.start_line !== undefined || args.end_line !== undefined;
+    const hasByteRange = args.start_byte !== undefined || args.length !== undefined;
+    if (hasLineRange && hasByteRange) {
+      return JSON.stringify({
+        error:
+          'Entweder Zeilenbereich (start_line/end_line) oder Byte-Bereich (start_byte/length) angeben — nicht beides.',
+      });
+    }
+    const parsed = {};
+    for (const name of ['start_line', 'end_line', 'start_byte', 'length']) {
+      const { value, error } = readIntegerArg(args, name);
+      if (error) return JSON.stringify({ error });
+      parsed[name] = value;
+    }
+    const { absPath, error } = await resolveWorkspacePathForAccess(workspaceRoot, rel);
+    if (error) return JSON.stringify({ error });
+    let buf;
+    try {
+      const st = await fs.stat(absPath);
+      if (st.isDirectory()) {
+        return JSON.stringify({ error: 'Pfad ist ein Ordner, keine Datei.' });
+      }
+      if (st.size > MAX_READ_FILE_BYTES) {
+        return JSON.stringify({
+          error: `Datei zu groß (>${MAX_READ_FILE_BYTES} Bytes). Bitte andere Datei wählen.`,
+        });
+      }
+      buf = await fs.readFile(absPath);
+    } catch (e) {
+      return JSON.stringify({ error: e.message });
+    }
+    const result = hasByteRange
+      ? buildByteSliceResult(rel, buf, parsed.start_byte, parsed.length, MAX_READ_SLICE_CHARS)
+      : buildLineSliceResult(
+          rel,
+          buf.toString('utf8'),
+          parsed.start_line,
+          parsed.end_line,
+          MAX_READ_SLICE_CHARS
+        );
+    return JSON.stringify(result);
   }
 
   async function runWriteFileTextTool(args, workspaceRoot) {
@@ -525,6 +682,7 @@ function createFsService({ fs, path, maxReadFileBytes, maxWriteFileBytes, maxSea
     resolveWorkspacePathForAccess,
     runListDirectoryTool,
     runReadFileTextTool,
+    runReadFileLinesTool,
     runWriteFileTextTool,
     runSearchInFilesTool,
     readDirectory,

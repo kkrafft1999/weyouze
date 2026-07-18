@@ -50,6 +50,16 @@ function summarizeToolCall(toolName, args, phase = 'start', locale = APP_LOCALES
     }
     return isDone ? 'Datei gelesen' : 'Datei wird gelesen …';
   }
+  if (toolName === 'read_file_lines') {
+    const pathLabel = formatRelativePathForLabel(args?.relative_path);
+    const start = Number.isFinite(args?.start_line) ? Math.floor(args.start_line) : null;
+    const end = Number.isFinite(args?.end_line) ? Math.floor(args.end_line) : null;
+    let rangeLabel = null;
+    if (start !== null && end !== null) rangeLabel = ` (Zeilen ${start}–${end})`;
+    else if (start !== null) rangeLabel = ` (ab Zeile ${start})`;
+    const target = `Datei${pathLabel ? ` ${pathLabel}` : ''}${rangeLabel || ''}`;
+    return isDone ? `${target} gelesen` : `${target} wird gelesen …`;
+  }
   if (toolName === 'write_file_text') {
     const pathLabel = formatRelativePathForLabel(args?.relative_path);
     if (pathLabel) {

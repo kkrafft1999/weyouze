@@ -648,6 +648,224 @@ test('search_in_files does not follow symlinks out of the workspace', async (t) 
   assert.deepEqual(out.matches, []);
 });
 
+async function makeLinesFixture(t, lineCount = 10) {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const lines = Array.from({ length: lineCount }, (_, i) => `zeile ${i + 1}`);
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), `${lines.join('\n')}\n`, 'utf8');
+  return tmpRoot;
+}
+
+test('read_file_lines returns a numbered line range through the registry', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeLinesFixture(t);
+
+  const out = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: 'a.txt', start_line: 3, end_line: 5 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(out.content, '3\tzeile 3\n4\tzeile 4\n5\tzeile 5');
+  assert.equal(out.start_line, 3);
+  assert.equal(out.end_line, 5);
+  assert.equal(out.total_lines, 10);
+  assert.equal(out.truncated, false);
+});
+
+test('read_file_lines defaults to the file start and clamps end_line at EOF', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeLinesFixture(t);
+  await fs.writeFile(path.join(tmpRoot, 'leer.txt'), '', 'utf8');
+
+  const all = JSON.parse(
+    await registry.execute('read_file_lines', { relative_path: 'a.txt' }, { workspaceRoot: tmpRoot })
+  );
+  assert.equal(all.start_line, 1);
+  assert.equal(all.end_line, 10);
+  assert.equal(all.truncated, false);
+  assert.match(all.content, /^1\tzeile 1\n/);
+
+  const clamped = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: 'a.txt', start_line: 8, end_line: 99 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(clamped.end_line, 10);
+  assert.equal(clamped.truncated, false);
+
+  const empty = JSON.parse(
+    await registry.execute('read_file_lines', { relative_path: 'leer.txt' }, { workspaceRoot: tmpRoot })
+  );
+  assert.equal(empty.total_lines, 0);
+  assert.equal(empty.content, '');
+});
+
+test('read_file_lines validates range parameters', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeLinesFixture(t);
+  const run = async (args) =>
+    JSON.parse(await registry.execute('read_file_lines', { relative_path: 'a.txt', ...args }, { workspaceRoot: tmpRoot }));
+
+  assert.match((await run({ start_line: 0 })).error, /start_line/);
+  assert.match((await run({ start_line: 5, end_line: 3 })).error, /end_line/);
+  assert.match((await run({ start_line: '3' })).error, /Ganzzahl/);
+  assert.match((await run({ start_line: 42 })).error, /hinter dem Dateiende.*10 Zeilen/);
+  assert.match((await run({ start_line: 1, start_byte: 0 })).error, /nicht beides/);
+  const noPath = JSON.parse(await registry.execute('read_file_lines', {}, { workspaceRoot: tmpRoot }));
+  assert.match(noPath.error, /relative_path/);
+});
+
+test('read_file_lines reads a byte range and reports the first line', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'b.txt'), 'abc\ndef\nghi\n', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: 'b.txt', start_byte: 4, length: 3 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(out.content, 'def');
+  assert.equal(out.first_line, 2);
+  assert.equal(out.length, 3);
+  assert.equal(out.size_bytes, 12);
+  assert.equal(out.truncated, false);
+
+  const tail = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: 'b.txt', start_byte: 8 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(tail.content, 'ghi\n');
+  assert.equal(tail.first_line, 3);
+
+  const beyond = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: 'b.txt', start_byte: 100 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.match(beyond.error, /hinter dem Dateiende.*12 Bytes/);
+});
+
+test('read_file_lines respects workspace bounds and rejects directories', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeLinesFixture(t);
+
+  const outside = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: '../outside.txt', start_line: 1 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.match(outside.error, /außerhalb/);
+
+  const dir = JSON.parse(
+    await registry.execute('read_file_lines', { relative_path: '.' }, { workspaceRoot: tmpRoot })
+  );
+  assert.match(dir.error, /Ordner/);
+});
+
+test('read_file_lines rejects a symlink to a file outside the workspace', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const workspace = path.join(tmpRoot, 'workspace');
+  const outside = path.join(tmpRoot, 'outside');
+  await fs.mkdir(workspace);
+  await fs.mkdir(outside);
+  const secret = path.join(outside, 'secret.txt');
+  await fs.writeFile(secret, 'geheim\n', 'utf8');
+  const linked = await createSymlinkOrSkip(
+    t,
+    secret,
+    path.join(workspace, 'secret-link.txt'),
+    process.platform === 'win32' ? 'file' : undefined
+  );
+  if (!linked) return;
+
+  const result = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: 'secret-link.txt', start_line: 1 },
+      { workspaceRoot: workspace }
+    )
+  );
+  assert.match(result.error, /außerhalb/);
+  assert.equal(result.content, undefined);
+});
+
+test('read_file_lines rejects oversized files and enforces the slice budget', async (t) => {
+  const smallRead = createFsService({ fs, path, maxReadFileBytes: 16 });
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'gross.txt'), 'x'.repeat(32), 'utf8');
+  const tooBig = JSON.parse(
+    await createWorkspaceToolRegistry({ fsService: smallRead }).execute(
+      'read_file_lines',
+      { relative_path: 'gross.txt' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.match(tooBig.error, /zu groß/);
+
+  const smallSlice = createFsService({
+    fs,
+    path,
+    maxReadFileBytes: 1024 * 1024,
+    maxReadSliceChars: 20,
+  });
+  const registry = createWorkspaceToolRegistry({ fsService: smallSlice });
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), 'zeile 1\nzeile 2\nzeile 3\n', 'utf8');
+  const budgeted = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: 'a.txt', start_line: 1, end_line: 3 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(budgeted.content, '1\tzeile 1\n2\tzeile 2');
+  assert.equal(budgeted.end_line, 2);
+  assert.equal(budgeted.truncated, true);
+
+  const byteBudget = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: 'a.txt', start_byte: 0, length: 999 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(byteBudget.length, 20);
+  assert.equal(byteBudget.truncated, true);
+});
+
+test('read_file_lines caps the line span per call', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeLinesFixture(t, 1200);
+
+  const out = JSON.parse(
+    await registry.execute(
+      'read_file_lines',
+      { relative_path: 'a.txt', start_line: 1, end_line: 1200 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(out.end_line, 1000);
+  assert.equal(out.total_lines, 1200);
+  assert.equal(out.truncated, true);
+});
+
 test('containsPath accepts the root itself and children, rejects siblings and traversal', () => {
   const path = require('path');
   const fs = require('fs/promises');

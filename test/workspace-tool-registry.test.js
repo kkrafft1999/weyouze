@@ -109,6 +109,7 @@ test('workspace registry declares all built-in tools and filters write consisten
   const fsService = {
     runListDirectoryTool() {},
     runReadFileTextTool() {},
+    runReadFileLinesTool() {},
     runWriteFileTextTool() {},
     runSearchInFilesTool() {},
   };
@@ -118,6 +119,7 @@ test('workspace registry declares all built-in tools and filters write consisten
   assert.deepEqual(readOnlyNames, [
     'list_directory',
     'read_file_text',
+    'read_file_lines',
     'search_in_files',
     'debug_wait',
   ]);
@@ -129,6 +131,7 @@ test('workspace registry declares all built-in tools and filters write consisten
   assert.deepEqual(writableNames, [
     'list_directory',
     'read_file_text',
+    'read_file_lines',
     'search_in_files',
     'debug_wait',
     'write_file_text',

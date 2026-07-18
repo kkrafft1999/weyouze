@@ -136,6 +136,47 @@ function createWorkspaceToolRegistry({ fsService }) {
         fsService.runReadFileTextTool(args, workspaceRoot),
     },
     {
+      name: 'read_file_lines',
+      description:
+        'Liest gezielt einen Ausschnitt einer Textdatei (UTF-8, nur innerhalb des Projektordners): ' +
+        'entweder einen Zeilenbereich (start_line/end_line, 1-basiert, inklusiv) oder einen Byte-Bereich (start_byte/length). ' +
+        'Im Zeilenmodus ist jeder Zeile ihre Zeilennummer plus Tabulator vorangestellt — passend zu Treffern aus search_in_files. ' +
+        'Token-sparsamer als read_file_text, wenn nur ein Teil der Datei gebraucht wird. Maximale Dateigröße: 2 MB.',
+      promptDescription:
+        'Liest gezielt Zeilen- oder Byte-Ausschnitte aus Textdateien des Projektordners (Zeilen nummeriert).',
+      parameters: {
+        type: 'object',
+        properties: {
+          relative_path: {
+            type: 'string',
+            description: 'Relativer Pfad zur Datei, z. B. "src/app.js".',
+          },
+          start_line: {
+            type: 'integer',
+            description:
+              'Erste Zeile des Ausschnitts (1-basiert, Standard 1). Nicht mit start_byte/length kombinierbar.',
+          },
+          end_line: {
+            type: 'integer',
+            description:
+              'Letzte Zeile (inklusiv; Standard start_line + 199, maximal 1000 Zeilen pro Aufruf).',
+          },
+          start_byte: {
+            type: 'integer',
+            description:
+              'Byte-Offset (0-basiert), ab dem gelesen wird. Nicht mit start_line/end_line kombinierbar.',
+          },
+          length: {
+            type: 'integer',
+            description: 'Anzahl Bytes ab start_byte (Standard 16000, Obergrenze 32000).',
+          },
+        },
+        required: ['relative_path'],
+      },
+      handler: (args, { workspaceRoot }) =>
+        fsService.runReadFileLinesTool(args, workspaceRoot),
+    },
+    {
       name: 'search_in_files',
       description:
         'Durchsucht Textdateien im Projektordner rekursiv nach einem Suchtext oder regulären Ausdruck ' +

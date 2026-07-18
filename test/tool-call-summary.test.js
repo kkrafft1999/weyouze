@@ -27,6 +27,19 @@ test('summarizeToolCall formats workspace tools with start and done labels', () 
   );
   assert.equal(summarizeToolCall('read_file_text', {}, 'start'), 'Datei wird gelesen …');
   assert.equal(
+    summarizeToolCall('read_file_lines', { relative_path: 'src/app.js', start_line: 400, end_line: 450 }, 'start'),
+    'Datei src/app.js (Zeilen 400–450) wird gelesen …'
+  );
+  assert.equal(
+    summarizeToolCall('read_file_lines', { relative_path: 'src/app.js', start_line: 400, end_line: 450 }, 'done'),
+    'Datei src/app.js (Zeilen 400–450) gelesen'
+  );
+  assert.equal(
+    summarizeToolCall('read_file_lines', { relative_path: 'src/app.js', start_line: 400 }, 'done'),
+    'Datei src/app.js (ab Zeile 400) gelesen'
+  );
+  assert.equal(summarizeToolCall('read_file_lines', {}, 'start'), 'Datei wird gelesen …');
+  assert.equal(
     summarizeToolCall('write_file_text', { relative_path: 'notes/todo.md' }, 'start'),
     'Datei notes/todo.md wird geschrieben …'
   );
