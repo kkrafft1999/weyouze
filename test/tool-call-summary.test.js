@@ -73,6 +73,16 @@ test('summarizeToolCall formats workspace tools with start and done labels', () 
   );
   assert.equal(summarizeToolCall('search_in_files', {}, 'start'), 'Dateien werden durchsucht …');
   assert.equal(summarizeToolCall('search_in_files', {}, 'done'), 'Dateien durchsucht');
+  assert.equal(
+    summarizeToolCall('find_files', { pattern: '**/*.js' }, 'start'),
+    'Suche Dateien zu „**/*.js“ …'
+  );
+  assert.equal(
+    summarizeToolCall('find_files', { pattern: '**/*.js' }, 'done'),
+    'Dateien zu „**/*.js“ gesucht'
+  );
+  assert.equal(summarizeToolCall('find_files', {}, 'start'), 'Dateien werden gesucht …');
+  assert.equal(summarizeToolCall('find_files', {}, 'done'), 'Dateien gesucht');
   assert.equal(summarizeToolCall('debug_wait', {}, 'start'), 'Warte 5 Sekunden …');
   assert.equal(summarizeToolCall('debug_wait', {}, 'done'), '5 Sekunden gewartet');
   assert.equal(summarizeToolCall('debug_wait', { duration_seconds: 1.2 }, 'start'), 'Warte 1,2 Sekunden …');

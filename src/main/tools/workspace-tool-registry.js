@@ -237,6 +237,44 @@ function createWorkspaceToolRegistry({ fsService }) {
         fsService.runSearchInFilesTool(args, workspaceRoot),
     },
     {
+      name: 'find_files',
+      description:
+        'Findet Dateien und Ordner im Projektordner rekursiv per Glob-Muster und liefert nur die Pfade zurück — ' +
+        'ein Aufruf statt vieler list_directory-Runden. Muster in gitignore-Syntax (*, ?, **); ' +
+        'Muster mit / sind am Projektroot verankert, ein abschließendes / findet nur Ordner. ' +
+        'Überspringt versteckte Einträge, Muster aus der .gitignore des Projektroots sowie .git.',
+      promptDescription:
+        'Findet Datei- und Ordnerpfade im Projektordner per Glob-Muster (z. B. "**/*.js").',
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: {
+            type: 'string',
+            description:
+              'Glob-Muster (gitignore-Syntax), z. B. "*.md", "src/**/*.js" oder "components/"; ' +
+              'wird gegen den Pfad relativ zum Projektroot geprüft.',
+          },
+          relative_path: {
+            type: 'string',
+            description:
+              'Startordner relativ zum Projektroot; leer oder "." für das gesamte Projekt.',
+          },
+          max_results: {
+            type: 'integer',
+            description: 'Maximale Anzahl gefundener Pfade (Standard 100, Obergrenze 500).',
+          },
+          include_hidden: {
+            type: 'boolean',
+            description:
+              'true, um auch versteckte Einträge (Punkt-Präfix) zu finden (Standard false; .git bleibt immer ausgenommen).',
+          },
+        },
+        required: ['pattern'],
+      },
+      handler: (args, { workspaceRoot }) =>
+        fsService.runFindFilesTool(args, workspaceRoot),
+    },
+    {
       name: 'debug_wait',
       description:
         'Nur zum UI-Test: wartet eine konfigurierbare Zeit und liefert danach OK zurück. Kein Dateizugriff.',

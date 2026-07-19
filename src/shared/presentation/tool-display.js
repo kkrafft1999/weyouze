@@ -82,6 +82,14 @@ function summarizeToolCall(toolName, args, phase = 'start', locale = APP_LOCALES
     }
     return isDone ? 'Dateien durchsucht' : 'Dateien werden durchsucht …';
   }
+  if (toolName === 'find_files') {
+    const raw = typeof args?.pattern === 'string' ? args.pattern.trim() : '';
+    if (raw) {
+      const patternLabel = `„${truncateToolLabel(raw, 32)}“`;
+      return isDone ? `Dateien zu ${patternLabel} gesucht` : `Suche Dateien zu ${patternLabel} …`;
+    }
+    return isDone ? 'Dateien gesucht' : 'Dateien werden gesucht …';
+  }
   if (toolName === 'debug_wait') {
     return formatPauseDurationLabel(resolveDebugWaitMs(args), phase, locale);
   }

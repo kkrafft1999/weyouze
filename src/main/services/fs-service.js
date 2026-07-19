@@ -11,6 +11,9 @@ const SEARCH_MAX_LINE_CHARS = 400;
 const SEARCH_BINARY_PROBE_BYTES = 8192;
 const SEARCH_DEFAULT_MAX_SCANNED_FILES = 5000;
 
+const FIND_DEFAULT_MAX_RESULTS = 100;
+const FIND_MAX_RESULTS = 500;
+
 function escapeRegExpLiteral(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -663,6 +666,101 @@ function createFsService({
     });
   }
 
+  async function runFindFilesTool(args, workspaceRoot) {
+    const pattern = typeof args.pattern === 'string' ? args.pattern.trim() : '';
+    if (!pattern) {
+      return JSON.stringify({ error: 'pattern ist erforderlich.' });
+    }
+    const glob = globToRegExp(pattern);
+    let maxResults = Number.isFinite(args.max_results)
+      ? Math.floor(args.max_results)
+      : FIND_DEFAULT_MAX_RESULTS;
+    maxResults = Math.min(Math.max(1, maxResults), FIND_MAX_RESULTS);
+    const includeHidden = args.include_hidden === true;
+
+    const rel = typeof args.relative_path === 'string' ? args.relative_path.trim() : '';
+    const { absPath, error } = await resolveWorkspacePathForAccess(workspaceRoot, rel);
+    if (error) return JSON.stringify({ error });
+
+    const root = path.resolve(workspaceRoot);
+    let isIgnored = null;
+    try {
+      const gitignore = await fs.readFile(path.join(root, '.gitignore'), 'utf8');
+      isIgnored = createGitignoreMatcher(gitignore);
+    } catch {
+      // keine lesbare .gitignore — nichts auszuschließen
+    }
+
+    const state = {
+      results: [],
+      entriesVisited: 0,
+      matchLimitReached: false,
+      scanLimitReached: false,
+    };
+    const toRelPosix = (abs) => path.relative(root, abs).split(path.sep).join('/');
+
+    function addMatch(relEntry, isDirectory) {
+      if (glob.dirOnly && !isDirectory) return;
+      if (!glob.regex.test(relEntry)) return;
+      state.results.push({ path: relEntry, kind: isDirectory ? 'directory' : 'file' });
+      if (state.results.length >= maxResults) state.matchLimitReached = true;
+    }
+
+    async function walk(dirAbs) {
+      let entries;
+      try {
+        entries = await fs.readdir(dirAbs, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      entries.sort((a, b) => {
+        if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? 1 : -1;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      });
+      for (const entry of entries) {
+        if (state.matchLimitReached || state.scanLimitReached) return;
+        if (entry.name === '.git') continue;
+        if (!includeHidden && entry.name.startsWith('.')) continue;
+        if (state.entriesVisited >= MAX_SEARCH_SCANNED_FILES) {
+          state.scanLimitReached = true;
+          return;
+        }
+        state.entriesVisited += 1;
+        const entryAbs = path.join(dirAbs, entry.name);
+        const relEntry = toRelPosix(entryAbs);
+        if (entry.isDirectory()) {
+          if (isIgnored && isIgnored(relEntry, true)) continue;
+          addMatch(relEntry, true);
+          if (state.matchLimitReached) return;
+          await walk(entryAbs);
+        } else if (entry.isFile()) {
+          // Symlinks sind an Dirents weder isFile noch isDirectory und werden
+          // bewusst übersprungen (kein Verfolgen aus dem Workspace hinaus).
+          if (isIgnored && isIgnored(relEntry, false)) continue;
+          addMatch(relEntry, false);
+        }
+      }
+    }
+
+    try {
+      const st = await fs.stat(absPath);
+      if (!st.isDirectory()) {
+        return JSON.stringify({ error: 'Pfad ist kein Ordner.' });
+      }
+      await walk(absPath);
+    } catch (e) {
+      return JSON.stringify({ error: e.message });
+    }
+
+    return JSON.stringify({
+      relative_path: rel || '.',
+      pattern,
+      results: state.results,
+      truncated: state.matchLimitReached,
+      scan_limit_reached: state.scanLimitReached,
+    });
+  }
+
   async function readDirectory(dirPath) {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const items = await Promise.all(
@@ -753,6 +851,7 @@ function createFsService({
     runWriteFileTextTool,
     runEditFileTool,
     runSearchInFilesTool,
+    runFindFilesTool,
     readDirectory,
     moveItem,
     readFilePreview,

@@ -648,6 +648,227 @@ test('search_in_files does not follow symlinks out of the workspace', async (t) 
   assert.deepEqual(out.matches, []);
 });
 
+test('find_files finds paths recursively by glob through the registry', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), 'x', 'utf8');
+  await fs.mkdir(path.join(tmpRoot, 'sub'));
+  await fs.writeFile(path.join(tmpRoot, 'sub', 'b.txt'), 'x', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'sub', 'c.md'), 'x', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute('find_files', { pattern: '*.txt' }, { workspaceRoot: tmpRoot })
+  );
+
+  assert.equal(out.error, undefined);
+  // Muster ohne / matchen auf jeder Ebene; Dateien vor Unterordnern.
+  assert.deepEqual(out.results, [
+    { path: 'a.txt', kind: 'file' },
+    { path: 'sub/b.txt', kind: 'file' },
+  ]);
+  assert.equal(out.truncated, false);
+  assert.equal(out.scan_limit_reached, false);
+
+  const anchored = JSON.parse(
+    await registry.execute('find_files', { pattern: 'sub/*.md' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(anchored.results, [{ path: 'sub/c.md', kind: 'file' }]);
+});
+
+test('find_files matches directories and honors trailing-slash patterns', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.mkdir(path.join(tmpRoot, 'sub'));
+  await fs.writeFile(path.join(tmpRoot, 'sub.txt'), 'x', 'utf8');
+
+  const dirOnly = JSON.parse(
+    await registry.execute('find_files', { pattern: 'sub/' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(dirOnly.results, [{ path: 'sub', kind: 'directory' }]);
+
+  const both = JSON.parse(
+    await registry.execute('find_files', { pattern: 'sub*' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(both.results, [
+    { path: 'sub.txt', kind: 'file' },
+    { path: 'sub', kind: 'directory' },
+  ]);
+});
+
+test('find_files rejects a missing pattern and a file as start path', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), 'x', 'utf8');
+
+  const missing = JSON.parse(
+    await registry.execute('find_files', {}, { workspaceRoot: tmpRoot })
+  );
+  assert.match(missing.error, /pattern/);
+
+  const notDir = JSON.parse(
+    await registry.execute(
+      'find_files',
+      { pattern: '*', relative_path: 'a.txt' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.match(notDir.error, /kein Ordner/);
+});
+
+test('find_files respects workspace bounds', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+
+  const out = JSON.parse(
+    await registry.execute(
+      'find_files',
+      { pattern: '*', relative_path: '../outside' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.match(out.error, /außerhalb/);
+});
+
+test('find_files skips hidden entries by default, include_hidden enables them, .git stays excluded', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.mkdir(path.join(tmpRoot, '.hidden'));
+  await fs.writeFile(path.join(tmpRoot, '.hidden', 'h.txt'), 'x', 'utf8');
+  await fs.mkdir(path.join(tmpRoot, '.git'));
+  await fs.writeFile(path.join(tmpRoot, '.git', 'config'), 'x', 'utf8');
+
+  const withoutHidden = JSON.parse(
+    await registry.execute('find_files', { pattern: '**' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(withoutHidden.results, []);
+
+  const withHidden = JSON.parse(
+    await registry.execute(
+      'find_files',
+      { pattern: '**', include_hidden: true },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.deepEqual(
+    withHidden.results.map((r) => r.path),
+    ['.hidden', '.hidden/h.txt']
+  );
+});
+
+test('find_files respects the root .gitignore including negation', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(
+    path.join(tmpRoot, '.gitignore'),
+    '# Kommentar\nignored-dir/\n*.log\n!keep.log\n',
+    'utf8'
+  );
+  await fs.mkdir(path.join(tmpRoot, 'ignored-dir'));
+  await fs.writeFile(path.join(tmpRoot, 'ignored-dir', 'x.txt'), 'x', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'debug.log'), 'x', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'keep.log'), 'x', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'normal.txt'), 'x', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute('find_files', { pattern: '**' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(
+    out.results.map((r) => r.path),
+    ['keep.log', 'normal.txt']
+  );
+});
+
+test('find_files caps results at max_results and reports truncated', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  for (let i = 0; i < 10; i++) {
+    await fs.writeFile(path.join(tmpRoot, `f${i}.txt`), 'x', 'utf8');
+  }
+
+  const out = JSON.parse(
+    await registry.execute(
+      'find_files',
+      { pattern: '*.txt', max_results: 3 },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(out.results.length, 3);
+  assert.equal(out.truncated, true);
+});
+
+test('find_files stops after the scan limit and reports it', async (t) => {
+  const svc = createFsService({
+    fs,
+    path,
+    maxReadFileBytes: 1024 * 1024,
+    maxWriteFileBytes: 1024 * 1024,
+    maxSearchScannedFiles: 1,
+  });
+  const registry = makeToolRegistry(svc);
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), 'x', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'b.txt'), 'x', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute('find_files', { pattern: '*.txt' }, { workspaceRoot: tmpRoot })
+  );
+  assert.deepEqual(
+    out.results.map((r) => r.path),
+    ['a.txt']
+  );
+  assert.equal(out.scan_limit_reached, true);
+});
+
+test('find_files searches only below the given start folder', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.mkdir(path.join(tmpRoot, 'src'));
+  await fs.mkdir(path.join(tmpRoot, 'dist'));
+  await fs.writeFile(path.join(tmpRoot, 'src', 'a.js'), 'x', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'dist', 'b.js'), 'x', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute(
+      'find_files',
+      { pattern: '*.js', relative_path: 'src' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.deepEqual(out.results, [{ path: 'src/a.js', kind: 'file' }]);
+});
+
+test('find_files does not follow symlinks out of the workspace', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const workspace = path.join(tmpRoot, 'workspace');
+  const outside = path.join(tmpRoot, 'outside');
+  await fs.mkdir(workspace);
+  await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, 'secret.txt'), 'x', 'utf8');
+  const linked = await createSymlinkOrSkip(
+    t,
+    outside,
+    path.join(workspace, 'outside-link'),
+    process.platform === 'win32' ? 'junction' : 'dir'
+  );
+  if (!linked) return;
+
+  const out = JSON.parse(
+    await registry.execute('find_files', { pattern: '**' }, { workspaceRoot: workspace })
+  );
+  assert.deepEqual(out.results, []);
+});
+
 async function makeLinesFixture(t, lineCount = 10) {
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
   t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
