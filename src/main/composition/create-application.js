@@ -126,6 +126,7 @@ function createApplication({
     REQ,
     setActiveWorkspaceRoot: workspaceState.setActiveWorkspaceRoot,
     presentation: settingsPresentation,
+    toolCatalog: toolRegistry,
   });
   registerChatHistoryHandlers({ ipcMain, chatHistoryStore, REQ });
   registerUpdateHandlers({ ipcMain, updates, REQ });

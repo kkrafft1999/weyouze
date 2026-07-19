@@ -379,8 +379,41 @@ test('engine passes the write preference to its tool registry', async () => {
     },
   });
 
-  assert.deepEqual(getToolsCalls, [{ allowWrite: true }]);
+  assert.deepEqual(getToolsCalls, [{ allowWrite: true, disabledNames: [] }]);
   assert.equal(calls[0].tools[0].function.name, 'write_file_text');
+});
+
+test('engine passes disabled tools to registry and execution context', async () => {
+  const getToolsCalls = [];
+  const tools = makeToolPort();
+  tools.getTools = (options) => {
+    getToolsCalls.push(options);
+    return [{ type: 'function', function: { name: 'list_directory' } }];
+  };
+  const { engine } = makeEngine([
+    assistantToolCall('call_1', 'list_directory', { relative_path: 'src' }),
+    assistantText('fertig'),
+  ], {
+    tools,
+    preferences: {
+      async read() {
+        return { allowWorkspaceWrite: false, disabledTools: ['debug_wait', 'search_in_files'] };
+      },
+    },
+  });
+
+  await engine.send({
+    sessionId: 'renderer-1',
+    payload: {
+      messages: [{ role: 'user', content: 'Liste' }],
+      workspaceRoot: '/tmp/weyouze-project',
+    },
+  });
+
+  assert.deepEqual(getToolsCalls, [
+    { allowWrite: false, disabledNames: ['debug_wait', 'search_in_files'] },
+  ]);
+  assert.deepEqual(tools.calls[0].context.disabledNames, ['debug_wait', 'search_in_files']);
 });
 
 test('engine preserves start display lines on tool trace when aborted during execution', async () => {

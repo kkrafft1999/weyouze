@@ -27,6 +27,7 @@ const REQUEST_CHANNELS = Object.freeze({
   SETTINGS_GET_FOLDER_HISTORY: 'settings:getFolderHistory',
   SETTINGS_GET_UI_PREFS: 'settings:getUIPrefs',
   SETTINGS_SET_UI_PREFS: 'settings:setUIPrefs',
+  SETTINGS_GET_TOOL_CATALOG: 'settings:getToolCatalog',
 
   UPDATE_CHECK: 'update:check',
   UPDATE_GET_VERSION: 'update:getVersion',

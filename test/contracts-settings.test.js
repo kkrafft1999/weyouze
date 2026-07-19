@@ -111,6 +111,23 @@ test('normalizeUiPrefs and patch apply clamps', () => {
   assert.equal(clampSidebarWidth(999), 600);
 });
 
+test('normalizeUiPrefs and patch sanitize disabledTools', () => {
+  assert.deepEqual(normalizeUiPrefs({}).disabledTools, []);
+  assert.deepEqual(normalizeUiPrefs({ disabledTools: 'debug_wait' }).disabledTools, []);
+  assert.deepEqual(
+    normalizeUiPrefs({ disabledTools: [' debug_wait ', 'debug_wait', 42, '', 'edit_file'] }).disabledTools,
+    ['debug_wait', 'edit_file']
+  );
+
+  assert.equal('disabledTools' in normalizeUiPrefsPatch({}), false);
+  assert.equal('disabledTools' in normalizeUiPrefsPatch({ disabledTools: 'x' }), false);
+  assert.deepEqual(normalizeUiPrefsPatch({ disabledTools: [] }).disabledTools, []);
+  assert.deepEqual(
+    normalizeUiPrefsPatch({ disabledTools: ['read_file_text', null, 'read_file_text'] }).disabledTools,
+    ['read_file_text']
+  );
+});
+
 test('createListModelsResult and settings result DTOs', () => {
   assert.deepEqual(createSettingsOk(), { ok: true });
   assert.deepEqual(createSettingsError('x'), { ok: false, error: 'x' });

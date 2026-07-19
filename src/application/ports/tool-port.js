@@ -7,6 +7,7 @@
  * @property {string} workspaceRoot
  * @property {AbortSignal} abortSignal
  * @property {boolean} allowWrite
+ * @property {string[]} [disabledNames] — in den Einstellungen abgewählte Tools
  */
 
 /**
@@ -26,8 +27,8 @@
 
 /**
  * @typedef {Object} ToolPort
- * @property {(options?: { allowWrite?: boolean }) => Array} getTools
- * @property {(options?: { allowWrite?: boolean }) => string} buildSystemPrompt
+ * @property {(options?: { allowWrite?: boolean, disabledNames?: string[] }) => Array} getTools
+ * @property {(options?: { allowWrite?: boolean, disabledNames?: string[] }) => string} buildSystemPrompt
  * @property {(toolName: string, args: object, extra?: object) => ToolTraceEntry} buildTraceEntry
  * @property {(entry: ToolTraceEntry, phase: string, locale?: string) => string} formatDisplayLine
  * @property {(name: string, args: object, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>} execute

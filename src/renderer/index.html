@@ -264,7 +264,7 @@
           </button>
           <button type="button" class="settings-nav-item" role="tab" aria-selected="false" aria-controls="panel-settings-tools" id="tab-settings-tools" data-settings-panel="tools">
             Tools
-            <span class="settings-nav-item__desc">Integrationen (z. B. später)</span>
+            <span class="settings-nav-item__desc">Werkzeuge fürs Sprachmodell</span>
           </button>
           <button type="button" class="settings-nav-item" role="tab" aria-selected="false" aria-controls="panel-settings-general" id="tab-settings-general" data-settings-panel="general">
             Allgemein
@@ -296,14 +296,15 @@
 
           <section class="settings-panel" id="panel-settings-tools" role="tabpanel" aria-labelledby="tab-settings-tools" hidden>
             <p class="settings-form-hint">
-              Hier können später z. B. externe Tools, Endpunkte oder MCP-Anbindungen verwaltet werden.
+              Diese Tools kann das Sprachmodell im geöffneten Projektordner nutzen. Nur angehakte Tools
+              werden dem Modell angeboten — standardmäßig sind alle aktiv.
             </p>
-            <div class="settings-placeholder-card">
-              <h3 class="settings-placeholder-card__title">Tool-Katalog</h3>
-              <p class="settings-placeholder-card__text">
-                Platz für Liste oder Karten pro Tool mit Name und Status — Datenfluss folgt mit späteren Releases.
+            <div class="settings-tools-card">
+              <h3 class="settings-subsection-title" id="heading-tool-catalog">Verfügbare Tools</h3>
+              <ul id="settings-tool-list" class="settings-tool-list" aria-labelledby="heading-tool-catalog"></ul>
+              <p id="settings-tool-list-empty" class="settings-empty-hint hidden">
+                Tool-Liste konnte nicht geladen werden.
               </p>
-              <span class="settings-soon-pill">Noch nicht umgesetzt</span>
             </div>
             <div class="settings-placeholder-card">
               <h3 class="settings-placeholder-card__title">Sichere Standards</h3>

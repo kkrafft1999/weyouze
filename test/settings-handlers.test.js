@@ -145,7 +145,7 @@ function makeHandlerProviders({ listModelsImpl } = {}) {
   };
 }
 
-async function setupHandlers(t, { encryptionAvailable = true, listModelsImpl } = {}) {
+async function setupHandlers(t, { encryptionAvailable = true, listModelsImpl, toolCatalog } = {}) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-settings-'));
   t.after(() => fs.rm(tmpDir, { recursive: true, force: true }));
   const safeStorage = {
@@ -197,9 +197,24 @@ async function setupHandlers(t, { encryptionAvailable = true, listModelsImpl } =
     REQ,
     setActiveWorkspaceRoot: () => {},
     presentation,
+    toolCatalog,
   });
   return { ipcMain, storage, llmConfigStore };
 }
+
+test('getToolCatalog returns the registry catalog, or an empty list without one', async (t) => {
+  const catalog = [
+    { name: 'list_directory', description: 'Listet Einträge.', requiresWrite: false },
+    { name: 'write_file_text', description: 'Schreibt Dateien.', requiresWrite: true },
+  ];
+  const { ipcMain } = await setupHandlers(t, {
+    toolCatalog: { listCatalog: () => catalog },
+  });
+  assert.deepEqual(await ipcMain.invoke(REQ.SETTINGS_GET_TOOL_CATALOG), { tools: catalog });
+
+  const { ipcMain: withoutCatalog } = await setupHandlers(t);
+  assert.deepEqual(await withoutCatalog.invoke(REQ.SETTINGS_GET_TOOL_CATALOG), { tools: [] });
+});
 
 test('registerSettingsHandlers requires injected presentation service', () => {
   const ipcMain = createMockIpcMain();

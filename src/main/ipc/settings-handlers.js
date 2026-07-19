@@ -16,6 +16,7 @@ function registerSettingsHandlers({
   REQ,
   setActiveWorkspaceRoot,
   presentation,
+  toolCatalog,
 }) {
   if (!presentation || typeof presentation.buildLlmStateDto !== 'function') {
     throw new Error('registerSettingsHandlers requires an injected settings presentation service.');
@@ -194,6 +195,10 @@ function registerSettingsHandlers({
   });
 
   ipcMain.handle(REQ.SETTINGS_GET_UI_PREFS, async () => uiPrefsStore.readUIPrefs());
+
+  ipcMain.handle(REQ.SETTINGS_GET_TOOL_CATALOG, async () => ({
+    tools: typeof toolCatalog?.listCatalog === 'function' ? toolCatalog.listCatalog() : [],
+  }));
 
   ipcMain.handle(REQ.SETTINGS_SET_UI_PREFS, async (_event, partial) => {
     const patch = normalizeUiPrefsPatch(partial);

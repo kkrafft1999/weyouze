@@ -7,6 +7,8 @@ let settingsDraftPresets = [];
 let settingsDraftActivePresetId = null;
 let settingsCredentialDraft = {};
 let popupPresetFieldValues = {};
+let settingsToolCatalog = [];
+let settingsDisabledToolsDraft = new Set();
 
 export function initSettingsModal(deps) {
   const {
@@ -53,6 +55,8 @@ export function initSettingsModal(deps) {
   const selectAppLocale = document.getElementById('select-app-locale');
   const inputMaxToolRounds = document.getElementById('input-max-tool-rounds');
   const inputAllowWorkspaceWrite = document.getElementById('input-allow-workspace-write');
+  const settingsToolList = document.getElementById('settings-tool-list');
+  const settingsToolListEmpty = document.getElementById('settings-tool-list-empty');
   const modalEncryptionWarning = document.getElementById('modal-encryption-warning');
   const modalSaveError = document.getElementById('modal-save-error');
   const btnChatSettings = document.getElementById('btn-chat-settings');
@@ -418,6 +422,66 @@ export function initSettingsModal(deps) {
     }
   }
 
+  function renderToolList() {
+    if (!settingsToolList) return;
+    settingsToolList.innerHTML = '';
+    const empty = settingsToolCatalog.length === 0;
+    settingsToolListEmpty?.classList.toggle('hidden', !empty);
+
+    for (const tool of settingsToolCatalog) {
+      const li = document.createElement('li');
+      li.className = 'settings-tool-item';
+
+      const label = document.createElement('label');
+      label.className = 'modal-checkbox settings-tool-item__checkbox';
+
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.dataset.toolName = tool.name;
+      input.checked = !settingsDisabledToolsDraft.has(tool.name);
+
+      const main = document.createElement('span');
+      main.className = 'settings-tool-item__main';
+
+      const name = document.createElement('code');
+      name.className = 'settings-tool-item__name';
+      name.setAttribute('lang', 'en');
+      name.textContent = tool.name;
+      main.appendChild(name);
+
+      if (tool.requiresWrite) {
+        const badge = document.createElement('span');
+        badge.className = 'settings-tool-item__badge';
+        badge.textContent = 'Schreib-Tool';
+        badge.title = 'Läuft nur, wenn zusätzlich der Schreibzugriff unten aktiviert ist.';
+        main.appendChild(badge);
+      }
+
+      label.appendChild(input);
+      label.appendChild(main);
+      li.appendChild(label);
+
+      if (tool.description) {
+        const desc = document.createElement('p');
+        desc.className = 'settings-tool-item__desc';
+        desc.textContent = tool.description;
+        li.appendChild(desc);
+      }
+
+      settingsToolList.appendChild(li);
+    }
+  }
+
+  async function loadToolCatalog() {
+    try {
+      const result = typeof api.getToolCatalog === 'function' ? await api.getToolCatalog() : null;
+      settingsToolCatalog = Array.isArray(result?.tools) ? result.tools : [];
+    } catch {
+      settingsToolCatalog = [];
+    }
+    renderToolList();
+  }
+
   function activateSettingsPanel(panelKey) {
     document.querySelectorAll('.settings-panel').forEach((p) => {
       const on = p.id === `panel-settings-${panelKey}`;
@@ -543,12 +607,17 @@ export function initSettingsModal(deps) {
           : DEFAULT_MAX_TOOL_ROUNDS;
       if (inputMaxToolRounds) inputMaxToolRounds.value = String(mtr);
       if (inputAllowWorkspaceWrite) inputAllowWorkspaceWrite.checked = up.allowWorkspaceWrite === true;
+      settingsDisabledToolsDraft = new Set(
+        Array.isArray(up.disabledTools) ? up.disabledTools.filter((n) => typeof n === 'string') : []
+      );
     } catch {
       inputGlobalSystemPrompt.value = '';
       selectAppLocale.value = 'de';
       if (inputMaxToolRounds) inputMaxToolRounds.value = String(DEFAULT_MAX_TOOL_ROUNDS);
       if (inputAllowWorkspaceWrite) inputAllowWorkspaceWrite.checked = false;
+      settingsDisabledToolsDraft = new Set();
     }
+    await loadToolCatalog();
     renderDraftPresetList();
     renderProviderSelect();
     syncPopupProviderUI(selectProvider.value, true);
@@ -735,6 +804,7 @@ export function initSettingsModal(deps) {
             return Number.isFinite(n) ? n : DEFAULT_MAX_TOOL_ROUNDS;
           })(),
           allowWorkspaceWrite: !!inputAllowWorkspaceWrite?.checked,
+          disabledTools: [...settingsDisabledToolsDraft],
         },
       });
       if (!res?.ok) {
@@ -863,6 +933,15 @@ export function initSettingsModal(deps) {
       }
       renderDraftPresetList();
     }
+  });
+
+  settingsToolList?.addEventListener('change', (e) => {
+    const input = e.target.closest('input[type="checkbox"][data-tool-name]');
+    if (!input) return;
+    const name = input.dataset.toolName;
+    if (!name) return;
+    if (input.checked) settingsDisabledToolsDraft.delete(name);
+    else settingsDisabledToolsDraft.add(name);
   });
 
   btnChatSettings.addEventListener('click', openSettingsModal);

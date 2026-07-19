@@ -2236,6 +2236,66 @@ select.modal-input {
   color: var(--ds-grey-muted);
 }
 
+/* Einstellungen › Tools: Liste der Workspace-Tools mit An/Aus-Häkchen.
+ * Solider Rahmen (im Gegensatz zur gestrichelten Placeholder-Card),
+ * weil hier echter Datenfluss dahintersteht. */
+.settings-tools-card {
+  border: 1px solid var(--ds-grey-divider);
+  border-radius: var(--ds-radius-md);
+  padding: 16px 18px;
+  background: var(--bg-primary);
+  margin-bottom: 14px;
+}
+
+.settings-tools-card .settings-subsection-title {
+  margin-bottom: 10px;
+}
+
+.settings-tool-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-tool-item__checkbox {
+  align-items: baseline;
+}
+
+.settings-tool-item__main {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-tool-item__name {
+  font-family: var(--ds-font-mono);
+  font-size: 0.92em;
+}
+
+.settings-tool-item__badge {
+  font-size: var(--ds-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: var(--ds-radius-pill);
+  border: 1px solid var(--ds-grey-divider);
+  color: var(--ds-grey-muted);
+  white-space: nowrap;
+}
+
+.settings-tool-item__desc {
+  margin: 2px 0 0 24px;
+  font-size: var(--ds-font-size-sm);
+  color: var(--ds-grey-muted);
+  line-height: var(--ds-line-height-prose, 1.5);
+  max-width: 64ch;
+}
+
 .modal-field-group {
   margin-bottom: 16px;
 }

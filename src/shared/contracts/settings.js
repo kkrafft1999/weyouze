@@ -42,6 +42,25 @@ function isAppLocale(value) {
   return value === APP_LOCALES.DE || value === APP_LOCALES.EN;
 }
 
+/**
+ * Normalisiert die Liste abgewählter Tool-Namen (Einstellungen › Tools).
+ * Gibt undefined zurück, wenn kein Array übergeben wurde; sonst eine
+ * bereinigte, deduplizierte Liste (leeres Array = alle Tools aktiv).
+ */
+function normalizeDisabledTools(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set();
+  const out = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'string') continue;
+    const name = entry.trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
 function createSettingsOk() {
   return { ok: true };
 }
@@ -201,6 +220,7 @@ function normalizeUiPrefs(raw) {
     baseSystemPrompt,
     appLocale,
     allowWorkspaceWrite: data.allowWorkspaceWrite === true,
+    disabledTools: normalizeDisabledTools(data.disabledTools) || [],
     ...(typeof maxToolRounds === 'number' ? { maxToolRounds } : {}),
     ...(typeof sidebarWidth === 'number' ? { sidebarWidth } : {}),
     ...(typeof chatPanelWidth === 'number' ? { chatPanelWidth } : {}),
@@ -239,6 +259,10 @@ function normalizeUiPrefsPatch(raw) {
   }
   if (typeof patch.allowWorkspaceWrite === 'boolean') {
     out.allowWorkspaceWrite = patch.allowWorkspaceWrite;
+  }
+  const disabledTools = normalizeDisabledTools(patch.disabledTools);
+  if (disabledTools) {
+    out.disabledTools = disabledTools;
   }
   if (typeof patch.ignoredUpdateVersion === 'string') {
     out.ignoredUpdateVersion = patch.ignoredUpdateVersion;
@@ -417,6 +441,7 @@ module.exports = {
   clampChatPanelWidth,
   clampHistoryCharLimit,
   isAppLocale,
+  normalizeDisabledTools,
   createSettingsOk,
   createSettingsError,
   createListModelsResult,

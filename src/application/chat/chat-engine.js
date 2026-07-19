@@ -244,7 +244,8 @@ function createChatEngine({
       const appLocale = resolveAppLocale(uiPrefs);
       const extraSystem = typeof uiPrefs.baseSystemPrompt === 'string' ? uiPrefs.baseSystemPrompt.trim() : '';
       const allowWrite = uiPrefs.allowWorkspaceWrite === true;
-      const toolOptions = { allowWrite };
+      const disabledNames = Array.isArray(uiPrefs.disabledTools) ? uiPrefs.disabledTools : [];
+      const toolOptions = { allowWrite, disabledNames };
       const workspaceSystem = workspaceRoot
         ? workspaceSystemPrompt(
             workspaceRoot,
@@ -375,7 +376,7 @@ function createChatEngine({
 
           let output;
           try {
-            const execution = await tools.execute(toolName, args, { workspaceRoot, abortSignal, allowWrite });
+            const execution = await tools.execute(toolName, args, { workspaceRoot, abortSignal, allowWrite, disabledNames });
             output = execution.output;
             emitProgressPayloads(execution.progressEvents);
           } catch (error) {

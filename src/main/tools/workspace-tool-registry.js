@@ -6,6 +6,11 @@ function toAllowedNameSet(allowedNames) {
   return new Set(allowedNames);
 }
 
+function toDisabledNameSet(disabledNames) {
+  if (!Array.isArray(disabledNames) || disabledNames.length === 0) return null;
+  return new Set(disabledNames);
+}
+
 function createToolRegistry(initialDefinitions = []) {
   const definitions = new Map();
 
@@ -23,13 +28,23 @@ function createToolRegistry(initialDefinitions = []) {
     });
   }
 
-  function getAvailableDefinitions({ allowWrite = false, allowedNames } = {}) {
+  function getAvailableDefinitions({ allowWrite = false, allowedNames, disabledNames } = {}) {
     const allowed = toAllowedNameSet(allowedNames);
+    const disabled = toDisabledNameSet(disabledNames);
     return [...definitions.values()].filter(
       (definition) =>
         (!definition.requiresWrite || allowWrite) &&
-        (!allowed || allowed.has(definition.name))
+        (!allowed || allowed.has(definition.name)) &&
+        (!disabled || !disabled.has(definition.name))
     );
+  }
+
+  function listCatalog() {
+    return [...definitions.values()].map((definition) => ({
+      name: definition.name,
+      description: definition.description,
+      requiresWrite: definition.requiresWrite === true,
+    }));
   }
 
   function getTools(options = {}) {
@@ -78,6 +93,12 @@ function createToolRegistry(initialDefinitions = []) {
     if (allowed && !allowed.has(name)) {
       return JSON.stringify({ error: `Tool ist nicht freigeschaltet: ${name}` });
     }
+    const disabled = toDisabledNameSet(context.disabledNames);
+    if (disabled && disabled.has(name)) {
+      return JSON.stringify({
+        error: `Tool ist deaktiviert: ${name}. Aktivierbar unter Einstellungen › Tools.`,
+      });
+    }
     return definition.handler(args || {}, context);
   }
 
@@ -87,6 +108,7 @@ function createToolRegistry(initialDefinitions = []) {
     register,
     getTools,
     buildSystemPrompt,
+    listCatalog,
     execute,
   };
 }

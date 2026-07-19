@@ -70,6 +70,49 @@ test('registry filters write tools and allowed tool names consistently', () => {
   assert.match(prompt, /Schreib-Tools zurückhaltend/);
 });
 
+test('registry filters disabled tool names from tools, prompt and execution', async () => {
+  const registry = createToolRegistry([
+    definition('read'),
+    definition('other'),
+    definition('write', { requiresWrite: true }),
+  ]);
+
+  assert.deepEqual(
+    registry.getTools({ allowWrite: true, disabledNames: ['other', 'write'] }).map((tool) => tool.function.name),
+    ['read']
+  );
+  const prompt = registry.buildSystemPrompt({ disabledNames: ['other'] });
+  assert.match(prompt, /read/);
+  assert.doesNotMatch(prompt, /other/);
+
+  assert.match(
+    JSON.parse(await registry.execute('other', {}, { disabledNames: ['other'] })).error,
+    /deaktiviert/
+  );
+  assert.deepEqual(
+    JSON.parse(await registry.execute('read', { value: 'x' }, { disabledNames: ['other'] })),
+    { name: 'read', value: 'x' }
+  );
+
+  // Leere Liste = alles aktiv (Default).
+  assert.deepEqual(
+    registry.getTools({ disabledNames: [] }).map((tool) => tool.function.name),
+    ['read', 'other']
+  );
+});
+
+test('registry lists its full catalog independent of write and disabled filters', () => {
+  const registry = createToolRegistry([
+    definition('read'),
+    definition('write', { requiresWrite: true }),
+  ]);
+
+  assert.deepEqual(registry.listCatalog(), [
+    { name: 'read', description: 'Beschreibung für read', requiresWrite: false },
+    { name: 'write', description: 'Beschreibung für write', requiresWrite: true },
+  ]);
+});
+
 test('registry executes handlers with request context', async () => {
   const registry = createToolRegistry([definition('read')]);
 
