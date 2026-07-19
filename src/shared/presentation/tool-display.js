@@ -67,6 +67,13 @@ function summarizeToolCall(toolName, args, phase = 'start', locale = APP_LOCALES
     }
     return isDone ? 'Datei geschrieben' : 'Datei wird geschrieben …';
   }
+  if (toolName === 'edit_file') {
+    const pathLabel = formatRelativePathForLabel(args?.relative_path);
+    if (pathLabel) {
+      return isDone ? `Datei ${pathLabel} geändert` : `Datei ${pathLabel} wird geändert …`;
+    }
+    return isDone ? 'Datei geändert' : 'Datei wird geändert …';
+  }
   if (toolName === 'search_in_files') {
     const raw = typeof args?.query === 'string' ? args.query.trim() : '';
     if (raw) {

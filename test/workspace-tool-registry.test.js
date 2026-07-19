@@ -111,6 +111,7 @@ test('workspace registry declares all built-in tools and filters write consisten
     runReadFileTextTool() {},
     runReadFileLinesTool() {},
     runWriteFileTextTool() {},
+    runEditFileTool() {},
     runSearchInFilesTool() {},
   };
   const registry = createWorkspaceToolRegistry({ fsService });
@@ -135,6 +136,7 @@ test('workspace registry declares all built-in tools and filters write consisten
     'search_in_files',
     'debug_wait',
     'write_file_text',
+    'edit_file',
   ]);
   assert.match(registry.buildSystemPrompt({ allowWrite: true }), /write_file_text/);
 });

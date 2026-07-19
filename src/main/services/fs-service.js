@@ -450,6 +450,73 @@ function createFsService({
     }
   }
 
+  async function runEditFileTool(args, workspaceRoot) {
+    const rel = typeof args.relative_path === 'string' ? args.relative_path.trim() : '';
+    if (!rel) {
+      return JSON.stringify({ error: 'relative_path ist erforderlich.' });
+    }
+    if (typeof args.old_string !== 'string' || !args.old_string.length) {
+      return JSON.stringify({ error: 'old_string (nicht leerer Text) ist erforderlich.' });
+    }
+    if (typeof args.new_string !== 'string') {
+      return JSON.stringify({ error: 'new_string (Text, darf leer sein) ist erforderlich.' });
+    }
+    if (args.old_string === args.new_string) {
+      return JSON.stringify({ error: 'old_string und new_string müssen sich unterscheiden.' });
+    }
+    const { absPath, error } = await resolveWorkspacePathForAccess(workspaceRoot, rel);
+    if (error) return JSON.stringify({ error });
+    try {
+      const st = await fs.stat(absPath);
+      if (st.isDirectory()) {
+        return JSON.stringify({ error: 'Pfad ist ein Ordner, keine Datei.' });
+      }
+      if (st.size > MAX_READ_FILE_BYTES) {
+        return JSON.stringify({
+          error: `Datei zu groß (>${MAX_READ_FILE_BYTES} Bytes). Bitte andere Datei wählen.`,
+        });
+      }
+      const text = (await fs.readFile(absPath)).toString('utf8');
+      let count = 0;
+      const firstIndex = text.indexOf(args.old_string);
+      for (let idx = firstIndex; idx !== -1; idx = text.indexOf(args.old_string, idx + args.old_string.length)) {
+        count += 1;
+      }
+      if (count === 0) {
+        return JSON.stringify({
+          error:
+            'old_string wurde nicht gefunden. Der Text muss exakt übereinstimmen — inklusive Einrückung und Zeilenumbrüchen.',
+        });
+      }
+      if (count > 1 && args.replace_all !== true) {
+        return JSON.stringify({
+          error: `old_string ist nicht eindeutig (${count} Treffer). Mehr umgebenden Kontext angeben oder replace_all=true setzen.`,
+        });
+      }
+      const updated =
+        args.replace_all === true
+          ? text.split(args.old_string).join(args.new_string)
+          : text.slice(0, firstIndex) +
+            args.new_string +
+            text.slice(firstIndex + args.old_string.length);
+      const byteLength = Buffer.byteLength(updated, 'utf8');
+      if (byteLength > MAX_WRITE_FILE_BYTES) {
+        return JSON.stringify({
+          error: `Inhalt zu groß (>${MAX_WRITE_FILE_BYTES} Bytes). Bitte kleiner aufteilen.`,
+        });
+      }
+      await fs.writeFile(absPath, updated, 'utf8');
+      return JSON.stringify({
+        relative_path: rel,
+        replacements: args.replace_all === true ? count : 1,
+        first_changed_line: text.slice(0, firstIndex).split(/\r\n|\r|\n/).length,
+        bytes_written: byteLength,
+      });
+    } catch (e) {
+      return JSON.stringify({ error: e.message });
+    }
+  }
+
   async function runSearchInFilesTool(args, workspaceRoot) {
     const query = typeof args.query === 'string' ? args.query : '';
     if (!query) {
@@ -684,6 +751,7 @@ function createFsService({
     runReadFileTextTool,
     runReadFileLinesTool,
     runWriteFileTextTool,
+    runEditFileTool,
     runSearchInFilesTool,
     readDirectory,
     moveItem,

@@ -50,6 +50,16 @@ test('summarizeToolCall formats workspace tools with start and done labels', () 
   assert.equal(summarizeToolCall('write_file_text', {}, 'start'), 'Datei wird geschrieben …');
   assert.equal(summarizeToolCall('write_file_text', {}, 'done'), 'Datei geschrieben');
   assert.equal(
+    summarizeToolCall('edit_file', { relative_path: 'src/app.js' }, 'start'),
+    'Datei src/app.js wird geändert …'
+  );
+  assert.equal(
+    summarizeToolCall('edit_file', { relative_path: 'src/app.js' }, 'done'),
+    'Datei src/app.js geändert'
+  );
+  assert.equal(summarizeToolCall('edit_file', {}, 'start'), 'Datei wird geändert …');
+  assert.equal(summarizeToolCall('edit_file', {}, 'done'), 'Datei geändert');
+  assert.equal(
     summarizeToolCall('search_in_files', { query: 'createFsService' }, 'start'),
     'Suche nach „createFsService“ …'
   );

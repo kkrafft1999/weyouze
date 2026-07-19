@@ -866,6 +866,165 @@ test('read_file_lines caps the line span per call', async (t) => {
   assert.equal(out.truncated, true);
 });
 
+async function makeEditFixture(t, content = 'const a = 1;\nconst b = 2;\nconst c = 3;\n') {
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'a.js'), content, 'utf8');
+  return tmpRoot;
+}
+
+test('edit_file replaces a unique string through the registry', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeEditFixture(t);
+
+  const out = JSON.parse(
+    await registry.execute(
+      'edit_file',
+      { relative_path: 'a.js', old_string: 'const b = 2;', new_string: 'const b = 42;' },
+      { workspaceRoot: tmpRoot, allowWrite: true }
+    )
+  );
+  assert.equal(out.replacements, 1);
+  assert.equal(out.first_changed_line, 2);
+  assert.equal(out.error, undefined);
+  const content = await fs.readFile(path.join(tmpRoot, 'a.js'), 'utf8');
+  assert.equal(content, 'const a = 1;\nconst b = 42;\nconst c = 3;\n');
+});
+
+test('edit_file is disabled unless allowWrite is set', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeEditFixture(t);
+
+  const out = JSON.parse(
+    await registry.execute(
+      'edit_file',
+      { relative_path: 'a.js', old_string: 'const a = 1;', new_string: 'const a = 9;' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.match(out.error, /Schreibzugriff/);
+  const content = await fs.readFile(path.join(tmpRoot, 'a.js'), 'utf8');
+  assert.match(content, /const a = 1;/);
+});
+
+test('edit_file rejects missing and ambiguous matches without changing the file', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeEditFixture(t, 'foo\nbar\nfoo\n');
+  const run = async (args) =>
+    JSON.parse(
+      await registry.execute('edit_file', { relative_path: 'a.js', ...args }, { workspaceRoot: tmpRoot, allowWrite: true })
+    );
+
+  assert.match((await run({ old_string: 'gibtEsNicht', new_string: 'x' })).error, /nicht gefunden/);
+  assert.match((await run({ old_string: 'foo', new_string: 'baz' })).error, /nicht eindeutig \(2 Treffer\)/);
+  const content = await fs.readFile(path.join(tmpRoot, 'a.js'), 'utf8');
+  assert.equal(content, 'foo\nbar\nfoo\n');
+});
+
+test('edit_file replaces all occurrences with replace_all', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeEditFixture(t, 'foo\nbar\nfoo\n');
+
+  const out = JSON.parse(
+    await registry.execute(
+      'edit_file',
+      { relative_path: 'a.js', old_string: 'foo', new_string: 'foofoo', replace_all: true },
+      { workspaceRoot: tmpRoot, allowWrite: true }
+    )
+  );
+  assert.equal(out.replacements, 2);
+  assert.equal(out.first_changed_line, 1);
+  const content = await fs.readFile(path.join(tmpRoot, 'a.js'), 'utf8');
+  assert.equal(content, 'foofoo\nbar\nfoofoo\n');
+});
+
+test('edit_file validates parameters and supports deletion via empty new_string', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeEditFixture(t, 'eins zwei drei\n');
+  const run = async (args) =>
+    JSON.parse(
+      await registry.execute('edit_file', { relative_path: 'a.js', ...args }, { workspaceRoot: tmpRoot, allowWrite: true })
+    );
+
+  assert.match((await run({ new_string: 'x' })).error, /old_string/);
+  assert.match((await run({ old_string: '', new_string: 'x' })).error, /old_string/);
+  assert.match((await run({ old_string: 'eins' })).error, /new_string/);
+  assert.match((await run({ old_string: 'eins', new_string: 'eins' })).error, /unterscheiden/);
+
+  const deleted = await run({ old_string: ' zwei', new_string: '' });
+  assert.equal(deleted.replacements, 1);
+  assert.equal(await fs.readFile(path.join(tmpRoot, 'a.js'), 'utf8'), 'eins drei\n');
+});
+
+test('edit_file respects workspace bounds and rejects directories', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await makeEditFixture(t);
+  const run = async (args) =>
+    JSON.parse(
+      await registry.execute('edit_file', { old_string: 'a', new_string: 'b', ...args }, { workspaceRoot: tmpRoot, allowWrite: true })
+    );
+
+  assert.match((await run({ relative_path: '../outside.js' })).error, /außerhalb/);
+  assert.match((await run({ relative_path: '.' })).error, /Ordner/);
+});
+
+test('edit_file rejects a symlink to a file outside the workspace', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const workspace = path.join(tmpRoot, 'workspace');
+  const outside = path.join(tmpRoot, 'outside');
+  await fs.mkdir(workspace);
+  await fs.mkdir(outside);
+  const secret = path.join(outside, 'secret.txt');
+  await fs.writeFile(secret, 'geheim\n', 'utf8');
+  const linked = await createSymlinkOrSkip(
+    t,
+    secret,
+    path.join(workspace, 'secret-link.txt'),
+    process.platform === 'win32' ? 'file' : undefined
+  );
+  if (!linked) return;
+
+  const result = JSON.parse(
+    await registry.execute(
+      'edit_file',
+      { relative_path: 'secret-link.txt', old_string: 'geheim', new_string: 'offen' },
+      { workspaceRoot: workspace, allowWrite: true }
+    )
+  );
+  assert.match(result.error, /außerhalb/);
+  assert.equal(await fs.readFile(secret, 'utf8'), 'geheim\n');
+});
+
+test('edit_file enforces read and write size limits', async (t) => {
+  const svc = createFsService({ fs, path, maxReadFileBytes: 1024, maxWriteFileBytes: 16 });
+  const registry = createWorkspaceToolRegistry({ fsService: svc });
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'gross.txt'), 'x'.repeat(2048), 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'klein.txt'), 'kurz\n', 'utf8');
+
+  const tooBigToRead = JSON.parse(
+    await registry.execute(
+      'edit_file',
+      { relative_path: 'gross.txt', old_string: 'x', new_string: 'y' },
+      { workspaceRoot: tmpRoot, allowWrite: true }
+    )
+  );
+  assert.match(tooBigToRead.error, /Datei zu groß/);
+
+  const tooBigToWrite = JSON.parse(
+    await registry.execute(
+      'edit_file',
+      { relative_path: 'klein.txt', old_string: 'kurz', new_string: 'k'.repeat(64) },
+      { workspaceRoot: tmpRoot, allowWrite: true }
+    )
+  );
+  assert.match(tooBigToWrite.error, /Inhalt zu groß/);
+  assert.equal(await fs.readFile(path.join(tmpRoot, 'klein.txt'), 'utf8'), 'kurz\n');
+});
+
 test('containsPath accepts the root itself and children, rejects siblings and traversal', () => {
   const path = require('path');
   const fs = require('fs/promises');

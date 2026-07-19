@@ -282,6 +282,43 @@ function createWorkspaceToolRegistry({ fsService }) {
       handler: (args, { workspaceRoot }) =>
         fsService.runWriteFileTextTool(args, workspaceRoot),
     },
+    {
+      name: 'edit_file',
+      description:
+        'Ersetzt in einer Textdatei (UTF-8, nur innerhalb des Projektordners) gezielt eine Textstelle: ' +
+        'old_string wird durch new_string ersetzt, ohne die Datei komplett neu zu schreiben. ' +
+        'old_string muss exakt und eindeutig vorkommen — inklusive Einrückung und Zeilenumbrüchen; ' +
+        'bei mehreren Treffern mehr Kontext angeben oder replace_all=true setzen. Maximale Dateigröße: 2 MB.',
+      promptDescription:
+        'Ersetzt gezielt Textstellen in Dateien des Projektordners (old_string → new_string), ohne die ganze Datei neu zu schreiben.',
+      parameters: {
+        type: 'object',
+        properties: {
+          relative_path: {
+            type: 'string',
+            description: 'Relativer Pfad zur Datei, z. B. "src/app.js".',
+          },
+          old_string: {
+            type: 'string',
+            description:
+              'Exakter zu ersetzender Text; muss eindeutig in der Datei vorkommen — bei Bedarf umgebende Zeilen mit aufnehmen.',
+          },
+          new_string: {
+            type: 'string',
+            description: 'Neuer Text; ein leerer String löscht die Textstelle.',
+          },
+          replace_all: {
+            type: 'boolean',
+            description:
+              'true, um alle Vorkommen zu ersetzen (Standard false = genau ein eindeutiger Treffer erforderlich).',
+          },
+        },
+        required: ['relative_path', 'old_string', 'new_string'],
+      },
+      requiresWrite: true,
+      handler: (args, { workspaceRoot }) =>
+        fsService.runEditFileTool(args, workspaceRoot),
+    },
   ]);
 }
 
