@@ -90,6 +90,13 @@ function summarizeToolCall(toolName, args, phase = 'start', locale = APP_LOCALES
     }
     return isDone ? 'Dateien gesucht' : 'Dateien werden gesucht …';
   }
+  if (toolName === 'stat_path') {
+    const pathLabel = formatRelativePathForLabel(args?.relative_path);
+    if (pathLabel) {
+      return isDone ? `Pfad ${pathLabel} geprüft` : `Pfad ${pathLabel} wird geprüft …`;
+    }
+    return isDone ? 'Pfad geprüft' : 'Pfad wird geprüft …';
+  }
   if (toolName === 'debug_wait') {
     return formatPauseDurationLabel(resolveDebugWaitMs(args), phase, locale);
   }

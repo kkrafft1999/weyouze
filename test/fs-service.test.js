@@ -869,6 +869,172 @@ test('find_files does not follow symlinks out of the workspace', async (t) => {
   assert.deepEqual(out.results, []);
 });
 
+test('stat_path returns file metadata without content through the registry', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), 'eins\nzwei\n', 'utf8');
+
+  const out = JSON.parse(
+    await registry.execute('stat_path', { relative_path: 'a.txt' }, { workspaceRoot: tmpRoot })
+  );
+
+  assert.equal(out.error, undefined);
+  assert.equal(out.exists, true);
+  assert.equal(out.kind, 'file');
+  assert.equal(out.size_bytes, 10);
+  assert.equal(new Date(out.modified).toISOString(), out.modified);
+  assert.equal(out.content, undefined);
+  // Zeilenzahl nur auf Wunsch — Standard bleibt der reine Metadaten-Blick.
+  assert.equal(out.line_count, undefined);
+});
+
+test('stat_path reports directories without size and counts lines on request', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.mkdir(path.join(tmpRoot, 'sub'));
+  await fs.writeFile(path.join(tmpRoot, 'a.txt'), 'eins\nzwei\n', 'utf8');
+  await fs.writeFile(path.join(tmpRoot, 'leer.txt'), '', 'utf8');
+
+  const dir = JSON.parse(
+    await registry.execute(
+      'stat_path',
+      { relative_path: 'sub', include_line_count: true },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(dir.exists, true);
+  assert.equal(dir.kind, 'directory');
+  assert.equal(dir.size_bytes, undefined);
+  assert.equal(dir.line_count, undefined);
+
+  const file = JSON.parse(
+    await registry.execute(
+      'stat_path',
+      { relative_path: 'a.txt', include_line_count: true },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(file.line_count, 2);
+
+  const empty = JSON.parse(
+    await registry.execute(
+      'stat_path',
+      { relative_path: 'leer.txt', include_line_count: true },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(empty.line_count, 0);
+
+  const root = JSON.parse(
+    await registry.execute('stat_path', { relative_path: '.' }, { workspaceRoot: tmpRoot })
+  );
+  assert.equal(root.kind, 'directory');
+});
+
+test('stat_path reports missing paths as exists=false instead of an error', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+
+  const out = JSON.parse(
+    await registry.execute(
+      'stat_path',
+      { relative_path: 'fehlt/nicht-da.txt' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.deepEqual(out, { relative_path: 'fehlt/nicht-da.txt', exists: false });
+});
+
+test('stat_path requires relative_path and respects workspace bounds', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+
+  const missing = JSON.parse(
+    await registry.execute('stat_path', {}, { workspaceRoot: tmpRoot })
+  );
+  assert.match(missing.error, /relative_path/);
+
+  const outside = JSON.parse(
+    await registry.execute(
+      'stat_path',
+      { relative_path: '../outside.txt' },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.match(outside.error, /außerhalb/);
+});
+
+test('stat_path rejects a symlink to a file outside the workspace', async (t) => {
+  const registry = makeToolRegistry();
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  const workspace = path.join(tmpRoot, 'workspace');
+  const outside = path.join(tmpRoot, 'outside');
+  await fs.mkdir(workspace);
+  await fs.mkdir(outside);
+  const secret = path.join(outside, 'secret.txt');
+  await fs.writeFile(secret, 'secret', 'utf8');
+  const linked = await createSymlinkOrSkip(
+    t,
+    secret,
+    path.join(workspace, 'secret-link.txt'),
+    process.platform === 'win32' ? 'file' : undefined
+  );
+  if (!linked) return;
+
+  const out = JSON.parse(
+    await registry.execute(
+      'stat_path',
+      { relative_path: 'secret-link.txt' },
+      { workspaceRoot: workspace }
+    )
+  );
+  assert.match(out.error, /außerhalb/);
+  assert.equal(out.exists, undefined);
+});
+
+test('stat_path skips the line count for binary and oversized files', async (t) => {
+  const svc = createFsService({
+    fs,
+    path,
+    maxReadFileBytes: 8,
+    maxWriteFileBytes: 1024,
+  });
+  const registry = makeToolRegistry(svc);
+  const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
+  t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(tmpRoot, 'binary.bin'), Buffer.from([0x41, 0x00, 0x42]));
+  await fs.writeFile(path.join(tmpRoot, 'gross.txt'), 'mehr als acht Bytes\n', 'utf8');
+
+  const binary = JSON.parse(
+    await registry.execute(
+      'stat_path',
+      { relative_path: 'binary.bin', include_line_count: true },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  assert.equal(binary.exists, true);
+  assert.equal(binary.line_count, undefined);
+  assert.match(binary.line_count_skipped, /Binärdatei/);
+
+  const oversized = JSON.parse(
+    await registry.execute(
+      'stat_path',
+      { relative_path: 'gross.txt', include_line_count: true },
+      { workspaceRoot: tmpRoot }
+    )
+  );
+  // Metadaten kommen trotzdem — nur die Zählung entfällt, statt wie beim Lesen zu scheitern.
+  assert.equal(oversized.exists, true);
+  assert.equal(oversized.size_bytes, 20);
+  assert.equal(oversized.line_count, undefined);
+  assert.match(oversized.line_count_skipped, /zu groß/);
+});
+
 async function makeLinesFixture(t, lineCount = 10) {
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'weyouze-fs-'));
   t.after(() => fs.rm(tmpRoot, { recursive: true, force: true }));

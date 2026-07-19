@@ -297,6 +297,34 @@ function createWorkspaceToolRegistry({ fsService }) {
         fsService.runFindFilesTool(args, workspaceRoot),
     },
     {
+      name: 'stat_path',
+      description:
+        'Liefert Metadaten zu einem Pfad im Projektordner, ohne die Datei zu lesen: ' +
+        'Existenz, Typ (Datei/Ordner), Größe in Bytes, Änderungszeitpunkt (ISO 8601) und ' +
+        'auf Wunsch die Zeilenzahl. Token-sparsam, um vor dem Lesen zu entscheiden, ' +
+        'ob und wie gelesen werden sollte — z. B. bei großen Dateien read_file_lines statt read_file_text.',
+      promptDescription:
+        'Liefert Metadaten (Existenz, Typ, Größe, Änderungszeit, optional Zeilenzahl) zu Pfaden im Projektordner, ohne Dateiinhalt.',
+      parameters: {
+        type: 'object',
+        properties: {
+          relative_path: {
+            type: 'string',
+            description:
+              'Relativer Pfad zu Datei oder Ordner, z. B. "src/app.js"; "." für das Projektroot.',
+          },
+          include_line_count: {
+            type: 'boolean',
+            description:
+              'true, um bei Textdateien zusätzlich die Zeilenzahl zu liefern (Standard false).',
+          },
+        },
+        required: ['relative_path'],
+      },
+      handler: (args, { workspaceRoot }) =>
+        fsService.runStatPathTool(args, workspaceRoot),
+    },
+    {
       name: 'debug_wait',
       description:
         'Nur zum UI-Test: wartet eine konfigurierbare Zeit und liefert danach OK zurück. Kein Dateizugriff.',

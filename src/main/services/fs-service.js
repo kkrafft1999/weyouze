@@ -761,6 +761,49 @@ function createFsService({
     });
   }
 
+  async function runStatPathTool(args, workspaceRoot) {
+    const rel = typeof args.relative_path === 'string' ? args.relative_path.trim() : '';
+    if (!rel) {
+      return JSON.stringify({ error: 'relative_path ist erforderlich ("." für das Projektroot).' });
+    }
+    const { absPath, error } = await resolveWorkspacePathForAccess(workspaceRoot, rel);
+    if (error) return JSON.stringify({ error });
+    let st;
+    try {
+      st = await fs.stat(absPath);
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        return JSON.stringify({ relative_path: rel, exists: false });
+      }
+      return JSON.stringify({ error: e.message });
+    }
+    const isDirectory = st.isDirectory();
+    const result = {
+      relative_path: rel,
+      exists: true,
+      kind: isDirectory ? 'directory' : 'file',
+    };
+    if (!isDirectory) result.size_bytes = st.size;
+    result.modified = new Date(st.mtimeMs).toISOString();
+    if (args.include_line_count === true && !isDirectory) {
+      if (st.size > MAX_READ_FILE_BYTES) {
+        result.line_count_skipped = `Datei zu groß für die Zeilenzählung (>${MAX_READ_FILE_BYTES} Bytes).`;
+      } else {
+        try {
+          const buf = await fs.readFile(absPath);
+          if (isBinaryBuffer(buf)) {
+            result.line_count_skipped = 'Binärdatei — Zeilenzählung übersprungen.';
+          } else {
+            result.line_count = splitFileLines(buf.toString('utf8')).length;
+          }
+        } catch (e) {
+          result.line_count_skipped = e.message;
+        }
+      }
+    }
+    return JSON.stringify(result);
+  }
+
   async function readDirectory(dirPath) {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const items = await Promise.all(
@@ -852,6 +895,7 @@ function createFsService({
     runEditFileTool,
     runSearchInFilesTool,
     runFindFilesTool,
+    runStatPathTool,
     readDirectory,
     moveItem,
     readFilePreview,

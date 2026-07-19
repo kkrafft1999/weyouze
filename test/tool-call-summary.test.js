@@ -83,6 +83,16 @@ test('summarizeToolCall formats workspace tools with start and done labels', () 
   );
   assert.equal(summarizeToolCall('find_files', {}, 'start'), 'Dateien werden gesucht …');
   assert.equal(summarizeToolCall('find_files', {}, 'done'), 'Dateien gesucht');
+  assert.equal(
+    summarizeToolCall('stat_path', { relative_path: 'src/app.js' }, 'start'),
+    'Pfad src/app.js wird geprüft …'
+  );
+  assert.equal(
+    summarizeToolCall('stat_path', { relative_path: 'src/app.js' }, 'done'),
+    'Pfad src/app.js geprüft'
+  );
+  assert.equal(summarizeToolCall('stat_path', {}, 'start'), 'Pfad wird geprüft …');
+  assert.equal(summarizeToolCall('stat_path', {}, 'done'), 'Pfad geprüft');
   assert.equal(summarizeToolCall('debug_wait', {}, 'start'), 'Warte 5 Sekunden …');
   assert.equal(summarizeToolCall('debug_wait', {}, 'done'), '5 Sekunden gewartet');
   assert.equal(summarizeToolCall('debug_wait', { duration_seconds: 1.2 }, 'start'), 'Warte 1,2 Sekunden …');
